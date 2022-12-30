@@ -1,0 +1,50 @@
+#!/bin/bash
+
+SCRIPTSDIR=$HOME/.config/hypr/scripts
+
+# Kill already running process
+_ps=(waybar mako)
+for _prs in "${_ps[@]}"; do
+	if [[ $(pidof "${_prs}") ]]; then
+		killall -9 "${_prs}"
+	fi
+done
+
+function run() {
+  # check if the program is installed and executable
+  if which "$1" > /dev/null; then
+    # check if the program is already running
+    if ! pgrep -f "$1" > /dev/null; then
+      # execute the program if it is not running
+      eval "$@" &
+    fi
+  else
+    # output an error message if the program is not installed or executable
+    echo "Error: program $1 is not installed or executable."
+    echo "$1" >> notinstalled
+  fi
+}
+
+# Apply themes
+"${SCRIPTSDIR}"/appearance/gtkthemes &
+
+# Lauch notification daemon (mako)
+"${SCRIPTSDIR}"/interactions/notifications &
+
+# Lauch statusbar (waybar)
+"${SCRIPTSDIR}"/appearance/statusbar &
+
+run nm-applet
+run redshift -l 53.55073:9.99302
+run xfce4-clipman
+run caffeine
+run pamac-tray
+run xfce4-power-manager
+run numlockx on
+run volumeicon
+run udiskie -a -s --terminal=Alacrity
+run pdfwatcher
+run dropbox
+run spotify
+run discord
+#run telegram-desktop
