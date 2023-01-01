@@ -64,8 +64,6 @@
 		"interval": 60,
 		"align": 0,
 		"rotate": 0,
-		"bat": "BAT1",
-		"adapter": "ACAD",
 		"full-at": 100,
 		"design-capacity": false,
     "states": {
@@ -77,12 +75,11 @@
     "format-charging": " {capacity}%",
     "format-plugged": " {capacity}%",
     "format-full": "{icon} Full",
-    //"format-good": "",
     "format-alt": "{icon} {time}",
     "format-icons": ["", "", "", "", ""],
     "format-time": "{H}h {M}min",
     "tooltip": true,
-    "on-click-right": "~/.config/hypr/scripts/glassmorphismToggle"
+    "on-click-right": "~/.config/hypr/scripts/appearance/glassmorphismToggle"
   },
 
   "clock": {
@@ -106,7 +103,7 @@
   "custom/menu": {
     "format": "",
     "tooltip": false,
-    "on-click": "$HOME/.config/hypr/scripts/menu",
+    "on-click": "$HOME/.config/hypr/scripts/menus/menu",
   },
 
   "custom/power": {
@@ -188,7 +185,7 @@
   "custom/keybindings": {
   "format":" 爵 ",
   "tooltip": false,
-  "on-click": "~/.config/hypr/scripts/keyhint",
+  "on-click": "~/.config/hypr/scripts/interaction/keyhint",
   },
 
   "tray": {

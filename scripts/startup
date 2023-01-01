@@ -43,7 +43,7 @@ run xfce4-power-manager
 run numlockx on
 run volumeicon
 run udiskie -a -s --terminal=Alacrity
-run pdfwatcher
+run pdfwatcher.sh
 run dropbox
 run spotify
 run discord
