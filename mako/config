@@ -47,6 +47,10 @@ border-color=#f38ba8
 text-color=#f38ba8
 default-timeout=5000
 
+[category=Mail]
+width=700
+height=400
+
 [category=System]
 anchor=top-center
 border-color=#f9e2af

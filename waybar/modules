@@ -86,6 +86,7 @@
     "interval": 60,
     "align": 0,
     "rotate": 0,
+    "locale": "de_DE.UTF-8",
     "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>",
     "format": " {:%d %b, %H:%M}",
     "format-alt": " {:%a %b %d, %G}",
