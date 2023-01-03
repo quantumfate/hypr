@@ -13,7 +13,7 @@ export XCURSOR_SIZE=24
 ### Language
 export LANG=en_GB.UTF-8:de_DE.UTF-8:it_IT.UTF-8
 export LANGUAGE=en_GB.UTF-8:de_DE.UTF-8:it_IT.UTF-8
-export LC_COLLATE=en_GB.UTF-8:de_DE.UTF-8:it_IT.UTF-8
+export LC_COLLATE=de_DE.UTF-8:en_GB.UTF-8:it_IT.UTF-8
 
 ### Applications
 export BROWSER=brave

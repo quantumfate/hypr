@@ -12,7 +12,7 @@ on-touch=dismiss
 font=Inconsolata Nerd Font Regular 13
 width=300
 height=100
-margin=10
+margin=7
 padding=15
 border-size=2
 border-radius=0
@@ -36,18 +36,38 @@ progress-color=over #89b4fa
 
 [urgency=low]
 border-color=#313244
-default-timeout=10
+default-timeout=5000
 
 [urgency=normal]
 border-color=#313244
-default-timeout=30
+default-timeout=5000
 
 [urgency=high]
 border-color=#f38ba8
 text-color=#f38ba8
-default-timeout=100
+default-timeout=5000
 
-[category=mpd]
+[category=System]
+anchor=top-center
 border-color=#f9e2af
-default-timeout=10
+default-timeout=3000
+group-by=category
+
+[category=Music]
+anchor=bottom-left
+border-color=#f9e2af
+default-timeout=3000
+group-by=category
+
+[category=WebBrowser]
+anchor=top-right
+border-color=#f9e2af
+default-timeout=5000
+group-by=category
+
+# Discord, WhatsApp, Signal, Telegram, etc ...
+[category=InstantMessaging]
+anchor=top-left
+border-color=#f9e2af
+default-timeout=5000
 group-by=category

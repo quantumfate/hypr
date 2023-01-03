@@ -29,7 +29,7 @@ function run() {
 "${SCRIPTSDIR}"/appearance/gtkthemes &
 
 # Lauch notification daemon (mako)
-"${SCRIPTSDIR}"/interactions/notifications &
+"${SCRIPTSDIR}"/interaction/notifications &
 
 # Lauch statusbar (waybar)
 "${SCRIPTSDIR}"/appearance/statusbar &
