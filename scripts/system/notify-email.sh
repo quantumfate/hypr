@@ -162,6 +162,19 @@ while getopts "$opts" opt; do
   esac
 done
 
+# Calculate additional categories for flow control
+case "$user_account_address" in
+    "$USER_PERSONAL_EMAIL")
+    notify_category+=",Personal"
+    ;;
+    "$USER_UNI_EMAIL")
+    notify_category+=",Uni"
+    ;;
+    "$USER_ALT_EMAIL")
+    notify_category+=",Alt"
+    ;;
+esac
+
 email_is_from=""
 # Check whether the sender_name is defined or not
 if [[ "$sender_address" == "$sender_name" ]]; then
@@ -182,7 +195,7 @@ fi
 notify_title=""
 notify_body=""
 
-if [[ "$message_is_new" == "true" ]]; then
+if [[ "$message_is_new" == "true" ]] || [[ "$message_is_old" == "true" ]]; then
     
     if [[ "$message_is_deleted" == "true" ]]; then
         if [[ "$message_is_flagged" == "true" || "$message_is_marked" == "true" ]]; then

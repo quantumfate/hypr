@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-CONFIG="$HOME/.config/hypr/mako/config"
+CONFIG="$HOME/.config/hypr/dunst/config"
 
 if [[ ! $(pidof mako) ]]; then
-	mako --config ${CONFIG}
+	dunst --config "${CONFIG}"
 fi

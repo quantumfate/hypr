@@ -47,9 +47,23 @@ border-color=#f38ba8
 text-color=#f38ba8
 default-timeout=5000
 
-[category=Mail]
-width=700
-height=400
+[category=Mail,Personal]
+width=650
+height=380
+max-visible=5
+on-button-middle=exec aerc
+
+[category=Mail,Uni]
+width=650
+height=380
+max-visible=5
+on-button-middle=none
+
+[category=Mail,Alt]
+width=650
+height=380
+max-visible=5
+on-button-middle=none
 
 [category=System]
 anchor=top-center
