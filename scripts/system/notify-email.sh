@@ -8,20 +8,18 @@ notify_cmd_shot="notify-send -h string:x-canonical-private-synchronous:shot-noti
 
 log_message() {
     # Takes a message and variable as parameter
+    local log_dir="$HOME/.local/log"
+    local log_file="email-notify.log"
+    local time_stamp=""
+
     if [[ ! -d "$log_dir" ]]; then
         mkdir -p "$log_dir"
     fi
 
-    local log_dir="$HOME/.local/log"
-    local log_file="email-notify.log"
-    local time_stamp=""
     time_stamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo "$time_stamp : $1" >> "$log_dir/$log_file"
 }
 
-if [[ ! -d "$log_dir" ]]; then
-	mkdir -p "$log_dir"
-fi
 # Initialize variable to store option
 sender_address="" # %a
 sender_name="" # %n or %a if none
@@ -32,6 +30,7 @@ cc_list="" # %R
 email_subject="" # %s
 local_system_time="" # %D
 notification_urgency="" # The urgency incoming mails should be treated with
+flags=""
 
 # Boolean vars for flags
 message_is_old=false # When the email arrived while the client was offline
@@ -41,72 +40,75 @@ message_is_flagged=false # Whether the email is flagged or not
 message_is_new=false # Whether the email is new or not (e.g. moved between folders)
 message_is_deleted=false # Whether the email was deleted
 
-opts=:a:n:r:A:T:R:s:D:Z
+opts="a:n:r:A:T:R:s:D:Z:"
 # Parse options
 while getopts "$opts" opt; do
   case "$opt" in
     a) 
         # Sender address %a
+        echo $OPTARG
         sender_address="$OPTARG"
         ;;
     n)
         # Sender name %n or %a if none
+        echo $OPTARG
         sender_name="$OPTARG"        
         ;;
     r)
         # Sender name %n or %a if none
+        echo $OPTARG
         receive_list="$OPTARG"        
         ;;
 
     A)
         # Reply-to address %A or %a if none
+        echo $OPTARG
         reply_to_address="$OPTARG"
         ;;
     T)
         # Receiver adress (Email account) %T
+        echo $OPTARG
         user_account_address="$OPTARG"
         ;;
     R)
         # CC-List %R (comma separated)
+        echo $OPTARG
         cc_list="$OPTARG"
         ;;
     s)
         # Subject %s
+        echo $OPTARG
         email_subject="$OPTARG"
         ;;
     D)
         # Local Time %D
+        echo $OPTARG
         local_system_time="$OPTARG"
-        
         ;;
     Z)
-        # Check for substring in flags -> aerc man page
-        # +-----------------+----------------------------------------+
-        # |       %Z        | flags (O=old, N=new, r=answered,       |
-        # |                 | D=deleted, !=flagged, *=marked)        |
-        # +-----------------+----------------------------------------+
-
         # Set the default notification urgency to low
-        notification_urgency="low"
+        echo $OPTARG
+        flags="$OPTARG"
+        notification_urgencylow="low"
 
-        if [[ $OPTARG == *O* ]] || [[ $OPTARG == *N* ]]; then
+        if [[ "$OPTARG" == *O* ]] || [[ "$OPTARG" == *N* ]]; then
             # Handle old or new mails
             message_is_old=true
             message_is_new=true
             notification_urgency="low"
-        elif [[ $OPTARG == *D* ]]; then
+        elif [[ "$OPTARG" == *D* ]]; then
             # Handle deleted mails
             message_is_deleted=true
             notification_urgency="low"
-        elif [[ $OPTARG == *r* ]]; then
+        elif [[ "$OPTARG" == *r* ]]; then
             # Handle answered mails
             message_is_response=true
             notification_urgency="medium"
-        elif [[ $OPTARG == *!* ]]; then
+        elif [[ "$OPTARG" == *!* ]]; then
             # Handle flagged mails
             message_is_flagged=true
             notification_urgency="high"
-        elif [[ $OPTARG == *\** ]]; then
+        elif [[ "$OPTARG" == *\** ]]; then
             # Handle marked mails
             message_is_marked=true
             notification_urgency="high"
@@ -145,6 +147,7 @@ fi
 notify_string=""
 
 if [[ "$message_is_new" == "true" ]]; then
+    echo "test"
     
     if [[ "$message_is_deleted" == "true" ]] \
         && [[ "$message_is_flagged" == "true" || "$message_is_marked" == "true" ]]; then
