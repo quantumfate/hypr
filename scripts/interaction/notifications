@@ -2,6 +2,6 @@
 
 CONFIG="$HOME/.config/hypr/dunst/config"
 
-if [[ ! $(pidof mako) ]]; then
+if [[ ! $(pidof dunst) ]]; then
 	dunst --config "${CONFIG}"
 fi

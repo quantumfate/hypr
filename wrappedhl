@@ -1,5 +1,5 @@
-#!/bin/bash
-
+#!/usr/bin/env bash
+# shellcheck disable=SC1091
 cd ~ || exit
 
 ## System
@@ -30,12 +30,17 @@ export QT_QPA_PLATFORM="wayland;xcb"
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QT_QPA_PLATFORMTHEME=gtk2
 
-## Source private env vars (commented here for doc purpose)
-## EMAILS #################################################
-## export USER_PERSONAL_EMAIL=""
-## export USER_UNI_EMAIL=""
-## export USER_ALT_EMAIL=""
-. ./privateenv.sh
+## Source private env vars
+# Read the lines of the file and iterate over them
+while read -r line; do
+    # Skip lines that start with "#" (comments)
+    if [[ "$line" =~ ^\#.* ]]; then
+        continue
+    fi
+
+    # Set the variable as an environment variable using the export command
+    export "${line?}"
+done < ~/.config/hypr/.env
 
 unset QT_STYLE_OVERRIDE
 exec Hyprland

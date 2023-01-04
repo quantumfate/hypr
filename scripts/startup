@@ -26,7 +26,7 @@ function run() {
 }
 
 # Launch monitor configuration daemon (kanshi)
-"${SCRIPTSDIR}"/devices/displayprofiles &
+#"${SCRIPTSDIR}"/devices/displayprofiles &
 
 # Apply themes
 "${SCRIPTSDIR}"/appearance/gtkthemes &

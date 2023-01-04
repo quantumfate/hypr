@@ -3,13 +3,33 @@
 
 # This script is inteded to be used to 
 # react to email notifications on click
+log_message() {
+    # Takes a message and variable as parameter
+    local log_dir="$HOME/.local/log"
+    local log_file="display-config.log"
+    local time_stamp=""
+
+    if [[ ! -d "$log_dir" ]]; then
+        mkdir -p "$log_dir"
+    fi
+
+    time_stamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "$time_stamp : $1" >> "$log_dir/$log_file"
+}
 
 mobile_config() {
+    
+    local opts=":o:m:p:s:t:"
 
 	echo ""
 }
 
-docked_config() {
+docked_one_config() {
+
+	echo ""
+}
+
+docked_tow_config() {
 
 	echo ""
 }
@@ -18,12 +38,139 @@ amore_config() {
 		
 	echo ""
 }
-if [[ "$1" == "--mobile" ]]; then
-	mobile_config
-elif [[ "$1" == "--docked" ]]; then
-	docked_config
-elif [[ "$1" == "--amore" ]]; then
-	amore_config
-else
-	echo -e "Available Options : --mobile, --docked, --amore"
+
+
+
+# Parse options
+while getopts ":c:o:" opt; do
+  case "$opt" in
+    c)
+      # Process command option
+      command="$OPTARG"
+      ;;
+    o)
+      # Process output options
+      IFS=',' read -r -a output_options <<< "$OPTARG"
+      for output in "${output_options[@]}"; do
+        # Process output-specific options
+        while getopts ":a:" output_opt; do
+          case "$output_opt" in
+            a)
+              # Process output-specific args
+              IFS=',' read -r -a output_args <<< "$OPTARG"
+              for arg in "${output_args[@]}"; do
+                # Do something with the output arg
+                echo "Processing output arg: $arg"
+              done
+              ;;
+            *)
+             ;;
+          esac
+        done
+      done
+      shift $((OPTIND-1))
+      ;;
+    *)
+  esac
+done
+
+# Define the available commands and outputs
+commands=("mobile" "dockedone" "dockedtwo" "amore")
+outputs=("display")
+args=("status" "mode" "position" "scale" "transform")
+
+# Initialize variables
+command=""
+output=""
+
+# Call the appropriate function based on the command
+case "$command" in
+  "mobile")
+    mobile_config "$output" "${args_arr[@]}"
+    ;;
+  "dockedone")
+    docked_one_config "$output" "${args_arr[@]}"
+    ;;
+  "dockedtwo")
+    docked_two_config "$output" "${args_arr[@]}"
+    ;;
+  "amore")
+    amore_config "$output" "${args_arr[@]}"
+    ;;
+esac
+
+process_output_args() {
+
+    # Initialize the args array
+    declare -a args_arr
+
+    # Iterate through the remaining arguments
+    while [[ $# -gt 0 ]]; do
+      # Check if the argument is a valid arg
+      if [[ " ${args[*]} " == *"$1"* ]]; then
+        args_arr+=("$1")
+      else
+        echo "Invalid arg '$1'. Available args: ${args[*]}" >&2
+        exit 1
+      fi
+      shift
+    done
+    
+    echo "${args_arr[@]}"
+}
+
+# Parse options
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        mobile)
+            shift
+            mobile_config
+            process_output_args "$@"
+            ;;
+        dockedone)
+            shift
+            docked_one_config
+            ;;
+        dockedtwo)
+            shift
+            docked_two_config
+            ;;
+        amore)
+            shift
+            amore_config
+            ;;
+        *)
+            echo "usage: displayconfiguration command output[,output,...] [args]"
+            echo ""
+            echo "commands:"
+            echo "  mobile"
+            echo "  dockedone"
+            echo "  dockedtwo"
+            echo "  amore"
+            echo ""
+            echo "output:"
+            echo "  display"
+            echo ""
+            echo "args:"
+            echo "  status"
+            echo "  mode"
+            echo "  position"
+            echo "  scale"
+            echo "  transform"
+            exit 1
+        ;;
+    esac
+done
+
+# Check if a command and an output were provided
+if [[ -z "$command" ]]; then
+  echo "No command provided. Available commands: ${commands[*]}" >&2
+  exit 1
+elif [[ -z "$output" ]]; then
+  echo "No output provided. Available outputs: ${outputs[*]}" >&2
+  exit 1
 fi
+
+
+
+exit 0
