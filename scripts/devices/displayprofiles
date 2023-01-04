@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+CONFIG="$HOME/.config/hypr/kanshi/config"
+
+if [[ ! $(pidof kanshi) ]]; then
+	kanshi --config "${CONFIG}"
+fi

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Author: Leon Connor Holm
+
+# This script is inteded to be used to 
+# react to email notifications on click
+
+mobile_config() {
+
+	echo ""
+}
+
+docked_config() {
+
+	echo ""
+}
+
+amore_config() {
+		
+	echo ""
+}
+if [[ "$1" == "--mobile" ]]; then
+	mobile_config
+elif [[ "$1" == "--docked" ]]; then
+	docked_config
+elif [[ "$1" == "--amore" ]]; then
+	amore_config
+else
+	echo -e "Available Options : --mobile, --docked, --amore"
+fi

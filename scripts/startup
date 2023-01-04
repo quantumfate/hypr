@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 
 # Kill already running process
-_ps=(waybar mako dunst)
+_ps=(waybar dunst kanshi)
 for _prs in "${_ps[@]}"; do
 	if [[ $(pidof "${_prs}") ]]; then
 		killall -9 "${_prs}"
@@ -24,6 +24,9 @@ function run() {
     echo "$1" >> notinstalled
   fi
 }
+
+# Launch monitor configuration daemon (kanshi)
+"${SCRIPTSDIR}"/devices/displayprofiles &
 
 # Apply themes
 "${SCRIPTSDIR}"/appearance/gtkthemes &

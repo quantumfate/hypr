@@ -1,0 +1,18 @@
+profile mobile {
+    
+	output eDP-1 mode 1920x1080 position 0,0
+}
+
+profile docked {
+	
+    output eDP-4 mode 2560x1440 position 0,0
+	output eDP-5 mode 2560x1440 position 2560,0
+    output eDP-3 mode 2560x1440 position 5120,0 transform 90
+	output eDP-1 mode 1920x1080 position 2850,1440
+}
+
+profile amore {
+	
+    output eDP-2 mode 1920x1080 position 0,0
+    output eDP-1 mode 1920x1080 position 0,1080
+}
