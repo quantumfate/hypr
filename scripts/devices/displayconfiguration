@@ -56,6 +56,11 @@ while getopts ":c:o:" opt; do
         while getopts ":a:" output_opt; do
           case "$output_opt" in
             a)
+              while getopts ":a:m:p:s:t:" arg_opt; do
+                case "$arg_opt" in
+                  
+                esac
+              done
               # Process output-specific args
               IFS=',' read -r -a output_args <<< "$OPTARG"
               for arg in "${output_args[@]}"; do
