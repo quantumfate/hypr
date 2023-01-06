@@ -1,23 +1,14 @@
-profile mobile {
+profile undocked {
+
+	output "eDP-1" position 0,0
+}
+
+profile dockedall {
+
+    output "DP-4" position 0,0 transform 90
+    output "DP-3" position 1440,300
+    output "DP-5" position 4000,300
+    output "eDP-1" position 1440,1730
     
-	output eDP-1 enable mode 1920x1080 position 0,0
 }
 
-profile dockedone {
-    output DP-4 enable mode 2560x1440@60Hz position 0,0 transform 90
-	  output DP-3 enable mode 2560x1440@60Hz position 1440,300
-    output DP-5 enable mode 2560x1440@60Hz  position 4000,300
-	  output eDP-1 enable mode 1920x1080@60Hz position 4000,1740
-}
-
-profile dockedtwo {
-    output DP-7 enable mode 2560x1440@60Hz position 0,0 transform 90
-	  output DP-6 enable mode 2560x1440@60Hz position 1440,300
-    output DP-8 enable mode 2560x1440@60Hz position 4000,300
-	  output eDP-1 enable mode 1920x1080@60Hz position 4000,1740
-}
-
-profile amore {
-    output eDP-2 enable mode 1920x1080@60Hz position 0,0
-    output DP-1 enable mode 1920x1080@60Hz position 0,1080
-}

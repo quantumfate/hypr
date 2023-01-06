@@ -1,0 +1,37 @@
+profile undocked {
+
+  exec hyprctl --batch "keyword monitor DP-4,disable ; keyword monitor "DP-3,disable ; keyword monitor DP-5,disable"
+  exec hyprctl --batch "keyword monitor DP-7,disable ; keyword monitor "DP-8,disable ; keyword monitor DP-6,disable"
+  output "*" disable
+	output "eDP-1" position 0,0
+  exec hyprctl --batch "keyword monitor eDP-1,preferred,auto,1"
+}
+
+profile dockedall {
+    exec hyprctl --batch "keyword monitor DP-7,disable ; keyword monitor "DP-8,disable ; keyword monitor DP-6,disable"
+
+    output "*" disable
+    output "DP-4" position 0,0 transform 90
+    output "DP-3" position 1440,300
+    output "DP-5" position 4000,300
+    output "eDP-1" position 1440,1730
+    
+    exec hyprctl --batch "keyword monitor DP-4,preferred,auto,1 ; keyword monitor DP-3,preferred,auto,1 ; keyword monitor DP-5,preferred,auto,1 ; keyword monitor eDP-1,preferred,auto,1"
+}
+
+profile dockedallredundant {
+    exec hyprctl --batch "keyword monitor DP-4,disable ; keyword monitor "DP-3,disable ; keyword monitor DP-5,disable"
+
+    output "*" disable
+    output "DP-7" position 0,0 transform 90
+    output "DP-8" position 1440,300
+    output "DP-6" position 4000,300
+	  output "eDP-1" position 1440,1730
+
+    exec hyprctl --batch "keyword monitor DP-7,preferred,auto,1 ; keyword monitor DP-8,preferred,auto,1 ; keyword monitor DP-6,preferred,auto,1 ; keyword monitor eDP-1,preferred,auto,1"
+}
+
+profile amore {
+    output eDP-2 enable mode 1920x1080@60Hz position 0,0
+    output DP-1 enable mode 1920x1080@60Hz position 0,1080
+}
