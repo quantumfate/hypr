@@ -2,14 +2,6 @@
 
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 
-# Kill already running process
-_ps=(waybar dunst kanshi)
-for _prs in "${_ps[@]}"; do
-	if [[ $(pidof "${_prs}") ]]; then
-		killall -9 "${_prs}"
-	fi
-done
-
 function run() {
   # check if the program is installed and executable
   if which "$1" > /dev/null; then
@@ -27,6 +19,7 @@ function run() {
 
 # Launch monitor configuration daemon (kanshi)
 "${SCRIPTSDIR}"/devices/displayprofiles &
+sleep 1
 
 # Apply themes
 "${SCRIPTSDIR}"/appearance/gtkthemes &
@@ -38,13 +31,11 @@ function run() {
 "${SCRIPTSDIR}"/appearance/statusbar &
 
 run nm-applet
-run redshift -l "$LOCATION_LAT":"$LOCATION_LON"
-run xfce4-clipman
+run redshift-gtk -l "$LOCATION_LAT":"$LOCATION_LON"
 run caffeine
 run pamac-tray
 run xfce4-power-manager
 run numlockx on
-run volumeicon
 run udiskie -a -s --terminal=Alacrity
 run pdfwatcher.sh
 run dropbox
