@@ -39,6 +39,8 @@ run numlockx on
 run udiskie -a -s --terminal=Alacrity
 run pdfwatcher.sh
 run dropbox
+run aerc
 run spotify
 run discord
+run pdfwatcher.sh
 #run telegram-desktop
