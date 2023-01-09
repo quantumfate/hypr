@@ -2,6 +2,9 @@
 # shellcheck disable=SC1091
 cd ~ || exit
 
+export SESSION_HYPR_SETTINGS_DIR="/tmp/hypr-session-settings"
+export SESSION_HYPR_SETTINGS_MONITOR="monitor.conf"
+
 ## System
 export CLUTTER_BACKEND="wayland"
 export GDK_BACKEND="wayland,x11"
