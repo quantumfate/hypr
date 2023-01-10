@@ -39,6 +39,8 @@ run numlockx on
 run env LANG="en_GB.UTF-8" kitty aerc
 run udiskie -t -a --terminal=Alacrity
 run pdfwatcher.sh
+run pomodorino
 run spotify
+run newsboat
 run discord
 #run telegram-desktop

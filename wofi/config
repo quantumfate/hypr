@@ -1,5 +1,5 @@
 ## Wofi Config
-
+style=/home/leonch/.config/hypr/wofi/style.css
 ## General
 show=drun
 prompt=Apps

@@ -1,16 +1,43 @@
 {
   "include": "~/.config/hypr/waybar/modules",
-  "layer": "top",
-  "mode": "dock",
-  "exclusive": true,
-  "passthrough": false,
-  "position": "bottom",
-  "spacing": 2,
-  "fixed-center": true,
+  "position": "bottom", 
+  "height": 35,
   "ipc": true,
   "margin-left": 5,
+  "layer": "top",
   "margin-right": 5,
-
+  "spacing": 6,
+  "fixed-center": true,
   "modules-left": ["wlr/workspaces", "cpu", "memory", "disk", "network"],
-  "modules-right": ["custom/updater", "pulseaudio", "custom/keybindings", "custom/weather", "clock", "tray", "battery", "custom/power"],
-}
+  "modules-right": ["custom/keybindings", "backlight", "custom/updater", "pulseaudio", "battery", "custom/date", "clock", "tray", "custom/power"],
+  // Modules configuration
+  "wlr/workspaces": {
+    "disable-scroll": true,
+    "all-outputs": true,
+    "format": "{icon}",
+    "persistent_workspaces": {
+      "1": [],
+      "2": [],
+      "3": [],
+      "4": [],
+      "5": [],
+      "6": [],
+      "7": [],
+      "8": [],
+      "9": [],
+      "10": []
+    },
+    "format-icons": {
+      "1": "",
+      "2": "",
+      "3": "u",
+      "4": "",
+      "5": "",
+      "6": "",
+      "7": "",
+      "8": "",
+      "9": "ﴔ",
+      "10": ""
+    },
+  },
+},

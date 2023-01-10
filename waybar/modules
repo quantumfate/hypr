@@ -1,4 +1,14 @@
 {
+  "custom/date": {
+    "format": "󰸗 {}",
+    "interval": 3600,
+    "exec": "/home/loki/bin/waybar-date.sh"
+  },
+  "clock": {
+    "format": " {:%H:%M}",
+    "tooltip-format": "<big>{:%Y %B}</big>\n<tt><small>{calendar}</small></tt>",
+    "format-alt": "{:%Y-%m-%d}"
+},
   "backlight": {
     "interval": 2,
     "align": 0,
@@ -9,56 +19,10 @@
       "on-click-middle": "",
       "on-click-right": "",
       "on-update": "",
-      "on-scroll-up": "~/.config/hypr/scripts/brightness --inc",
-      "on-scroll-down": "~/.config/hypr/scripts/brightness --dec",
+      "on-scroll-up": "changebrightness up",
+      "on-scroll-down": "changebrightness down",
       "smooth-scrolling-threshold": 1,
     },
-
-	"wlr/workspaces-cn": {
-    "format": "{icon}",
-    "on-click": "activate",
-    "all-outputs": true,
-    "sort-by-number": true,
-    "format-icons": {
-      "1": "一",
-      "2": "二",
-      "3": "三",
-      "4": "四",
-      "5": "五",
-      "6": "六",
-      "7": "七",
-      "8": "八",
-      "9": "九",
-      "10": "十",
-      "focused": "",
-      "default": ""
-    },
-    "on-scroll-up": "hyprctl dispatch workspace e+1",
-    "on-scroll-down": "hyprctl dispatch workspace e-1",
-  },
-
-  "wlr/workspaces": {
-    "format": "{icon}",
-    "on-click": "activate",
-    "all-outputs": true,
-    "sort-by-number": true,
-    "format-icons": {
-      "1": "1",
-      "2": "2",
-      "3": "3",
-      "4": "4",
-      "5": "5",
-      "6": "6",
-      "7": "7",
-      "8": "8",
-      "9": "9",
-      "10": "10",
-      "focused": "",
-      "default": ""
-    },
-    "on-scroll-up": "hyprctl dispatch workspace e+1",
-    "on-scroll-down": "hyprctl dispatch workspace e-1",
-  },
 	
   "battery": {
 		"interval": 60,
@@ -76,27 +40,16 @@
     "format-plugged": " {capacity}%",
     "format-full": "{icon} Full",
     "format-alt": "{icon} {time}",
-    "format-icons": ["", "", "", "", ""],
+    "format-icons": [" ", " ", " ", " ", " "],
     "format-time": "{H}h {M}min",
     "tooltip": true,
     "on-click-right": "~/.config/hypr/scripts/appearance/glassmorphismToggle"
   },
 
-  "clock": {
-    "interval": 60,
-    "align": 0,
-    "rotate": 0,
-    "locale": "de_DE.UTF-8",
-    "tooltip-format": "<big>{:%B %Y}</big>\n<tt><small>{calendar}</small></tt>",
-    "format": " {:%d %b, %H:%M}",
-    "format-alt": " {:%a %b %d, %G}",
-    "on-click-right": "~/.config/hypr/scripts/changeWallpaper",
-  },
-
   "cpu": {
     // "interval": 5,
     // "format": " {usage}%",
-    "interval": 1,
+    "interval": 4,
     "format": "{icon0}{icon1}{icon2}{icon3} {usage:>2}% ",
     "format-icons": ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"],
   },
@@ -108,14 +61,14 @@
   },
 
   "custom/power": {
-    "format": " 襤 ",
+    "format": "襤",
     "tooltip": false,
     "on-click": "archlinux-logout",
   },
 
   "disk": {
     "interval": 30,
-    "format": " {free}",
+    "format": " {free}",
   },
 
   "memory": {
@@ -126,8 +79,8 @@
   "network": {
     "interval": 5,
     "format-wifi": " {essid}",
-    "format-ethernet": " {ipaddr}/{cidr}",
-    "format-linked": " {ifname} (No IP)",
+    "format-ethernet": " {ipaddr}/{cidr}",
+    "format-linked": " {ifname} (No IP)",
     "format-disconnected": "睊 Disconnected",
     "format-disabled": "睊 Disabled",
     "format-alt": " {bandwidthUpBits} |  {bandwidthDownBits}",
@@ -159,16 +112,17 @@
   },
 
   "pulseaudio": {
-    /* "format": "{icon} {volume}% {format_source}", */
     "format": "{icon} {volume}",
     "format-muted": " Mute",
     "format-bluetooth": " {volume}% {format_source}",
     "format-bluetooth-muted": " Mute",
-    "format-source": " {volume}",
+    "format-source": " ",
     "format-source-muted": "",
     "format-icons": {
       "headphone": "",
       "hands-free": "",
+      "speaker": "ﰝ",
+      "hifi": "醙",
       "headset": "",
       "phone": "",
       "portable": "",
@@ -178,8 +132,8 @@
     "scroll-step": 5.0,
     "on-click": "pamixer -t",
     "on-click-right": "pavucontrol",
-    "on-scroll-up": "~/.config/hypr/scripts/volume --inc",
-    "on-scroll-down": "~/.config/hypr/scripts/volume --dec",
+    "on-scroll-up": "~/.config/hypr/scripts/control/volume --inc",
+    "on-scroll-down": "~/.config/hypr/scripts/control/volume --dec",
     "smooth-scrolling-threshold": 1,
   },
 
