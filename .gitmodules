@@ -1,0 +1,3 @@
+[submodule "wofi"]
+	path = wofi
+	url = git@github.com:quantumfate/wofi.git

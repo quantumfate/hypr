@@ -7,7 +7,7 @@ Super = Windows Key
 Super Return _term_ (`kitty`)
 Super q _quit_ (kill focused window)
 Super Shift q _quit_ (kill focused window)
-Super d _show app menu_ (`wofi small`)
+Super d _show app menu_ (`wofi --dmenu small`)
 Super Shift d _show app menu_ (`wofi large`)
 Super x _show archlinux-logout_ (lock/suspend/logout/reboot/shutdown)
 Super Shift r _reload config files_ (`hyprland reload`)
@@ -46,14 +46,14 @@ Super Shift 1 .. 0 _move container to workspace 1 .. 10_
 - _Wofi_ is documented through man pages - `man wofi`.
 - _Multimedia keys_ - may not work for every keyboard
   may need to hold down the function (`fn`) key
-- Follow the wiki - https://wiki.hyprland.org/
-- Follow the github - https://github.com/hyprwm/Hyprland
+- Follow the wiki - <https://wiki.hyprland.org/>
+- Follow the github - <https://github.com/hyprwm/Hyprland>
 
 # user githubs
 
-- https://github.com/eldermf/bspwm-hyprland
-- https://github.com/lauroro/hyprland-dotfiles
-- https://github.com/eneshecan/dotfiles
+- <https://github.com/eldermf/bspwm-hyprland>
+- <https://github.com/lauroro/hyprland-dotfiles>
+- <https://github.com/eneshecan/dotfiles>
 
 # share your own files on github
 

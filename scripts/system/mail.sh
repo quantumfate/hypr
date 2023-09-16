@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-
 secret-tool lookup "$1" "$2"
 # wait until the password is available
 while [ $? != 0 ]; do

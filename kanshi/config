@@ -1,17 +1,17 @@
-profile undocked {
-
-	output "eDP-1" position 0,0
-  exec hyprctl --batch "keyword monitor eDP-1,preferred,0x0,1 ; keyword workspace eDP-1,1 ; keyword workspace eDP-1,2 ; keyword workspace eDP-1,3 ; keyword workspace eDP-1,4" 
-}
-
 profile dockedall {
 
-	output "eDP-1" position 0,1480
-    output "DP-4" position 1920,0
-    output "DP-3" position 3360,300
-    output "DP-5" position 5920,300
-    
-    exec hyprctl --batch "keyword monitor eDP-1,preferred,0x1480,1 ; keyword monitor DP-4, transform, 1 ; keyword workspace eDP-1,1 ; keyword workspace DP-3,2 ; keyword workspace DP-4,3 ; keyword workspace DP-5,4" 
-
+  output "DP-5" position 0,0
+  output "DP-3" position 2560,0
+  output "DP-4" position 5120,0
+	output "eDP-1" position 7680,360
+  exec layout.sh --docked
 }
 
+profile switch {
+
+  output "DP-5" position 0,0
+  output "DP-3" disable 
+  output "DP-4" position 2560,0
+  output "eDP-1" position 5120,360
+  exec layout.sh --switch
+}

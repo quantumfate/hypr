@@ -1,0 +1,162 @@
+[
+    {
+        "label": "argparse",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "argparse",
+        "description": "argparse",
+        "detail": "argparse",
+        "documentation": {}
+    },
+    {
+        "label": "logging",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "logging",
+        "description": "logging",
+        "detail": "logging",
+        "documentation": {}
+    },
+    {
+        "label": "sys",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "sys",
+        "description": "sys",
+        "detail": "sys",
+        "documentation": {}
+    },
+    {
+        "label": "signal",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "signal",
+        "description": "signal",
+        "detail": "signal",
+        "documentation": {}
+    },
+    {
+        "label": "gi",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "gi",
+        "description": "gi",
+        "detail": "gi",
+        "documentation": {}
+    },
+    {
+        "label": "json",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "json",
+        "description": "json",
+        "detail": "json",
+        "documentation": {}
+    },
+    {
+        "label": "Playerctl",
+        "importPath": "gi.repository",
+        "description": "gi.repository",
+        "isExtraImport": true,
+        "detail": "gi.repository",
+        "documentation": {}
+    },
+    {
+        "label": "GLib",
+        "importPath": "gi.repository",
+        "description": "gi.repository",
+        "isExtraImport": true,
+        "detail": "gi.repository",
+        "documentation": {}
+    },
+    {
+        "label": "write_output",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def write_output(text, player):\n    logger.info('Writing output')\n    output = {'text': text,\n              'class': 'custom-' + player.props.player_name,\n              'alt': player.props.player_name}\n    sys.stdout.write(json.dumps(output) + '\\n')\n    sys.stdout.flush()\ndef on_play(player, status, manager):\n    logger.info('Received new playback status')\n    on_metadata(player, player.props.metadata, manager)",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "on_play",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def on_play(player, status, manager):\n    logger.info('Received new playback status')\n    on_metadata(player, player.props.metadata, manager)\ndef on_metadata(player, metadata, manager):\n    logger.info('Received new metadata')\n    track_info = ''\n    if player.props.player_name == 'spotify' and \\\n            'mpris:trackid' in metadata.keys() and \\\n            ':ad:' in player.props.metadata['mpris:trackid']:\n        track_info = 'AD PLAYING'",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "on_metadata",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def on_metadata(player, metadata, manager):\n    logger.info('Received new metadata')\n    track_info = ''\n    if player.props.player_name == 'spotify' and \\\n            'mpris:trackid' in metadata.keys() and \\\n            ':ad:' in player.props.metadata['mpris:trackid']:\n        track_info = 'AD PLAYING'\n    elif player.get_artist() != '' and player.get_title() != '':\n        track_info = '{artist} - {title}'.format(artist=player.get_artist(),\n                                                 title=player.get_title())",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "on_player_appeared",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def on_player_appeared(manager, player, selected_player=None):\n    if player is not None and (selected_player is None or player.name == selected_player):\n        init_player(manager, player)\n    else:\n        logger.debug(\"New player appeared, but it's not the selected player, skipping\")\ndef on_player_vanished(manager, player):\n    logger.info('Player has vanished')\n    sys.stdout.write('\\n')\n    sys.stdout.flush()\ndef init_player(manager, name):",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "on_player_vanished",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def on_player_vanished(manager, player):\n    logger.info('Player has vanished')\n    sys.stdout.write('\\n')\n    sys.stdout.flush()\ndef init_player(manager, name):\n    logger.debug('Initialize player: {player}'.format(player=name.name))\n    player = Playerctl.Player.new_from_name(name)\n    player.connect('playback-status', on_play, manager)\n    player.connect('metadata', on_metadata, manager)\n    manager.manage_player(player)",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "init_player",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def init_player(manager, name):\n    logger.debug('Initialize player: {player}'.format(player=name.name))\n    player = Playerctl.Player.new_from_name(name)\n    player.connect('playback-status', on_play, manager)\n    player.connect('metadata', on_metadata, manager)\n    manager.manage_player(player)\n    on_metadata(player, player.props.metadata, manager)\ndef signal_handler(sig, frame):\n    logger.debug('Received signal to stop, exiting')\n    sys.stdout.write('\\n')",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "signal_handler",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def signal_handler(sig, frame):\n    logger.debug('Received signal to stop, exiting')\n    sys.stdout.write('\\n')\n    sys.stdout.flush()\n    # loop.quit()\n    sys.exit(0)\ndef parse_arguments():\n    parser = argparse.ArgumentParser()\n    # Increase verbosity with every occurrence of -v\n    parser.add_argument('-v', '--verbose', action='count', default=0)",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "parse_arguments",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def parse_arguments():\n    parser = argparse.ArgumentParser()\n    # Increase verbosity with every occurrence of -v\n    parser.add_argument('-v', '--verbose', action='count', default=0)\n    # Define for which player we're listening\n    parser.add_argument('--player')\n    return parser.parse_args()\ndef main():\n    arguments = parse_arguments()\n    # Initialize logging",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "main",
+        "kind": 2,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "def main():\n    arguments = parse_arguments()\n    # Initialize logging\n    logging.basicConfig(stream=sys.stderr, level=logging.DEBUG,\n                        format='%(name)s %(levelname)s %(message)s')\n    # Logging is set by default to WARN and higher.\n    # With every occurrence of -v it's lowered by one\n    logger.setLevel(max((3 - arguments.verbose) * 10, 0))\n    # Log the sent command line arguments\n    logger.debug('Arguments received {}'.format(vars(arguments)))",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    },
+    {
+        "label": "logger",
+        "kind": 5,
+        "importPath": "waybar.custom_modules.mediaplayer",
+        "description": "waybar.custom_modules.mediaplayer",
+        "peekOfCode": "logger = logging.getLogger(__name__)\ndef write_output(text, player):\n    logger.info('Writing output')\n    output = {'text': text,\n              'class': 'custom-' + player.props.player_name,\n              'alt': player.props.player_name}\n    sys.stdout.write(json.dumps(output) + '\\n')\n    sys.stdout.flush()\ndef on_play(player, status, manager):\n    logger.info('Received new playback status')",
+        "detail": "waybar.custom_modules.mediaplayer",
+        "documentation": {}
+    }
+]
