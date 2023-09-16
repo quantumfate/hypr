@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-CONFIG="$HOME/.config/hypr/dunst/config"
+CONFIG="$HOME/.config/hypr/dunst/dunstrc"
 
 if [[ ! $(pidof dunst) ]]; then
-	dunst --config "${CONFIG}"
+    dunst -config "${CONFIG}"
 fi

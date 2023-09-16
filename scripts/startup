@@ -3,18 +3,18 @@
 SCRIPTSDIR=$HOME/.config/hypr/scripts
 
 function run() {
-  # check if the program is installed and executable
-  if which "$1" > /dev/null; then
-    # check if the program is already running
-    if ! pgrep -f "$1" > /dev/null; then
-      # execute the program if it is not running
-      eval "$@" &
+    # check if the program is installed and executable
+    if which "$1" > /dev/null; then
+        # check if the program is already running
+        if ! pgrep -f "$1" > /dev/null; then
+            # execute the program if it is not running
+            eval "$@" &
+        fi
+    else
+        # output an error message if the program is not installed or executable
+        echo "Error: program $1 is not installed or executable."
+        echo "$1" >> notinstalled
     fi
-  else
-    # output an error message if the program is not installed or executable
-    echo "Error: program $1 is not installed or executable."
-    echo "$1" >> notinstalled
-  fi
 }
 
 # Launch monitor configuration daemon (kanshi)
@@ -24,7 +24,7 @@ sleep 1
 # Apply themes
 "${SCRIPTSDIR}"/appearance/gtkthemes &
 
-# Lauch notification daemon (mako)
+# Lauch notification daemon (dunst)
 "${SCRIPTSDIR}"/interaction/notifications &
 
 # Lauch statusbar (waybar)
