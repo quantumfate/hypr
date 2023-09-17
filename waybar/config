@@ -11,6 +11,6 @@
   "fixed-center": true,
   "modules-left": ["wlr/workspaces", "custom/menu", "cpu", "memory", "disk", "network"],
   "modules-center": ["custom/spotify", "custom/weather"],
-  "modules-right": ["custom/keybindings", "backlight", "custom/updater", "pulseaudio", "battery", "custom/date", "clock", "tray", "custom/power"],
+  "modules-right": ["custom/keybindings", "backlight", "custom/updater", "pulseaudio", "battery", "clock", "tray", "custom/power"],
   // Modules configuration
   },

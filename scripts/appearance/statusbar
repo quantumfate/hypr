@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 CONFIG="$HOME/.config/hypr/waybar/config"
-CONFIG_VERTICAL="$HOME/.config/hypr/waybar/config-vertical"
 STYLE="$HOME/.config/hypr/waybar/style.css"
 
 if [[ ! $(pidof waybar) ]]; then

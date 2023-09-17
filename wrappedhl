@@ -38,14 +38,12 @@ export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QT_QPA_PLATFORMTHEME=gtk2
 
 ## Source private env vars
-# Read the lines of the file and iterate over them
 while read -r line; do
     # Skip lines that start with "#" (comments)
     if [[ "$line" =~ ^\#.* ]]; then
         continue
     fi
 
-    # Set the variable as an environment variable using the export command
     export "${line?}"
 done < ~/.config/hypr/.env
 
