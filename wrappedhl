@@ -17,9 +17,9 @@ export _JAVA_AWT_WM_NONREPARENTING=1
 export XCURSOR_SIZE=24
 
 ### Language
-export LANG=de_DE.UTF-8
-export LANGUAGE=en_GB.UTF-8
+export LANGUAGE=en_GB:de_DE
 export LC_COLLATE=de_DE.UTF-8
+export LANG=en_GB.UTF-8
 
 ### Applications
 export BROWSER=brave
@@ -39,7 +39,6 @@ export QT_QPA_PLATFORMTHEME=gtk2
 
 ## Source private env vars
 while read -r line; do
-    # Skip lines that start with "#" (comments)
     if [[ "$line" =~ ^\#.* ]]; then
         continue
     fi

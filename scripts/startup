@@ -30,6 +30,7 @@ sleep 1
 # Lauch statusbar (waybar)
 "${SCRIPTSDIR}"/appearance/statusbar &
 
+run openrazer-daemon
 run nm-applet
 run redshift-gtk -l "$LOCATION_LAT":"$LOCATION_LON"
 run caffeine
