@@ -1,3 +1,9 @@
+profile undocked {
+	output "eDP-1" position 0,0
+  exec layout.sh --undocked
+  
+}
+
 profile dockedall {
 
   output "DP-5" position 0,0
