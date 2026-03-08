@@ -2,12 +2,12 @@
 
 # Toggles a submap and updates the shared resource for applications that rely on nesting submaps
 toggle=$1
-IFS=':' read -r app_name next_submap prev_submap <<<$2
+IFS=':' read -r app_name next_submap prev_submap <<<"$2"
 
 if [[ $toggle == "--on" ]]; then
-  notify-send --app-name="$app_name" -h string:x-canonical-private-synchronous:sys-notify -u low "Submap on"
-  hyprctl -q dispatch submap $next_submap
-  echo "$next_submap" >$XDG_RUNTIME_DIR/hypr/alttab/submap
+  notify-send --app-name="$app_name" -h string:x-canonical-private-synchronous:sys-notify -u low "Submap $next_submap on"
+  hyprctl -q dispatch submap "$next_submap"
+  echo "$next_submap" >"$XDG_RUNTIME_DIR/hypr/alttab/submap"
 fi
 
 if [[ $toggle == "--off" ]]; then
@@ -16,6 +16,6 @@ if [[ $toggle == "--off" ]]; then
   else
     notify-send --app-name="$app_name" -h string:x-canonical-private-synchronous:sys-notify -u low "Submap $prev_submap off"
   fi
-  hyprctl -q dispatch submap $prev_submap
-  echo "$prev_submap" >$XDG_RUNTIME_DIR/hypr/alttab/submap
+  hyprctl -q dispatch submap "$prev_submap"
+  echo "$prev_submap" >"$XDG_RUNTIME_DIR/hypr/alttab/submap"
 fi
