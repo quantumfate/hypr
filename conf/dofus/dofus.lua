@@ -6,6 +6,8 @@
 
 local mainMod = "SUPER"
 local dofus_scripts = "~/.local/share/own-scripts/gitlab/quantumfate/dofus-scripts"
+local dofus_launch = require("conf.dofus.launch")
+local colors = require("themes.macchiato")
 
 -- Window rules
 hl.window_rule({
@@ -38,12 +40,10 @@ hl.bind(mainMod .. " + d", hl.dsp.submap("dofus"))
 
 hl.define_submap("dofus", function()
 	hl.bind("escape", hl.dsp.submap("reset"))
-	hl.bind("d", hl.dsp.exec_cmd(dofus_scripts .. "/dofus_toggle_launch.sh"))
-	hl.bind("a", hl.dsp.exec_cmd(dofus_scripts .. "/dofus_toggle_launch.sh --team-leech"))
-	-- Auto turn-swap detector (toggle)
+	hl.bind("d", function()
+		dofus_launch:toggle_enable()
+	end)
 	hl.bind("s", hl.dsp.exec_cmd(dofus_scripts .. "/dofus_swap_toggle.sh"))
-	hl.bind("SHIFT + s", hl.dsp.exec_cmd(dofus_scripts .. "/dofus_swap_toggle.sh --team-leech"))
-	-- Enter the team_pioneer submap
 	hl.bind("plus", hl.dsp.submap("team_pioneer"))
 end)
 

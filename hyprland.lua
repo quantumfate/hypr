@@ -31,7 +31,7 @@ local theme = require("themes.macchiato")
 require("scripts.alttab.alttab")
 require("scripts.events.zen-browser")
 require("conf.monitors")
-require("conf.dofus")
+require("conf.dofus.dofus")
 
 --------------------------------------------------------------------------------
 -- Autostart (formerly exec-once). hyprland.start fires once per session.
