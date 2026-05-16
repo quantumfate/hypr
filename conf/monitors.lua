@@ -18,11 +18,17 @@ hl.workspace_rule({ workspace = "1", monitor = "DP-1", persistent = true, defaul
 hl.workspace_rule({ workspace = "2", monitor = "DP-1", persistent = true })
 hl.workspace_rule({ workspace = "3", monitor = "DP-1", persistent = true })
 hl.workspace_rule({ workspace = "4", monitor = "DP-1", persistent = true })
-hl.workspace_rule({ workspace = "5", monitor = "DP-1", persistent = true, gaps_in = 0, gaps_out = 0, border_size = 0 })
+hl.workspace_rule({
+	workspace = "5",
+	monitor = "DP-1",
+	persistent = true,
+	gaps_in = 0,
+	gaps_out = 0,
+	border_size = 0,
+	decorate = false,
+})
 
 -- DP-2 workspaces
--- NOTE: the original config had a typo `layoutopt:rientation` (missing 'o') on
--- workspaces 6-9; corrected to `orientation` here so 6-9 match workspace 10.
 for _, ws in ipairs({ "6", "7", "8", "9", "10" }) do
 	hl.workspace_rule({
 		workspace = ws,

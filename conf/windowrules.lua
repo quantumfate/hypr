@@ -107,3 +107,50 @@ hl.window_rule({
 	},
 	opacity = "1 1",
 })
+
+hl.window_rule({ match = { class = [[^(org\.wezfurlong\.wezterm)$]] }, tile = true })
+
+hl.window_rule({ match = { class = [[^(org\.gnome\.)]] }, rounding = 12 })
+
+hl.window_rule({ match = { class = "^(gnome-control-center)$" }, tile = true })
+hl.window_rule({ match = { class = "^(pavucontrol)$" }, tile = true })
+hl.window_rule({ match = { class = "^(nm-connection-editor)$" }, tile = true })
+
+hl.window_rule({ match = { class = [[^(org\.gnome\.Calculator)$]] }, float = true })
+hl.window_rule({ match = { class = "^(gnome-calculator)$" }, float = true })
+hl.window_rule({ match = { class = "^(galculator)$" }, float = true })
+hl.window_rule({ match = { class = "^(blueman-manager)$" }, float = true })
+hl.window_rule({ match = { class = [[^(org\.gnome\.Nautilus)$]] }, float = true })
+hl.window_rule({ match = { class = "^(xdg-desktop-portal)$" }, float = true })
+
+hl.window_rule({ match = { class = "^(steam)$", title = "^(notificationtoasts)" }, no_initial_focus = true })
+hl.window_rule({ match = { class = "^(steam)$", title = "^(notificationtoasts)" }, pin = true })
+
+hl.window_rule({ match = { class = "^(firefox)$", title = "^(Picture-in-Picture)$" }, float = true })
+hl.window_rule({ match = { class = "^(zoom)$" }, float = true })
+
+-- Named window rules (ported from conf/misc/named-windowrules.conf).
+-- Named rules can be toggled at runtime and are evaluated before anonymous ones.
+
+hl.window_rule({
+	name = "feh",
+	match = { initial_class = "feh" },
+	workspace = "special:feh",
+	float = true,
+	content = "photo",
+	center = true,
+	rounding = 0,
+	opacity = "1 override 1 override",
+})
+
+hl.window_rule({
+	name = "workspace-spotify",
+	match = { initial_class = "([Ss]potify)" },
+	workspace = "special:spotify",
+})
+
+hl.window_rule({
+	name = "workspace-vesktop",
+	match = { initial_class = "vesktop" },
+	workspace = "special:vesktop",
+})

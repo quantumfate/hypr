@@ -26,9 +26,10 @@ package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 require("conf.workspaces")
 require("conf.animations")
 require("conf.windowrules")
+require("conf.binds")
 local theme = require("themes.macchiato")
 require("scripts.alttab.alttab")
-require("conf.misc.named-windowrules")
+require("scripts.events.zen-browser")
 require("conf.monitors")
 require("conf.dofus")
 
@@ -50,6 +51,9 @@ hl.config({
 
 	decoration = {
 		rounding = 12,
+		-- active_opacity = 1,
+		-- inactive_opacity = 1,
+
 		active_opacity = 0.92,
 		inactive_opacity = 0.85,
 		dim_around = 0.6,
@@ -141,30 +145,6 @@ hl.config({
 
 hl.layer_rule({ match = { namespace = "notifications" }, animation = "slide" })
 
---------------------------------------------------------------------------------
--- Window rules
---------------------------------------------------------------------------------
-hl.window_rule({ match = { class = [[^(org\.wezfurlong\.wezterm)$]] }, tile = true })
-
-hl.window_rule({ match = { class = [[^(org\.gnome\.)]] }, rounding = 12 })
-
-hl.window_rule({ match = { class = "^(gnome-control-center)$" }, tile = true })
-hl.window_rule({ match = { class = "^(pavucontrol)$" }, tile = true })
-hl.window_rule({ match = { class = "^(nm-connection-editor)$" }, tile = true })
-
-hl.window_rule({ match = { class = [[^(org\.gnome\.Calculator)$]] }, float = true })
-hl.window_rule({ match = { class = "^(gnome-calculator)$" }, float = true })
-hl.window_rule({ match = { class = "^(galculator)$" }, float = true })
-hl.window_rule({ match = { class = "^(blueman-manager)$" }, float = true })
-hl.window_rule({ match = { class = [[^(org\.gnome\.Nautilus)$]] }, float = true })
-hl.window_rule({ match = { class = "^(xdg-desktop-portal)$" }, float = true })
-
-hl.window_rule({ match = { class = "^(steam)$", title = "^(notificationtoasts)" }, no_initial_focus = true })
-hl.window_rule({ match = { class = "^(steam)$", title = "^(notificationtoasts)" }, pin = true })
-
-hl.window_rule({ match = { class = "^(firefox)$", title = "^(Picture-in-Picture)$" }, float = true })
-hl.window_rule({ match = { class = "^(zoom)$" }, float = true })
-
 -- DMS windows: Hyprland does not size org.quickshell windows correctly, so the
 -- float rule is intentionally left disabled (matches the original commented-out
 -- rule in hyprland.conf):
@@ -183,4 +163,3 @@ hl.layer_rule({ match = { namespace = "^dms:.*" }, no_anim = true })
 --------------------------------------------------------------------------------
 require("dms.colors")
 require("dms.layout")
-require("dms.binds")

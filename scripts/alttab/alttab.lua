@@ -19,7 +19,7 @@ function M:bind(bind)
 	end
 end
 
----@param direction string up|down (fzf `start:` action -> initial cursor move)
+---@param direction string up|down
 function M:alttab(direction)
 	local prev_submap = hl.get_current_submap()
 	if prev_submap == "alttab" then
@@ -30,7 +30,6 @@ function M:alttab(direction)
 		prev_submap = "reset"
 	end
 
-	-- mkdir synchronously: instant, and the candidate file is written below.
 	os.execute("mkdir -p '" .. M.alttab_dir .. "'")
 
 	local current_class = hl.get_active_window().class

@@ -1,18 +1,9 @@
--- Keybinds (ported from dms/binds.conf).
---
--- Flag mapping from the old hyprlang bind variants:
---   bindl   -> { locked = true }
---   bindel  -> { locked = true, repeating = true }
---   bindd   -> { description = "..." }
---   binddu  -> { description = "...", submap_universal = true }
---   binddum -> { description = "...", submap_universal = true, mouse = true }
---   bindde  -> { description = "...", repeating = true }
-
 local mainMod = "SUPER"
 local browser = "zen-twilight"
 local terminal = "kitty"
 local shared_scripts = "~/.local/share/own-scripts/github/quantumfate/scripts"
-local hyprland_scripts = "~/.config/hypr/scripts"
+
+local toggle_minimize = require("scripts.minimize")
 
 -- === Application launchers ===
 hl.bind(mainMod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
@@ -227,11 +218,9 @@ hl.bind(
 	hl.dsp.window.resize(),
 	{ description = "Resize a window with right click", submap_universal = true, mouse = true }
 )
-hl.bind(
-	mainMod .. " + ALT + m",
-	hl.dsp.exec_cmd(hyprland_scripts .. "/minimize.sh --toggle"),
-	{ description = "Minimize Window", submap_universal = true }
-)
+hl.bind(mainMod .. " + ALT + m", function()
+	toggle_minimize:toggle_minimize()
+end, { description = "Minimize Window", submap_universal = true })
 
 -- === Utility ===
 hl.bind(
