@@ -6,7 +6,7 @@ IFS=':' read -r app_name next_submap prev_submap <<<"$2"
 
 if [[ $toggle == "--on" ]]; then
   notify-send --app-name="$app_name" -h string:x-canonical-private-synchronous:sys-notify -u low "Submap $next_submap on"
-  hyprctl -q dispatch submap "$next_submap"
+  hyprctl eval "hl.dsp.submap($next_submap)"
   echo "$next_submap" >"$XDG_RUNTIME_DIR/hypr/alttab/submap"
 fi
 
