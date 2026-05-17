@@ -83,7 +83,7 @@ hl.bind(
 -- === Applications ===
 hl.bind(
 	mainMod .. " + semicolon",
-	hl.dsp.exec_cmd(shared_scripts .. "/wrapper/minimize.sh"),
+	hl.dsp.window.close("activewindow"),
 	{ description = "Close focused window", submap_universal = true }
 )
 hl.bind(
