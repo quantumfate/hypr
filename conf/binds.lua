@@ -3,7 +3,7 @@ local browser = "zen-twilight"
 local terminal = "kitty"
 local shared_scripts = "~/.local/share/own-scripts/github/quantumfate/scripts"
 
-local toggle_minimize = require("scripts.minimize")
+local toggle_minimize = require("conf.lib.minimize")
 
 -- === Application launchers ===
 hl.bind(mainMod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))

@@ -12,4 +12,16 @@ function M.any(callable, iter)
 	return false
 end
 
+---@param callable function
+---@param iter table
+---@return boolean
+function M.all(callable, iter)
+	for _, v in ipairs(iter) do
+		if not callable(v) then
+			return false
+		end
+	end
+	return true
+end
+
 return M

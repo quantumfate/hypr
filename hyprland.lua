@@ -1,59 +1,15 @@
---[[
-  Hyprland configuration — Lua
-  Ported from hyprlang (hyprland.conf) on 2026-05-16 for Hyprland 0.55+.
-
-  Since 0.55 hyprlang is deprecated for the main config; if hyprland.lua exists
-  it is loaded instead of hyprland.conf. Other hypr* tools (hypridle, hyprpaper,
-  hyprlock, hyprsunset, hyprqt6engine, hyprtoolkit) still use hyprlang — their
-  .conf files are unchanged.
-
-  Layout:
-    conf/        - workspaces, animations, window rules, monitors, dofus
-    conf/misc/   - alt-tab, named window rules
-    themes/      - colour palettes (data only)
-    dms/         - DankMaterialShell binds + snapshotted colours/layout
-]]
-
--- Allow require() of modules in sub-directories of the config dir.
 local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr"
 package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 
---------------------------------------------------------------------------------
--- Sub-modules (order mirrors the original hyprland.conf `source` order).
--- Each require() runs in its own scope, so an error in one file does not stop
--- the others from loading.
---------------------------------------------------------------------------------
-require("conf.workspaces")
-require("conf.animations")
-require("conf.windowrules")
-require("conf.binds")
-local theme = require("themes.macchiato")
-require("scripts.alttab.alttab")
-require("scripts.events.zen-browser")
-require("conf.monitors")
-require("conf.dofus.dofus")
+require("conf")
 
---------------------------------------------------------------------------------
--- Autostart (formerly exec-once). hyprland.start fires once per session.
---------------------------------------------------------------------------------
-hl.on("hyprland.start", function()
-	hl.exec_cmd("~/.config/hypr/scripts/IPC/IPC_Wrapper.sh")
-	hl.exec_cmd("setxkbmap dvorak-custom")
-end)
-
---------------------------------------------------------------------------------
--- Look & feel / input / behaviour
---------------------------------------------------------------------------------
 hl.config({
 	cursor = {
 		no_warps = true,
 	},
 
 	decoration = {
-		rounding = 12,
-		-- active_opacity = 1,
-		-- inactive_opacity = 1,
-
+		rounding = 4,
 		active_opacity = 0.92,
 		inactive_opacity = 0.85,
 		dim_around = 0.6,
@@ -86,18 +42,13 @@ hl.config({
 
 	general = {
 		border_size = 2,
-		gaps_in = 5,
-		gaps_out = 10,
+		gaps_in = 2,
+		gaps_out = 5,
 		float_gaps = -1,
 		layout = "master",
 		allow_tearing = false,
 		resize_on_border = false,
 		no_focus_fallback = true,
-
-		col = {
-			active_border = theme.mauve,
-			inactive_border = theme.crust,
-		},
 
 		snap = {
 			enabled = true,
@@ -145,21 +96,4 @@ hl.config({
 
 hl.layer_rule({ match = { namespace = "notifications" }, animation = "slide" })
 
--- DMS windows: Hyprland does not size org.quickshell windows correctly, so the
--- float rule is intentionally left disabled (matches the original commented-out
--- rule in hyprland.conf):
--- hl.window_rule({ match = { class = "^(org.quickshell)$" }, float = true })
-
---------------------------------------------------------------------------------
--- Layer rules
---------------------------------------------------------------------------------
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, no_anim = true })
-hl.layer_rule({ match = { namespace = "^dms:.*" }, no_anim = true })
-
---------------------------------------------------------------------------------
--- DankMaterialShell config (snapshotted from hyprlang .conf — see dms/*.lua).
--- Required last so it overrides the borders / gaps / rounding set above,
--- matching the original `source = ./dms/*.conf` ordering.
---------------------------------------------------------------------------------
-require("dms.colors")
-require("dms.layout")

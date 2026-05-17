@@ -66,7 +66,7 @@ function M:alttab(direction)
   fzf --color prompt:green,pointer:green,current-bg:-1,current-fg:green,gutter:-1,border:bright-black,current-hl:red,hl:red \
   --cycle --sync --wrap --delimiter="\t" --with-nth=2 --bind tab:down,shift-tab:up,double-click:ignore,start:%s \
   --preview-window=down:80%%,border-none \
-  --preview "$XDG_CONFIG_HOME/hypr/scripts/alttab/preview.sh {}" \
+  --preview "$XDG_CONFIG_HOME/hypr/conf/services/alttab/preview.sh {}" \
   --layout=reverse < "%s" > "%s"'
 
 hyprctl eval 'hl.config({ animations = { enabled = true } })'
@@ -106,5 +106,3 @@ hl.window_rule({ match = { class = "alttab" }, float = true })
 hl.window_rule({ match = { class = "alttab" }, min_size = { 1200, 1000 } })
 hl.window_rule({ match = { class = "alttab" }, workspace = "special:alttab" })
 hl.window_rule({ match = { class = "alttab" }, border_size = 0 })
-
-return M

@@ -1,4 +1,4 @@
-local helper = require("scripts.helper")
+local helper = require("conf.lib.fn")
 M = {}
 M.worspace = "magic"
 function M:toggle_minimize()

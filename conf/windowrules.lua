@@ -1,6 +1,3 @@
--- Window rules (ported from conf/windowrules.conf).
--- Rules are evaluated top-to-bottom; the last match wins for a given window.
-
 -- Browser
 hl.window_rule({ match = { initial_class = "([fF]irefox|zen|zen-twilight|zen-beta)" }, tag = "+default-browser" })
 hl.window_rule({ match = { initial_class = "(zen-twilight-media)" }, tag = "+media-browser" })

@@ -2,6 +2,7 @@ local M = {}
 
 M.enabled = false
 
+local notify = require("conf.lib.notify")
 M.counter = 1
 M.launch_cmd = 'xdotool set_window --name "Dofus %s" "$(xdotool search --pid %s)"'
 
@@ -18,11 +19,7 @@ M.characters = {
 
 function M:reset_counter()
 	self.counter = 1
-	hl.notification.create({
-		text = "Dofus Launch Counter Reset",
-		duration = 2000,
-		color = require("themes.macchiato").mauve,
-	})
+	notify:notify("Dofus Launch Counter Reset", 2000, notify.level.INFO)
 end
 
 function M:increment_counter()
@@ -32,18 +29,10 @@ end
 function M:toggle_enable()
 	if self.enabled then
 		self.enabled = false
-		hl.notification.create({
-			text = "Dofus Launch Disabled",
-			duration = 2000,
-			color = require("themes.macchiato").mauve,
-		})
+		notify:notify("Dofus Launch Disabled", 2000, notify.level.INFO)
 	else
 		self.enabled = true
-		hl.notification.create({
-			text = "Dofus Launch Enabled",
-			duration = 2000,
-			color = require("themes.macchiato").mauve,
-		})
+		notify:notify("Dofus Launch Enabled", 2000, notify.level.INFO)
 	end
 end
 
