@@ -7,6 +7,7 @@ if monitor_configs then
 		if monitor_name then
 			workspace_spec.monitor = monitor_name
 			workspace_spec.layout = monitor_configs.monitors[monitor_name].layouts[workspace]
+			hl.workspace_rule(workspace_spec)
 		end
 	end
 end
