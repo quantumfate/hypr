@@ -1,5 +1,6 @@
+local util = require("hypr.lib.util")
 ---@type Hosts?
-local monitor_configs = config.host_configs[os.getenv("HOST")]
+local monitor_configs = config.host_configs[util.hostname()]
 if monitor_configs then
 	for _, workspace_spec in ipairs(config.workspaces.workspace_specs) do
 		local workspace = tonumber(workspace_spec.workspace)

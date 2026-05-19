@@ -1,5 +1,7 @@
 require("hypr.conf")
+require("hypr.workspaces")
 require("hypr.events")
+require("hypr.layouts")
 require("hypr.services")
 require("hypr.themes")
 
@@ -8,4 +10,3 @@ require("hypr.binds")
 require("hypr.layerrules")
 require("hypr.monitors")
 require("hypr.windowrules")
-require("hypr.workspaces")

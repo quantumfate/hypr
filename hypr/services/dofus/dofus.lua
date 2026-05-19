@@ -12,7 +12,6 @@ local dofus_launch = require("hypr.services.dofus.launch")
 hl.window_rule({
 	match = { initial_class = "Dofus.x64" },
 	workspace = "5",
-	float = true,
 	center = true,
 	content = "game",
 	opacity = "1.0 override",
