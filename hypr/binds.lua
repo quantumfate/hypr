@@ -1,17 +1,14 @@
-local browser = "zen-twilight"
-local terminal = "kitty"
-local shared_scripts = "~/.local/share/own-scripts/github/quantumfate/scripts"
-
 local toggle_minimize = require("hypr.lib.minimize")
 
 -- === Application launchers ===
-hl.bind(config.main_mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
-hl.bind(config.main_mod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"))
-hl.bind(config.main_mod .. " + P", hl.dsp.exec_cmd("dms ipc call processlist focusOrToggle"))
-hl.bind(config.main_mod .. " + comma", hl.dsp.exec_cmd("dms ipc call settings focusOrToggle"))
-hl.bind(config.main_mod .. " + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))
-hl.bind(config.main_mod .. " + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
-hl.bind(config.main_mod .. " + X", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
+-- TODO: replace for qs ipc
+-- hl.bind(config.main_mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
+-- hl.bind(config.main_mod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"))
+-- hl.bind(config.main_mod .. " + P", hl.dsp.exec_cmd("dms ipc call processlist focusOrToggle"))
+-- hl.bind(config.main_mod .. " + comma", hl.dsp.exec_cmd("dms ipc call settings focusOrToggle"))
+-- hl.bind(config.main_mod .. " + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))
+-- hl.bind(config.main_mod .. " + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
+-- hl.bind(config.main_mod .. " + X", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
 
 -- === Cheat sheet ===
 hl.bind(config.main_mod .. " + SHIFT + Slash", hl.dsp.exec_cmd("dms ipc call keybinds toggle hyprland"))
@@ -21,36 +18,29 @@ hl.bind(config.main_mod .. " + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock
 hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd("dms ipc call processlist focusOrToggle"))
 
 -- === Audio controls ===
-hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("dms ipc call audio increment 3"), { locked = true, repeating = true })
-hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("dms ipc call audio decrement 3"), { locked = true, repeating = true })
-hl.bind("XF86AudioMute", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
-hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("dms ipc call audio micmute"), { locked = true })
-hl.bind("XF86AudioPause", hl.dsp.exec_cmd("dms ipc call mpris playPause"), { locked = true })
-hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("dms ipc call mpris playPause"), { locked = true })
-hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("dms ipc call mpris previous"), { locked = true })
-hl.bind("XF86AudioNext", hl.dsp.exec_cmd("dms ipc call mpris next"), { locked = true })
-hl.bind(
-	"CTRL + XF86AudioRaiseVolume",
-	hl.dsp.exec_cmd("dms ipc call mpris increment 3"),
-	{ locked = true, repeating = true }
-)
-hl.bind(
-	"CTRL + XF86AudioLowerVolume",
-	hl.dsp.exec_cmd("dms ipc call mpris decrement 3"),
-	{ locked = true, repeating = true }
-)
+-- TODO: replace with script
+-- hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd("dms ipc call audio increment 3"), { locked = true, repeating = true })
+-- hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd("dms ipc call audio decrement 3"), { locked = true, repeating = true })
+-- hl.bind("XF86AudioMute", hl.dsp.exec_cmd("dms ipc call audio mute"), { locked = true })
+-- hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd("dms ipc call audio micmute"), { locked = true })
+-- hl.bind("XF86AudioPause", hl.dsp.exec_cmd("dms ipc call mpris playPause"), { locked = true })
+-- hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("dms ipc call mpris playPause"), { locked = true })
+-- hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("dms ipc call mpris previous"), { locked = true })
+-- hl.bind("XF86AudioNext", hl.dsp.exec_cmd("dms ipc call mpris next"), { locked = true })
+-- hl.bind(
+-- 	"CTRL + XF86AudioRaiseVolume",
+-- 	hl.dsp.exec_cmd("dms ipc call mpris increment 3"),
+-- 	{ locked = true, repeating = true }
+-- )
+-- hl.bind(
+-- 	"CTRL + XF86AudioLowerVolume",
+-- 	hl.dsp.exec_cmd("dms ipc call mpris decrement 3"),
+-- 	{ locked = true, repeating = true }
+-- )
 
 -- === Brightness controls ===
-hl.bind(
-	"XF86MonBrightnessUp",
-	hl.dsp.exec_cmd('dms ipc call brightness increment 5 ""'),
-	{ locked = true, repeating = true }
-)
-hl.bind(
-	"XF86MonBrightnessDown",
-	hl.dsp.exec_cmd('dms ipc call brightness decrement 5 ""'),
-	{ locked = true, repeating = true }
-)
+hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(",brightness.sh --inc"), { locked = true, repeating = true })
+hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(',brightness.sh --dec ""'), { locked = true, repeating = true })
 
 -- === Window management ===
 hl.bind(config.main_mod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
@@ -60,22 +50,22 @@ hl.bind(config.main_mod .. " + SHIFT + T", hl.dsp.window.float())
 -- === Terminal ===
 hl.bind(
 	config.main_mod .. " + return",
-	hl.dsp.exec_cmd("uwsm app -- " .. terminal .. " --class Kitty-Main"),
+	hl.dsp.exec_cmd("uwsm app -- " .. config.app_cmds.terminal),
 	{ description = "Open the Terminal", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + s",
-	hl.dsp.exec_cmd("uwsm app -- " .. terminal .. " --class Tmux-Main tms"),
+	hl.dsp.exec_cmd("uwsm app -- " .. config.app_cmds.tmux),
 	{ description = "Open Kitty with Tmux Session", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + SHIFT + return",
-	hl.dsp.exec_cmd("uwsm app -- " .. terminal .. " --class Kitty-float"),
+	hl.dsp.exec_cmd("uwsm app -- " .. config.app_cmds.terminal_float),
 	{ description = "Open the Terminal", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + ALT + d",
-	hl.dsp.exec_cmd("uwsm-app -- zen-twilight -P Media --name zen-twilight-media --no-remote"),
+	hl.dsp.exec_cmd("uwsm-app -- " .. config.app_cmds.media_browser),
 	{ description = "Open Zen Browser media profile", submap_universal = true }
 )
 
@@ -87,22 +77,22 @@ hl.bind(
 )
 hl.bind(
 	config.main_mod .. " + b",
-	hl.dsp.exec_cmd("uwsm app -- " .. browser),
+	hl.dsp.exec_cmd("uwsm app -- " .. config.app_cmds.main_browser),
 	{ description = "Open the Browser", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + c",
-	hl.dsp.exec_cmd("uwsm app -- qalculate-qt"),
+	hl.dsp.exec_cmd("uwsm app -- " .. config.app_cmds.calculator),
 	{ description = "Open Calculator", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + m",
-	hl.dsp.exec_cmd("uwsm app -- proton-pass"),
+	hl.dsp.exec_cmd("uwsm app -- " .. config.app_cmds.password_manager),
 	{ description = "Open Proton Pass", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + r",
-	hl.dsp.exec_cmd('rofi -show drun -run-command "uwsm app -- {cmd}"'),
+	hl.dsp.exec_cmd(config.app_cmds.app_launcher),
 	{ description = "Open Application Launcher", submap_universal = true }
 )
 
@@ -215,17 +205,17 @@ end, { description = "Minimize Window", submap_universal = true })
 -- === Utility ===
 hl.bind(
 	config.main_mod .. " + PRINT",
-	hl.dsp.exec_cmd(shared_scripts .. "/wrapper/hyprshot.sh --window"),
+	hl.dsp.exec_cmd(",hyprshot.sh --window"),
 	{ description = "Screenshot current window", submap_universal = true }
 )
 hl.bind(
 	"PRINT",
-	hl.dsp.exec_cmd(shared_scripts .. "/wrapper/hyprshot.sh --output"),
+	hl.dsp.exec_cmd(",hyprshot.sh --output"),
 	{ description = "Screenshot current output", submap_universal = true }
 )
 hl.bind(
 	config.main_mod .. " + SHIFT + PRINT",
-	hl.dsp.exec_cmd(shared_scripts .. "/wrapper/hyprshot.sh --region"),
+	hl.dsp.exec_cmd(",hyprshot.sh --region"),
 	{ description = "Screenshot a selected region", submap_universal = true }
 )
 hl.bind("ALT + p", hl.dsp.exec_cmd("hyprpicker -a -n"), { description = "Execute hyprpicker to extract hex code" })
