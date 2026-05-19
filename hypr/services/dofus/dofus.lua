@@ -6,7 +6,7 @@
 
 local mainMod = "SUPER"
 local dofus_scripts = "~/.local/share/own-scripts/gitlab/quantumfate/dofus-scripts"
-local dofus_launch = require("conf.services.dofus.launch")
+local dofus_launch = require("hypr.services.dofus.launch")
 
 -- Window rules
 hl.window_rule({

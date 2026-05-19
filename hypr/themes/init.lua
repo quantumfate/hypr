@@ -1,0 +1,1 @@
+require("hypr.themes.colors")

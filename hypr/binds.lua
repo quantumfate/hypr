@@ -2,7 +2,7 @@ local browser = "zen-twilight"
 local terminal = "kitty"
 local shared_scripts = "~/.local/share/own-scripts/github/quantumfate/scripts"
 
-local toggle_minimize = require("conf.lib.minimize")
+local toggle_minimize = require("hypr.lib.minimize")
 
 -- === Application launchers ===
 hl.bind(config.main_mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
@@ -130,8 +130,8 @@ hl.bind(
 	{ description = "Next workspace", submap_universal = true }
 )
 
-for i, key in ipairs(config.workspace_keys) do
-	if config.workspace_specs[i] then
+for i, key in ipairs(config.workspaces.workspace_keys) do
+	if config.workspaces.workspace_specs[i] then
 		hl.bind(
 			config.main_mod .. " + " .. key,
 			hl.dsp.focus({ workspace = i }),

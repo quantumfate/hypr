@@ -1,96 +1,87 @@
 local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr"
 package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 
-require("conf")
+local mt = require("hypr.lib.mt")
 
-hl.config({
-	cursor = {
-		no_warps = true,
+---@type Config
+_G.config = {
+	main_mod = "SUPER",
+	app_cmds = {
+		media_browser = "zen-twilight -P media --name zen-twilight-media",
+		main_browser = "zen-twilight -P default --name zen-twilight-main",
+		terminal = "kitty --class Kitty-Main",
+		terminal_float = "kitty --class Kitty-float",
+		tmux = "kitty --class Tmux-Main tms",
+		password_manager = "proton-pass",
+		mail = "proton-mail",
+		calculator = "qalculate-qt",
+		app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
 	},
-
-	decoration = {
-		rounding = 4,
-		active_opacity = 0.92,
-		inactive_opacity = 0.85,
-		dim_around = 0.6,
-		dim_special = 0.4,
-
-		blur = {
-			enabled = true,
-			size = 6, -- blur kernel radius
-			passes = 3, -- 2 = cheap, 3 = sweet spot, 4+ = diminishing returns
-			new_optimizations = true,
-			xray = false, -- true = blur sees through ALL windows to wallpaper
-			ignore_opacity = true, -- blur even fully-opaque regions of windows below
-			noise = 0.02, -- subtle film grain hides banding
-			contrast = 1.05, -- slightly punch up blurred content
-			brightness = 1.0,
-			vibrancy = 0.18, -- saturation boost on blurred areas
-			vibrancy_darkness = 0.0,
-			popups = true, -- blur menus/tooltips too
-			popups_ignorealpha = 0.2,
+	workspaces = {
+		workspace_specs = {
+			{
+				workspace = "1",
+				persistent = true,
+				default = true,
+				default_name = "code",
+			},
+			{ workspace = "2", persistent = true, default_name = "study" },
+			{ workspace = "3", persistent = true, default_name = "mail" },
+			{ workspace = "4", persistent = true, default_name = "media" },
+			{
+				workspace = "5",
+				persistent = true,
+				gaps_in = 0,
+				gaps_out = 0,
+				border_size = 0,
+				decorate = false,
+				default_name = "gaming",
+			},
+			{ workspace = "6", persistent = true, default_name = "media" },
 		},
-
-		shadow = {
-			enabled = true,
-			range = 30,
-			render_power = 5,
-			offset = { 0, 5 },
-			color = "rgba(00000070)",
-		},
-	},
-
-	general = {
-		border_size = 2,
-		gaps_in = 2,
-		gaps_out = 5,
-		float_gaps = -1,
-		layout = "master",
-		allow_tearing = false,
-		resize_on_border = false,
-		no_focus_fallback = true,
-
-		snap = {
-			enabled = true,
-			monitor_gap = 30,
-			border_overlap = false,
+		workspace_keys = {
+			"plus",
+			"bracketleft",
+			"braceleft",
+			"parenleft",
+			"ampersand",
+			"equal",
+			"parenright",
+			"braceright",
+			"bracketright",
+			"asterisk",
 		},
 	},
-
-	group = {
-		auto_group = true,
-		groupbar = {
-			enabled = true,
+	host_configs = {
+		["quantum-laptop"] = {
+			monitors = mt.reverse_index_lookup_by_key({
+				["eDP-1"] = {
+					workspaces = { 1, 2, 3, 4, 5, 6 },
+					layouts = mt.reverse_index_lookup({
+						scrolling = { 1, 2, 3, 4, 6 },
+						monocle = { 5 },
+					}),
+				},
+			}, "workspaces"),
+		},
+		["quantum-desktop"] = {
+			monitors = mt.reverse_index_lookup_by_key({
+				["DP-1"] = {
+					workspaces = { 1, 2, 3, 4, 5 },
+					layouts = mt.reverse_index_lookup({
+						master = { 1, 2, 3, 4 },
+						monocle = { 5 },
+					}),
+				},
+				["DP-2"] = {
+					workspaces = { 6 },
+					layouts = mt.reverse_index_lookup({
+						dwindle = { 6 },
+					}),
+				},
+			}, "workspaces"),
 		},
 	},
+}
 
-	input = {
-		kb_layout = "dvorak-custom",
-		follow_mouse = 0,
-		mouse_refocus = false,
-		sensitivity = 0.2,
-		touchpad = {
-			disable_while_typing = true,
-		},
-	},
-
-	master = {
-		new_status = "inherit",
-		orientation = "left",
-		new_on_active = "after",
-		mfact = 0.70,
-		center_master_fallback = "right",
-		always_keep_position = false,
-		slave_count_for_center_master = 2,
-	},
-
-	misc = {
-		disable_hyprland_logo = true,
-		disable_splash_rendering = true,
-		focus_on_activate = true,
-		font_family = "Hack Nerd Font Mono",
-		size_limits_tiled = true,
-		mouse_move_enables_dpms = true,
-	},
-})
-hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
+require("hypr")

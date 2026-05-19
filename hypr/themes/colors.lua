@@ -1,4 +1,4 @@
-local theme = require("conf.themes.macchiato")
+local theme = require("hypr.themes.macchiato")
 
 hl.config({
 	general = {

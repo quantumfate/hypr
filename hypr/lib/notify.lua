@@ -1,7 +1,7 @@
 ---@class NotifyWrapper
 local M = {}
 
-local colors = require("conf.themes.macchiato")
+local colors = require("hypr.themes.macchiato")
 
 ---@enum NotifyLevel
 M.level = {

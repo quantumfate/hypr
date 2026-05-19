@@ -1,4 +1,4 @@
-local helper = require("conf.lib.fn")
+local helper = require("hypr.lib.fn")
 M = {}
 M.worspace = "magic"
 function M:toggle_minimize()

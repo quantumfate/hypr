@@ -2,7 +2,7 @@ local M = {}
 
 M.enabled = false
 
-local notify = require("conf.lib.notify")
+local notify = require("hypr.lib.notify")
 M.counter = 1
 M.launch_cmd = 'xdotool set_window --name "Dofus %s" "$(xdotool search --pid %s)"'
 
