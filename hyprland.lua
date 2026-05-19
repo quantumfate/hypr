@@ -93,7 +93,4 @@ hl.config({
 		mouse_move_enables_dpms = true,
 	},
 })
-
-hl.layer_rule({ match = { namespace = "notifications" }, animation = "slide" })
-
-hl.layer_rule({ match = { namespace = "^(quickshell)$" }, no_anim = true })
+hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })

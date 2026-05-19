@@ -12,28 +12,3 @@ hl.monitor({
 	position = "auto",
 	scale = "auto",
 })
-
--- DP-1 workspaces
-hl.workspace_rule({ workspace = "1", monitor = "DP-1", persistent = true, default = true })
-hl.workspace_rule({ workspace = "2", monitor = "DP-1", persistent = true })
-hl.workspace_rule({ workspace = "3", monitor = "DP-1", persistent = true })
-hl.workspace_rule({ workspace = "4", monitor = "DP-1", persistent = true })
-hl.workspace_rule({
-	workspace = "5",
-	monitor = "DP-1",
-	persistent = true,
-	gaps_in = 0,
-	gaps_out = 0,
-	border_size = 0,
-	decorate = false,
-})
-
--- DP-2 workspaces
-for _, ws in ipairs({ "6", "7", "8", "9", "10" }) do
-	hl.workspace_rule({
-		workspace = ws,
-		monitor = "DP-2",
-		persistent = true,
-		layout_opts = { orientation = "right", mfact = 0.5 },
-	})
-end

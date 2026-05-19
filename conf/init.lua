@@ -1,9 +1,10 @@
 require("conf.events")
 require("conf.services")
-require("conf.themes.colors")
+require("conf.themes")
 
 require("conf.animations")
 require("conf.binds")
+require("conf.layerrules")
 require("conf.monitors")
 require("conf.windowrules")
 require("conf.workspaces")
