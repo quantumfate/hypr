@@ -1,3 +1,4 @@
+require("conf.conf")
 require("conf.events")
 require("conf.services")
 require("conf.themes")

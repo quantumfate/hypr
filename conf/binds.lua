@@ -1,4 +1,3 @@
-local mainMod = "SUPER"
 local browser = "zen-twilight"
 local terminal = "kitty"
 local shared_scripts = "~/.local/share/own-scripts/github/quantumfate/scripts"
@@ -6,19 +5,19 @@ local shared_scripts = "~/.local/share/own-scripts/github/quantumfate/scripts"
 local toggle_minimize = require("conf.lib.minimize")
 
 -- === Application launchers ===
-hl.bind(mainMod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
-hl.bind(mainMod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"))
-hl.bind(mainMod .. " + P", hl.dsp.exec_cmd("dms ipc call processlist focusOrToggle"))
-hl.bind(mainMod .. " + comma", hl.dsp.exec_cmd("dms ipc call settings focusOrToggle"))
-hl.bind(mainMod .. " + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))
-hl.bind(mainMod .. " + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
-hl.bind(mainMod .. " + X", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
+hl.bind(config.main_mod .. " + space", hl.dsp.exec_cmd("dms ipc call spotlight toggle"))
+hl.bind(config.main_mod .. " + V", hl.dsp.exec_cmd("dms ipc call clipboard toggle"))
+hl.bind(config.main_mod .. " + P", hl.dsp.exec_cmd("dms ipc call processlist focusOrToggle"))
+hl.bind(config.main_mod .. " + comma", hl.dsp.exec_cmd("dms ipc call settings focusOrToggle"))
+hl.bind(config.main_mod .. " + N", hl.dsp.exec_cmd("dms ipc call notifications toggle"))
+hl.bind(config.main_mod .. " + SHIFT + N", hl.dsp.exec_cmd("dms ipc call notepad toggle"))
+hl.bind(config.main_mod .. " + X", hl.dsp.exec_cmd("dms ipc call powermenu toggle"))
 
 -- === Cheat sheet ===
-hl.bind(mainMod .. " + SHIFT + Slash", hl.dsp.exec_cmd("dms ipc call keybinds toggle hyprland"))
+hl.bind(config.main_mod .. " + SHIFT + Slash", hl.dsp.exec_cmd("dms ipc call keybinds toggle hyprland"))
 
 -- === Security ===
-hl.bind(mainMod .. " + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"))
+hl.bind(config.main_mod .. " + ALT + L", hl.dsp.exec_cmd("dms ipc call lock lock"))
 hl.bind("CTRL + ALT + Delete", hl.dsp.exec_cmd("dms ipc call processlist focusOrToggle"))
 
 -- === Audio controls ===
@@ -54,177 +53,168 @@ hl.bind(
 )
 
 -- === Window management ===
-hl.bind(mainMod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
-hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
-hl.bind(mainMod .. " + SHIFT + T", hl.dsp.window.float())
+hl.bind(config.main_mod .. " + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
+hl.bind(config.main_mod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
+hl.bind(config.main_mod .. " + SHIFT + T", hl.dsp.window.float())
 
 -- === Terminal ===
 hl.bind(
-	mainMod .. " + return",
+	config.main_mod .. " + return",
 	hl.dsp.exec_cmd("uwsm app -- " .. terminal .. " --class Kitty-Main"),
 	{ description = "Open the Terminal", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + s",
+	config.main_mod .. " + s",
 	hl.dsp.exec_cmd("uwsm app -- " .. terminal .. " --class Tmux-Main tms"),
 	{ description = "Open Kitty with Tmux Session", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + SHIFT + return",
+	config.main_mod .. " + SHIFT + return",
 	hl.dsp.exec_cmd("uwsm app -- " .. terminal .. " --class Kitty-float"),
 	{ description = "Open the Terminal", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + ALT + d",
+	config.main_mod .. " + ALT + d",
 	hl.dsp.exec_cmd("uwsm-app -- zen-twilight -P Media --name zen-twilight-media --no-remote"),
 	{ description = "Open Zen Browser media profile", submap_universal = true }
 )
 
 -- === Applications ===
 hl.bind(
-	mainMod .. " + semicolon",
+	config.main_mod .. " + semicolon",
 	hl.dsp.window.close("activewindow"),
 	{ description = "Close focused window", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + b",
+	config.main_mod .. " + b",
 	hl.dsp.exec_cmd("uwsm app -- " .. browser),
 	{ description = "Open the Browser", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + c",
+	config.main_mod .. " + c",
 	hl.dsp.exec_cmd("uwsm app -- qalculate-qt"),
 	{ description = "Open Calculator", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + m",
+	config.main_mod .. " + m",
 	hl.dsp.exec_cmd("uwsm app -- proton-pass"),
 	{ description = "Open Proton Pass", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + r",
+	config.main_mod .. " + r",
 	hl.dsp.exec_cmd('rofi -show drun -run-command "uwsm app -- {cmd}"'),
 	{ description = "Open Application Launcher", submap_universal = true }
 )
 
 -- === Special workspaces ===
 hl.bind(
-	mainMod .. " + ALT + s",
+	config.main_mod .. " + ALT + s",
 	hl.dsp.workspace.toggle_special("spotify"),
 	{ description = "Toggle Special Workspace spotify", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + ALT + v",
+	config.main_mod .. " + ALT + v",
 	hl.dsp.workspace.toggle_special("vesktop"),
 	{ description = "Toggle Special Workspace vesktop", submap_universal = true }
 )
 
 -- === Workspaces ===
 hl.bind(
-	mainMod .. " + TAB",
+	config.main_mod .. " + TAB",
 	hl.dsp.focus({ workspace = "e-1" }),
 	{ description = "Previous workspace", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + SHIFT + TAB",
+	config.main_mod .. " + SHIFT + TAB",
 	hl.dsp.focus({ workspace = "e+1" }),
 	{ description = "Next workspace", submap_universal = true }
 )
 
--- dvorak-custom number row: keys map to workspaces 1-10 in order.
-local wsKeys = {
-	"plus",
-	"bracketleft",
-	"braceleft",
-	"parenleft",
-	"ampersand",
-	"equal",
-	"parenright",
-	"braceright",
-	"bracketright",
-	"asterisk",
-}
-for i, key in ipairs(wsKeys) do
-	hl.bind(
-		mainMod .. " + " .. key,
-		hl.dsp.focus({ workspace = i }),
-		{ description = "Switch to workspace " .. i, submap_universal = true }
-	)
-end
-for i, key in ipairs(wsKeys) do
-	hl.bind(
-		mainMod .. " + SHIFT + " .. key,
-		hl.dsp.window.move({ workspace = i, follow = true }),
-		{ description = "Move focused to workspace " .. i, submap_universal = true }
-	)
+for i, key in ipairs(config.workspace_keys) do
+	if config.workspace_specs[i] then
+		hl.bind(
+			config.main_mod .. " + " .. key,
+			hl.dsp.focus({ workspace = i }),
+			{ description = "Switch to workspace " .. i, submap_universal = true }
+		)
+		hl.bind(
+			config.main_mod .. " + SHIFT + " .. key,
+			hl.dsp.window.move({ workspace = i, follow = true }),
+			{ description = "Move focused to workspace " .. i, submap_universal = true }
+		)
+	end
 end
 
 -- === Window focus / swap / resize ===
-hl.bind(mainMod .. " + h", hl.dsp.focus({ direction = "l" }), { description = "Move window focus to the left" })
-hl.bind(mainMod .. " + l", hl.dsp.focus({ direction = "r" }), { description = "Move window focus to the right" })
-hl.bind(mainMod .. " + j", hl.dsp.focus({ direction = "u" }), { description = "Move window focus up" })
-hl.bind(mainMod .. " + k", hl.dsp.focus({ direction = "d" }), { description = "Move window focus down" })
+hl.bind(config.main_mod .. " + h", hl.dsp.focus({ direction = "l" }), { description = "Move window focus to the left" })
+hl.bind(
+	config.main_mod .. " + l",
+	hl.dsp.focus({ direction = "r" }),
+	{ description = "Move window focus to the right" }
+)
+hl.bind(config.main_mod .. " + j", hl.dsp.focus({ direction = "u" }), { description = "Move window focus up" })
+hl.bind(config.main_mod .. " + k", hl.dsp.focus({ direction = "d" }), { description = "Move window focus down" })
 
 hl.bind(
-	mainMod .. " + SHIFT + h",
+	config.main_mod .. " + SHIFT + h",
 	hl.dsp.window.swap({ direction = "l" }),
 	{ description = "Swap current window with the window to the left" }
 )
 hl.bind(
-	mainMod .. " + SHIFT + l",
+	config.main_mod .. " + SHIFT + l",
 	hl.dsp.window.swap({ direction = "r" }),
 	{ description = "Swap current window with the window to the right" }
 )
 hl.bind(
-	mainMod .. " + SHIFT + j",
+	config.main_mod .. " + SHIFT + j",
 	hl.dsp.window.swap({ direction = "u" }),
 	{ description = "Swap current window with the lower window" }
 )
 hl.bind(
-	mainMod .. " + SHIFT + k",
+	config.main_mod .. " + SHIFT + k",
 	hl.dsp.window.swap({ direction = "d" }),
 	{ description = "Swap current window with the upper window" }
 )
 
 hl.bind(
-	mainMod .. " + CTRL + h",
+	config.main_mod .. " + CTRL + h",
 	hl.dsp.window.resize({ x = -10, y = 0, relative = true }),
 	{ description = "Resize vertical by -10", repeating = true }
 )
 hl.bind(
-	mainMod .. " + CTRL + l",
+	config.main_mod .. " + CTRL + l",
 	hl.dsp.window.resize({ x = 10, y = 0, relative = true }),
 	{ description = "Resize vertically by 10", repeating = true }
 )
 hl.bind(
-	mainMod .. " + CTRL + j",
+	config.main_mod .. " + CTRL + j",
 	hl.dsp.window.resize({ x = 0, y = -10, relative = true }),
 	{ description = "Resize horizontally by -10", repeating = true }
 )
 hl.bind(
-	mainMod .. " + CTRL + k",
+	config.main_mod .. " + CTRL + k",
 	hl.dsp.window.resize({ x = 0, y = 10, relative = true }),
 	{ description = "Resize horizontally by 10", repeating = true }
 )
 
 -- === Mouse bindings ===
 hl.bind(
-	mainMod .. " + ALT + mouse:272",
+	config.main_mod .. " + ALT + mouse:272",
 	hl.dsp.window.drag(),
 	{ description = "Move a window with left click", submap_universal = true, mouse = true }
 )
 hl.bind(
-	mainMod .. " + ALT + mouse:273",
+	config.main_mod .. " + ALT + mouse:273",
 	hl.dsp.window.resize(),
 	{ description = "Resize a window with right click", submap_universal = true, mouse = true }
 )
-hl.bind(mainMod .. " + ALT + m", function()
+hl.bind(config.main_mod .. " + ALT + m", function()
 	toggle_minimize:toggle_minimize()
 end, { description = "Minimize Window", submap_universal = true })
 
 -- === Utility ===
 hl.bind(
-	mainMod .. " + PRINT",
+	config.main_mod .. " + PRINT",
 	hl.dsp.exec_cmd(shared_scripts .. "/wrapper/hyprshot.sh --window"),
 	{ description = "Screenshot current window", submap_universal = true }
 )
@@ -234,13 +224,13 @@ hl.bind(
 	{ description = "Screenshot current output", submap_universal = true }
 )
 hl.bind(
-	mainMod .. " + SHIFT + PRINT",
+	config.main_mod .. " + SHIFT + PRINT",
 	hl.dsp.exec_cmd(shared_scripts .. "/wrapper/hyprshot.sh --region"),
 	{ description = "Screenshot a selected region", submap_universal = true }
 )
 hl.bind("ALT + p", hl.dsp.exec_cmd("hyprpicker -a -n"), { description = "Execute hyprpicker to extract hex code" })
 hl.bind(
-	mainMod .. " + ALT + l",
+	config.main_mod .. " + ALT + l",
 	hl.dsp.exec_cmd("hyprlock -c ~/.config/hypr-chezmoi/hyprlock.conf"),
 	{ description = "Lock the screen" }
 )
