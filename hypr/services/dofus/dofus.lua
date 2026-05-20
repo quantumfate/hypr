@@ -22,7 +22,7 @@ hl.window_rule({
 	match = { initial_class = "Ankama Launcher" },
 	workspace = "5",
 	center = true,
-	size = { 2000, 1200 },
+	size = { "monitor_w", "monitor_h" },
 	float = true,
 })
 hl.window_rule({
