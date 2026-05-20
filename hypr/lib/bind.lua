@@ -1,6 +1,7 @@
 local M = {}
 
 local notify = require("hypr.lib.notify")
+local util = require("hypr.lib.util")
 
 ---@param mods string[]?
 local function parse_mods(mods)
@@ -9,8 +10,12 @@ end
 
 ---Binds workspace focus and window move actions
 function M.bind_workspaces()
-	for i, key in ipairs(config.workspaces.workspace_keys) do
-		if config.workspaces.workspace_specs[i] then
+	local host = util.host_config()
+	if not host then
+		return
+	end
+	for i, key in ipairs(host.workspaces.workspace_keys) do
+		if host.workspaces.workspace_specs[i] then
 			M.focus_workspace(key, tostring(i))
 			M.move_focused_to_workspace(key, tostring(i), { "SHIFT" })
 		end
@@ -63,11 +68,20 @@ end
 ---@param description string
 ---@param mods string[]?
 function M.move_window_focus(key, direction, description, mods)
-	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
-		hl.dsp.focus({ direction = direction }),
-		{ description = description }
-	)
+	hl.bind(config.main_mod .. parse_mods(mods) .. key, function()
+		local ws = hl.get_active_workspace(hl.get_active_monitor())
+		if ws then
+			if ws.tiled_layout == "monocle" then
+				if direction == "l" or direction == "d" then
+					hl.dispatch(hl.dsp.layout("cycleprev"))
+				else
+					hl.dispatch(hl.dsp.layout("cyclenext"))
+				end
+			else
+				hl.dispatch(hl.dsp.focus({ direction = direction }))
+			end
+		end
+	end, { description = description })
 end
 
 ---@param key string

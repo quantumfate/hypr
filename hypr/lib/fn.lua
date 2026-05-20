@@ -13,6 +13,18 @@ function M.any(callable, iter)
 end
 
 ---@param callable function
+---@param table table
+---@return boolean
+function M.any_in_table(callable, table)
+	for k, v in pairs(table) do
+		if callable(k, v) then
+			return true
+		end
+	end
+	return false
+end
+
+---@param callable function
 ---@param iter table
 ---@return boolean
 function M.all(callable, iter)

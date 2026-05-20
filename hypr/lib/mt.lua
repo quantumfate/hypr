@@ -40,4 +40,22 @@ function M.reverse_index_lookup_by_key(table, target_key)
 	})
 end
 
+---Attaches a metatable to a given table that returns the table in a list of tables of which the index is found first
+---@param table any
+---@return table
+function M.list_reverse_index_lookup_by_key(table)
+	return setmetatable(table, {
+		__index = function(t, k)
+			for idx, _ in ipairs(t) do
+				if fn.any_in_table(function(_, value)
+					return value == k
+				end, t[idx]) then
+					return t[idx]
+				end
+			end
+			notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
+		end,
+	})
+end
+
 return M

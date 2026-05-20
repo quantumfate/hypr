@@ -1,8 +1,6 @@
 local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr"
 package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 
-local mt = require("hypr.lib.mt")
-
 ---@type Config
 _G.config = {
 	main_mod = "SUPER",
@@ -17,69 +15,116 @@ _G.config = {
 		calculator = "qalculate-qt",
 		app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
 	},
-	workspaces = {
-		workspace_specs = {
-			{
-				workspace = "1",
-				persistent = true,
-				default = true,
-				default_name = "code",
-			},
-			{ workspace = "2", persistent = true, default_name = "study" },
-			{ workspace = "3", persistent = true, default_name = "mail" },
-			{ workspace = "4", persistent = true, default_name = "media" },
-			{
-				workspace = "5",
-				persistent = true,
-				gaps_in = 0,
-				gaps_out = 0,
-				border_size = 0,
-				decorate = false,
-				default_name = "gaming",
-			},
-			{ workspace = "6", persistent = true, default_name = "media" },
-		},
-		workspace_keys = {
-			"plus",
-			"bracketleft",
-			"braceleft",
-			"parenleft",
-			"ampersand",
-			"equal",
-			"parenright",
-			"braceright",
-			"bracketright",
-			"asterisk",
-		},
-	},
 	host_configs = {
 		["quantum-laptop"] = {
-			monitors = mt.reverse_index_lookup_by_key({
-				["eDP-1"] = {
-					workspaces = { 1, 2, 3, 4, 5, 6 },
-					layouts = mt.reverse_index_lookup({
-						scrolling = { 1, 2, 3, 4, 6 },
-						monocle = { 5 },
-					}),
+			workspaces = {
+				workspace_specs = {
+					{
+						workspace = "1",
+						persistent = true,
+						default = true,
+						default_name = "code",
+						layout = "monocle",
+						monitor = "eDP-1",
+					},
+					{
+						workspace = "2",
+						persistent = true,
+						default_name = "study",
+						layout = "scrolling",
+						monitor = "eDP-1",
+					},
+					{
+						workspace = "3",
+						persistent = true,
+						default_name = "mail",
+						layout = "scrolling",
+						monitor = "eDP-1",
+					},
+					{
+						workspace = "4",
+						persistent = true,
+						default_name = "media",
+						layout = "scrolling",
+						monitor = "eDP-1",
+					},
+					{
+						workspace = "5",
+						persistent = true,
+						gaps_in = 0,
+						gaps_out = 0,
+						border_size = 0,
+						decorate = false,
+						layout = "monocle",
+						default_name = "gaming",
+						monitor = "eDP-1",
+					},
 				},
-			}, "workspaces"),
+				workspace_keys = {
+					"plus",
+					"bracketleft",
+					"braceleft",
+					"parenleft",
+					"ampersand",
+					"equal",
+					"parenright",
+					"braceright",
+					"bracketright",
+					"asterisk",
+				},
+			},
 		},
 		["quantum-desktop"] = {
-			monitors = mt.reverse_index_lookup_by_key({
-				["DP-1"] = {
-					workspaces = { 1, 2, 3, 4, 5 },
-					layouts = mt.reverse_index_lookup({
-						master = { 1, 2, 3, 4 },
-						monocle = { 5 },
-					}),
+			workspaces = {
+				workspace_specs = {
+					{
+						workspace = "1",
+						persistent = true,
+						default = true,
+						default_name = "code",
+						monitor = "DP-1",
+						layout = "master",
+					},
+					{ workspace = "2", persistent = true, default_name = "study", monitor = "DP-1", layout = "master" },
+					{
+						workspace = "3",
+						persistent = true,
+						default_name = "mail",
+						monitor = "DP-1",
+						layout = "master",
+					},
+					{
+						workspace = "4",
+						persistent = true,
+						gaps_in = 0,
+						gaps_out = 0,
+						border_size = 0,
+						decorate = false,
+						default_name = "gaming",
+						layout = "monocle",
+						monitor = "DP-1",
+					},
+					{
+						workspace = "5",
+						persistent = true,
+						default_name = "media",
+						monitor = "DP-2",
+						layout = "scrolling",
+					},
 				},
-				["DP-2"] = {
-					workspaces = { 6 },
-					layouts = mt.reverse_index_lookup({
-						dwindle = { 6 },
-					}),
+				workspace_keys = {
+					"plus",
+					"bracketleft",
+					"braceleft",
+					"parenleft",
+					"ampersand",
+					"equal",
+					"parenright",
+					"braceright",
+					"bracketright",
+					"asterisk",
 				},
-			}, "workspaces"),
+			},
 		},
 	},
 }
