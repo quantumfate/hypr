@@ -141,14 +141,16 @@ end
 ---@param description string
 ---@param mods string[]?
 ---@param repeating boolean?
-function M.audio(key, cmd, description, mods, repeating)
+---@param callback function?
+function M.audio(key, cmd, description, mods, repeating, callback)
 	local full_key = key:find("XF86") and key or ("XF86Audio" .. key)
 	local prefix = mods and (table.concat(mods, "+") .. "+") or ""
-	hl.bind(
-		prefix .. full_key,
-		hl.dsp.exec_cmd(cmd),
-		{ locked = true, repeating = repeating, description = description }
-	)
+	hl.bind(prefix .. full_key, function()
+		hl.dispatch(hl.dsp.exec_cmd(cmd))
+		if callback then
+			callback()
+		end
+	end, { locked = true, repeating = repeating, description = description })
 end
 
 ---@param key string
