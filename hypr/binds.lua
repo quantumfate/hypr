@@ -41,6 +41,7 @@ bind.app("s", config.app_cmds.tmux, "Open Kitty with Tmux Session")
 bind.app("return", config.app_cmds.terminal_float, "Open the floating Terminal", { "SHIFT" })
 bind.app("d", config.app_cmds.media_browser, "Open Zen Browser media profile", { "ALT" })
 bind.app("b", config.app_cmds.main_browser, "Open the Browser")
+bind.app("d", config.app_cmds.dev_browser, "Open the dev Browser", { "SHIFT" })
 bind.app("c", config.app_cmds.calculator, "Open Calculator")
 bind.app("m", config.app_cmds.password_manager, "Open Proton Pass")
 bind.exec("r", config.app_cmds.app_launcher, {

@@ -10,6 +10,7 @@
 ---@class Commands
 ---@field media_browser string
 ---@field main_browser string
+---@field dev_browser string
 ---@field terminal string
 ---@field terminal_float string
 ---@field tmux string
