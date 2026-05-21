@@ -1,5 +1,12 @@
+---@meta
+
+---Global config table populated by hyprland.lua entry point.
+---@type Config
+config = nil
+
 ---@class Config
 ---@field main_mod string
+---@field hyprlock_conf string
 ---@field app_cmds Commands
 ---@field host_configs table<string, Hosts>
 

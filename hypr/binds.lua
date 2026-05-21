@@ -98,7 +98,7 @@ bind.exec("p", "hyprpicker -a -n", {
 	description = "Execute hyprpicker to extract hex code",
 })
 
-bind.exec("l", "hyprlock -c ~/.config/hypr-chezmoi/hyprlock.conf", {
+bind.exec("l", "hyprlock -c " .. config.hyprlock_conf, {
 	mods = { "ALT" },
 	description = "Lock the screen",
 })

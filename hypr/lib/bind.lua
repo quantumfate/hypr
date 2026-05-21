@@ -107,7 +107,7 @@ end
 
 ---Generic exec_cmd binding. Defaults: prefix with config.main_mod, no submap_universal/locked/repeating.
 ---@param key string
----@param cmd string shell command
+---@param cmd string|function shell command
 ---@param opts ExecOpts?
 function M.exec(key, cmd, opts)
 	opts = opts or {}
@@ -117,7 +117,7 @@ function M.exec(key, cmd, opts)
 	else
 		prefix = config.main_mod .. parse_mods(opts.mods)
 	end
-	hl.bind(prefix .. key, hl.dsp.exec_cmd(cmd), {
+	hl.bind(prefix .. key, type(cmd) == "function" and cmd() or hl.dsp.exec_cmd(cmd), {
 		description = opts.description,
 		submap_universal = opts.submap_universal,
 		locked = opts.locked,

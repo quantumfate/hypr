@@ -16,6 +16,11 @@ _G.config = {
 		calculator = "qalculate-qt",
 		app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
 	},
+	hyprlock_conf = os.getenv("HOME")
+		.. (
+			require("hypr.lib.util").hostname() == "quantum-desktop" and "/.config/hypr/hyprlock.conf"
+			or "/.config/hypr/hyprlock-laptop.conf"
+		),
 	host_configs = {
 		["quantum-laptop"] = {
 			workspaces = {
