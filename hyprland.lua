@@ -7,6 +7,7 @@ _G.config = {
 	app_cmds = {
 		media_browser = "zen-twilight -P Media --name zen-twilight-media",
 		main_browser = "zen-twilight",
+		dev_browser = "firefox-developer-edition",
 		terminal = "kitty --class Kitty-Main",
 		terminal_float = "kitty --class Kitty-float",
 		tmux = "kitty --class Tmux-Main tms",

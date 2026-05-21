@@ -21,44 +21,107 @@
 ---@class Hosts
 ---@field workspaces Workspaces
 
----@class Match
----@field class string?
----@field initial_class string?
----@field title string?
----@field initial_title string?
----@field tag string?
----@field workspace string?
----@field floating boolean?
----@field fullscreen boolean?
----@field fullscreen_state string?
----@field pinned boolean?
----@field focus boolean?
----@field xwayland boolean?
----@field content string?
----@field group string?
----@field pid integer?
----@field address string?
+---@class WindowRuleProps
+---@field class	string?	Windows with class matching RegEx.
+---@field title	string?	Windows with title matching RegEx.
+---@field initial_class	string?	Windows with initialClass matching RegEx.
+---@field initial_title	string?	Windows with initialTitle matching RegEx.
+---@field tag	string?	Windows with matching tag.
+---@field xwayland	boolean?	Xwayland windows.
+---@field float	boolean?	Floating windows.
+---@field fullscreen	boolean?	Fullscreen windows.
+---@field pin	boolean?	Pinned windows.
+---@field focus	boolean?	Currently focused window.
+---@field group	boolean?	Grouped windows.
+---@field modal	boolean?	Modal windows (e.g. “Are you sure” popups)
+---@field fullscreen_state_client	integer?	Windows with matching fullscreenstate. 0 - none, 1 - maximize, 2 - fullscreen, 3 - maximize and fullscreen.
+---@field fullscreen_state_internal	integer?	Windows with matching fullscreenstate. 0 - none, 1 - maximize, 2 - fullscreen, 3 - maximize and fullscreen.
+---@field workspace	string?	Windows on matching workspace. Can be id, "name:string" or a workspace selector.
+---@field content	string?	Windows with specified content type (none, photo, video, game).
+---@field xdg_tag	string?	Match a window by its xdgTag (see hyprctl clients to check if it has one).
+
+---Group rule string. Space-separate options to combine (e.g. "barred set", "lock always").
+---@alias HL.WindowGroup
+---| "set"           # Open window as a group.
+---| "set always"    # Open as group; always effective (not just first window).
+---| "new"           # Shorthand for "barred set".
+---| "lock"          # Lock the group. Combine with "set" or "new".
+---| "lock always"   # Lock the group; always effective.
+---| "barred"        # Do not auto-group into focused unlocked group.
+---| "deny"          # Disallow toggling as/adding to a group.
+---| "invade"        # Force open window in locked group.
+---| "override"      # Override other group rules. Combine with other options.
+---| "unset"         # Clear all group rules.
+---| string
+
+---@alias HL.ContentType "none"|"photo"|"video"|"game"
+---@alias HL.IdleInhibit "none"|"always"|"focus"|"fullscreen"
+
+---Effects evaluated once at window open. initialClass/initialTitle used for matching.
+---@class WindowRuleStaticEffects
+---@field float	boolean?	Floats a window.
+---@field tile	boolean?	Tiles a window.
+---@field fullscreen	boolean?	Fullscreens a window.
+---@field maximize	boolean?	Maximizes a window.
+---@field fullscreen_state	string?	Sets fullscreen mode, e.g. "1 2" (internal client). 0 none, 1 maximize, 2 fullscreen, 3 both.
+---@field move	(string|number)[]?	Moves floating window, monitor-local. E.g. {100, 200} or expression strings.
+---@field size	(string|number)[]?	Resizes floating window. E.g. {800, 600} or expression strings.
+---@field center	boolean?	Centers floating window on monitor.
+---@field pseudo	boolean?	Pseudotiles a window.
+---@field monitor	string?	Sets monitor to open on. E.g. "1" or "DP-1". Suffix " silent".
+---@field workspace	string?	Sets workspace to open on. "unset" or suffix " silent".
+---@field no_initial_focus	boolean?	Disables initial focus.
+---@field pin	boolean?	Pin to all workspaces. Floating only.
+---@field group	HL.WindowGroup?	Sets group properties. Bare key = "set".
+---@field suppress_event	string?	Ignore events. Space-separated: "fullscreen", "maximize", "activate", "activatefocus", "fullscreenoutput".
+---@field content	HL.ContentType?	Sets content type.
+---@field no_close_for	integer?	Block killactive for N ms after open.
+---@field scrolling_width	number?	Column width for scrolling layout workspaces.
+
+---Effects re-evaluated on property change. All also settable via setprop.
+---@class WindowRuleDynamicEffects
+---@field persistent_size	boolean?	Restore stored size for floating windows of same class/title.
+---@field no_max_size	boolean?	Remove max size limitations.
+---@field stay_focused	boolean?	Force focus while window visible.
+---@field animation	string?	Force animation, optional style. E.g. "popin" or "popin 80%".
+---@field border_color	string|table?	Force border color. Color, gradient, or {colors={...}, angle=N}.
+---@field idle_inhibit	HL.IdleInhibit?	Idle inhibit rule.
+---@field opacity	string?	Opacity multiplier. "0.8", "0.9 0.7" (active/inactive), "1 0.8 0.9" (active/inactive/fullscreen). Append " override" for absolute.
+---@field tag	string?	Apply tag. "+t" set, "-t" unset, "t" toggle.
+---@field max_size	(string|number)[]?	Max size for floating. E.g. {800, 600}.
+---@field min_size	number[]?	Min size for floating. E.g. {200, 150}.
+---@field border_size	integer?	Border size.
+---@field rounding	integer?	Force rounding px, ignore default.
+---@field rounding_power	number?	Override rounding power.
+---@field allows_input	boolean?	Force XWayland window to receive input.
+---@field dim_around	boolean?	Dim around window. Floating only.
+---@field decorate	boolean?	Draw window decorations. (default: true)
+---@field focus_on_activate	boolean?	Focus app on activation request.
+---@field keep_aspect_ratio	boolean?	Force aspect ratio on mouse resize.
+---@field nearest_neighbor	boolean?	Force nearest-neighbor filtering.
+---@field no_anim	boolean?	Disable animations.
+---@field no_blur	boolean?	Disable blur.
+---@field no_dim	boolean?	Disable window dimming.
+---@field no_focus	boolean?	Disable focus.
+---@field no_follow_mouse	boolean?	Block focus on mouse-over when follow_mouse=1.
+---@field no_shadow	boolean?	Disable shadows.
+---@field no_shortcuts_inhibit	boolean?	Disallow shortcut inhibition.
+---@field no_screen_share	boolean?	Hide from screen sharing.
+---@field no_vrr	boolean?	Disable VRR. Needs misc.vrr = 2 or 3.
+---@field opaque	boolean?	Force opaque.
+---@field force_rgbx	boolean?	Ignore alpha channel entirely.
+---@field sync_fullscreen	boolean?	Sync fullscreen mode with window-sent mode.
+---@field immediate	boolean?	Allow tearing.
+---@field xray	boolean?	Blur xray mode.
+---@field render_unfocused	boolean?	Render as if visible when hidden.
+---@field scroll_mouse	number?	Override input.scroll_factor.
+---@field scroll_touchpad	number?	Override input.touchpad.scroll_factor.
+---@field confine_pointer	boolean?	Lock cursor to window.
+
+---@class WindowRuleEffects
+---@field static WindowRuleStaticEffects?
+---@field dynamic WindowRuleDynamicEffects?
 
 ---@class WindowRuleScope
----@field matches Match[]
----@field tag string with "+" prefix to add tag
----@field props table<string, any>? props applied to bare tag
-
----@class WorkspaceAssign
----@field match Match
----@field props table<string, any>?
-
----@class WindowRuleRule
----@field match Match
----@field props table<string, any>
-
----@class NamedWindowRule
----@field name string
----@field match Match
----@field props table<string, any>
-
----@class WindowRuleConfig
----@field tag_scopes table<string, WindowRuleScope>
----@field workspace_assigns table<string, WorkspaceAssign[]>
----@field rules WindowRuleRule[]
----@field named table<string, NamedWindowRule>
+---@field props WindowRuleProps[]
+---@field effects WindowRuleStaticEffects

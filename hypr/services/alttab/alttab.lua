@@ -36,14 +36,17 @@ function M:alttab(direction)
 
 	os.execute("mkdir -p '" .. M.alttab_dir .. "'")
 
-	local current_class = hl.get_active_window().class
 	local filter = false
-	for _, class in ipairs(M.filter_classes) do
-		if current_class == class then
-			filter = true
+	local active_window = hl.get_active_window()
+	if active_window then
+		for _, class in ipairs(M.filter_classes) do
+			if active_window.class == class then
+				filter = true
+			end
 		end
 	end
-	local windows = filter and hl.get_windows({ class = current_class }) or hl.get_windows()
+	---@diagnostic disable-next-line: need-check-nil
+	local windows = filter and hl.get_windows({ class = active_window.class }) or hl.get_windows()
 	table.sort(windows, function(a, b)
 		return a.focus_history_id < b.focus_history_id
 	end)
