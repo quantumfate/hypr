@@ -11,7 +11,7 @@ local dofus_launch = require("hypr.services.dofus.launch")
 -- Window rules
 hl.window_rule({
 	match = { initial_class = "Dofus.x64" },
-	workspace = "5",
+	workspace = "name:gaming",
 	center = true,
 	content = "game",
 	opacity = "1.0 override",
@@ -45,6 +45,7 @@ hl.define_submap("dofus", function()
 	hl.bind("plus", hl.dsp.submap("team_pioneer"))
 end)
 
+-- TODO: port scripts
 hl.define_submap("team_pioneer", function()
 	for i = 1, 8 do
 		hl.bind("F" .. i, hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --activate " .. (i - 1)))
