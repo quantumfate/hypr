@@ -3,6 +3,11 @@ hl.config({
 		no_warps = true,
 	},
 
+	binds = {
+		workspace_back_and_forth = true,
+		hide_special_on_workspace_change = true,
+	},
+
 	decoration = {
 		rounding = 4,
 		active_opacity = 0.92,
