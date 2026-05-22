@@ -61,6 +61,7 @@ hl.config({
 
 	input = {
 		kb_layout = "dvorak-custom",
+		kb_options = require("hypr.lib.util").hostname() == "quantum-laptop" and "caps:swapescape",
 		follow_mouse = 0,
 		mouse_refocus = false,
 		sensitivity = 0.2,

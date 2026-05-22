@@ -73,15 +73,12 @@ bind.resize_split("j", 0, -10, { "CTRL" })
 bind.resize_split("k", 0, 10, { "CTRL" })
 
 -- === Mouse bindings ===
+
+hl.bind("SUPER + ALT_L", hl.dsp.window.resize(), { mouse = true })
 hl.bind(
 	config.main_mod .. " + ALT + mouse:272",
 	hl.dsp.window.drag(),
 	{ description = "Move a window with left click", submap_universal = true, mouse = true }
-)
-hl.bind(
-	config.main_mod .. " + ALT + mouse:273",
-	hl.dsp.window.resize(),
-	{ description = "Resize a window with right click", submap_universal = true, mouse = true }
 )
 hl.bind(config.main_mod .. " + ALT + m", function()
 	toggle_minimize:toggle_minimize()
