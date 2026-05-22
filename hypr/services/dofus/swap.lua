@@ -3,8 +3,7 @@ local notify = require("hypr.lib.notify")
 
 local M = {}
 
-local SCRIPTS_DIR = os.getenv("HOME") .. "/Projects/gitlab/quantumfate/dofus-scripts"
-local SWAP_SCRIPT = SCRIPTS_DIR .. "/dofus_swap.py"
+local SWAP_SCRIPT = "dofus_swap.py"
 local LOG_DIR = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
 local LOG_FILE = LOG_DIR .. "/dofus_swap.log"
 local PGREP_PATTERN = "dofus_swap\\.py run"
