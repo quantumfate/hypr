@@ -43,7 +43,7 @@ _G.config = {
 					{
 						workspace = "3",
 						persistent = true,
-						default_name = "mail",
+						default_name = "proton",
 						layout = "scrolling",
 						monitor = "eDP-1",
 					},
@@ -95,9 +95,9 @@ _G.config = {
 					{
 						workspace = "3",
 						persistent = true,
-						default_name = "mail",
+						default_name = "proton",
 						monitor = "DP-1",
-						layout = "master",
+						layout = "dwindle",
 					},
 					{
 						workspace = "4",

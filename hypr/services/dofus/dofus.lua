@@ -1,12 +1,7 @@
--- Dofus gaming window rules & submaps.
--- Ported from the formerly chezmoi-managed dofus-binds.conf.
---
--- MACHINE-SPECIFIC: only relevant on machines where you play Dofus. The bound
--- scripts live in an external repo (gitlab/quantumfate/dofus-scripts).
-
-local mainMod = "SUPER"
-local dofus_scripts = "~/.local/share/own-scripts/gitlab/quantumfate/dofus-scripts"
 local dofus_launch = require("hypr.services.dofus.launch")
+local common = require("hypr.services.dofus.common")
+local team = require("hypr.services.dofus.team")
+local swap = require("hypr.services.dofus.swap")
 
 -- Window rules
 hl.window_rule({
@@ -20,7 +15,7 @@ hl.window_rule({
 })
 hl.window_rule({
 	match = { initial_class = "Ankama Launcher" },
-	workspace = "5",
+	workspace = "name:gaming",
 	center = true,
 	size = { "monitor_w", "monitor_h" },
 	float = true,
@@ -34,29 +29,51 @@ hl.window_rule({
 })
 
 -- Enter the Dofus submap
-hl.bind(mainMod .. " + d", hl.dsp.submap("dofus"))
+hl.bind(config.main_mod .. " + d", hl.dsp.submap("dofus"))
 
 hl.define_submap("dofus", function()
 	hl.bind("escape", hl.dsp.submap("reset"))
 	hl.bind("d", function()
 		dofus_launch:toggle_enable()
 	end)
-	hl.bind("s", hl.dsp.exec_cmd(dofus_scripts .. "/dofus_swap_toggle.sh"))
-	hl.bind("plus", hl.dsp.submap("team_pioneer"))
+	hl.bind("s", function()
+		swap.toggle()
+	end)
+	hl.bind("plus", function()
+		common.select("pioneer")
+		hl.dispatch(hl.dsp.submap("team_pioneer"))
+	end)
 end)
 
--- TODO: port scripts
 hl.define_submap("team_pioneer", function()
 	for i = 1, 8 do
-		hl.bind("F" .. i, hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --activate " .. (i - 1)))
+		hl.bind("F" .. i, function()
+			team.activate(common.team(), i)
+		end)
 	end
-	-- Scroll direction is inverted
-	hl.bind("F23", hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --down --pioneer"))
-	hl.bind(mainMod .. " + F23", hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --up --pioneer"))
-	hl.bind("right", hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --down --pioneer"))
-	hl.bind("left", hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --up --pioneer"))
-	hl.bind("mouse:274", hl.dsp.exec_cmd(dofus_scripts .. "/wrap_action.sh --press --pioneer"))
+	hl.bind("F23", function()
+		team.iterate(common.team(), false)
+	end)
+	hl.bind(config.main_mod .. " + F23", function()
+		team.iterate(common.team(), true)
+	end)
+	hl.bind("right", function()
+		team.iterate(common.team(), false)
+	end)
+	hl.bind("left", function()
+		team.iterate(common.team(), true)
+	end)
+	hl.bind("mouse:274", function()
+		team.press(common.team())
+	end)
+	hl.bind("up", function()
+		team.press(common.team())
+	end)
 	hl.bind("SHIFT + escape", hl.dsp.submap("dofus"))
-	hl.bind(mainMod .. " + F10", hl.dsp.exec_cmd("bash " .. dofus_scripts .. "/double_click.sh &"))
-	hl.bind(mainMod .. " + F11", hl.dsp.exec_cmd("pkill -f double_click.sh"), { release = true, transparent = true })
+	hl.bind(config.main_mod .. " + F10", function()
+		team.double_click_start()
+	end)
+	hl.bind(config.main_mod .. " + F11", function()
+		team.double_click_stop()
+	end, { release = true, transparent = true })
 end)

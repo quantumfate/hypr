@@ -28,10 +28,11 @@ windowrule.tag_set_effects("study", {
 
 windowrule.tag_props({
 	{ initial_class = "(Proton Mail)" },
-}, "mail")
+	{ initial_class = "(Proton Pass)" },
+}, "proton")
 
-windowrule.tag_set_effects("mail", {
-	static = { workspace = "name:mail" },
+windowrule.tag_set_effects("proton", {
+	static = { workspace = "name:proton" },
 })
 
 windowrule.tag_props({
@@ -59,7 +60,7 @@ windowrule.tag_set_effects("pip", {
 
 windowrule.tag_props({
 	{
-		initial_class = [[(protonvpn-app|Impala|About|Wiremix|com.gabm.satty|Calos|TUI.float|io\.github\.Qalculate\.qalculate-qt|Proton Pass)]],
+		initial_class = [[(protonvpn-app|Impala|About|Wiremix|com.gabm.satty|Calos|TUI.float|io\.github\.Qalculate\.qalculate-qt)]],
 	},
 	{ initial_class = "(Ranger-tui|Wiremix-tui|Btop-tui|Parui-tui|Blue-tui)" },
 	{

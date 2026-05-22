@@ -3,19 +3,12 @@ local M = {}
 M.enabled = false
 
 local notify = require("hypr.lib.notify")
+local common = require("hypr.services.dofus.common")
 M.counter = 1
 M.launch_cmd = 'xdotool set_window --name "Dofus %s" "$(xdotool search --pid %s)"'
 
-M.characters = {
-	"Rejecter",
-	"Draintouch",
-	"Reminiscer",
-	"Traumafactory",
-	"Memoryfracture",
-	"Miserymaker",
-	"Sayer",
-	"Dissipate",
-}
+-- Snapshot of the team being launched; set from common.team() on enable.
+M.characters = common.team()
 
 function M:reset_counter()
 	self.counter = 1
@@ -32,12 +25,12 @@ function M:toggle_enable()
 		notify:notify("Dofus Launch Disabled", 2000, notify.level.INFO)
 	else
 		self.enabled = true
+		self.characters = common.team()
 		notify:notify("Dofus Launch Enabled", 2000, notify.level.INFO)
 	end
 end
 
 hl.on(
-
 	"window.open",
 	---@param w HL.Window
 	function(w)
