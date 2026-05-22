@@ -95,7 +95,7 @@ bind.exec("p", "hyprpicker -a -n", {
 	description = "Execute hyprpicker to extract hex code",
 })
 
-bind.exec("l", "hyprlock -c " .. config.hyprlock_conf, {
+bind.exec("l", ",lock-session.sh", {
 	mods = { "ALT" },
 	description = "Lock the screen",
 })
