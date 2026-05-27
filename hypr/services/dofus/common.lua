@@ -8,15 +8,15 @@
 ---@field title_prefix string
 local M = {}
 
-M.default_team = "main_team"
+M.default_team = "pioneer"
 M.selected = M.default_team
 M.title_prefix = "Dofus "
 
 M.characters = {
 	pioneer = {
+		"Rejecter",
 		"Reminiscer",
 		"Sayer",
-		"Rejecter",
 		"Draintouch",
 		"Traumafactory",
 		"Memoryfracture",
