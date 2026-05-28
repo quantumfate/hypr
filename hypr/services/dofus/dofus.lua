@@ -13,16 +13,22 @@ hl.window_rule({
 	no_anim = true,
 	suppress_event = "fullscreen",
 })
+
+hl.workspace_rule({
+	workspace = "special:ankama",
+	on_created_empty = "gamemoderun ankama-launcher",
+})
+
 hl.window_rule({
 	match = { initial_class = "Ankama Launcher" },
-	workspace = "name:gaming",
+	workspace = "special:ankama",
 	center = true,
-	size = { "monitor_w", "monitor_h" },
+	size = { "monitor_w * 0.8", "monitor_h * 0.8" },
 	float = true,
 })
 hl.window_rule({
 	match = { class = "Ankama Launcher", title = "overlay" },
-	workspace = "5",
+	workspace = "name:gaming",
 	float = true,
 	center = true,
 	tag = "+floating-window",
@@ -36,6 +42,8 @@ hl.define_submap("dofus", function()
 	hl.bind("d", function()
 		dofus_launch:toggle_enable()
 	end)
+	hl.bind("a", hl.dsp.exec_cmd("gamemoderun ankama-launcher"))
+	hl.bind("SUPER + ALT + l", hl.dsp.workspace.toggle_special("ankama"))
 	hl.bind("s", function()
 		swap.toggle()
 	end)
