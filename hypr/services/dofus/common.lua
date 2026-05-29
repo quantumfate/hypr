@@ -14,9 +14,9 @@ M.title_prefix = "Dofus "
 
 M.characters = {
 	pioneer = {
-		"Rejecter",
 		"Reminiscer",
 		"Sayer",
+		"Rejecter",
 		"Draintouch",
 		"Traumafactory",
 		"Memoryfracture",
