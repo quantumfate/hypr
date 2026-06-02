@@ -1,5 +1,4 @@
 local M = {}
-local collection = require("hypr.lib.collection")
 
 ---Bulk tag-assign matches with a single tag (e.g. "+pip")
 ---@param props_list WindowRuleProps[]

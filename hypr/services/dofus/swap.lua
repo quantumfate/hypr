@@ -10,8 +10,14 @@ local PGREP_PATTERN = "dofus_swap\\.py run"
 
 ---@return boolean
 local function running()
-	local ok = os.execute("pgrep -f '" .. PGREP_PATTERN .. "' >/dev/null 2>&1")
-	return ok == true or ok == 0
+	local h = io.popen("pgrep -f '" .. PGREP_PATTERN .. "' >/dev/null 2>&1; echo $?")
+	if not h then
+		-- kill anyway
+		return true
+	end
+	local code = h:read("*n")
+	h:close()
+	return code == 0
 end
 
 ---Toggle the dofus_swap.py auto turn-swap detector for a team.

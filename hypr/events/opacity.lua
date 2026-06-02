@@ -2,14 +2,14 @@ local opaque_media_browser = hl.window_rule({
 	name = "opaque-media-browser",
 	enabled = false,
 	match = { tag = "media-browser" },
-	opacity = "1 override",
+	opacity = "1.0 override",
 })
 
 local opaque_default_browser = hl.window_rule({
 	name = "opaque-default-browser",
 	enabled = false,
 	match = { tag = "default-browser" },
-	opacity = "1 override",
+	opacity = "1.0 override",
 })
 
 hl.on(
