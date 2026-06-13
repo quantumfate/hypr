@@ -12,17 +12,42 @@ local opaque_default_browser = hl.window_rule({
 	opacity = "1.0 override",
 })
 
+---@param w HL.Window
+---@param tag string
+---@return boolean
+local function is_tagged_browser(w, tag)
+	if type(w.tags) == "table" then
+		if
+			require("hypr.lib.fn").any(function(p)
+				return p == tag
+				---@diagnostic disable-next-line: param-type-mismatch
+			end, w.tags) or w.tags == tag
+		then
+			return true
+		end
+	end
+	return false
+end
+
+---@param w HL.Window
+---@param w_rule HL.WindowRule
+local function toggle_media_opacity(w, w_rule)
+	if w.title:lower():find("crunchyroll") or w.title:lower():find("twitch") or w.title:lower():find("youtube") then
+		w_rule:set_enabled(true)
+	else
+		w_rule:set_enabled(false)
+	end
+end
+
 hl.on(
 	"window.update_rules",
-	---comment
 	---@param w HL.Window
 	function(w)
-		if w.title:lower():find("crunchyroll") or w.title:lower():find("twitch") or w.title:lower():find("youtube") then
-			opaque_media_browser:set_enabled(true)
-			opaque_default_browser:set_enabled(true)
-		else
-			opaque_media_browser:set_enabled(false)
-			opaque_default_browser:set_enabled(false)
+		if is_tagged_browser(w, "media-browser*") then
+			toggle_media_opacity(w, opaque_media_browser)
+		end
+		if is_tagged_browser(w, "default-browser*") then
+			toggle_media_opacity(w, opaque_default_browser)
 		end
 	end
 )
