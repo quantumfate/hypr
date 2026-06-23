@@ -51,6 +51,7 @@ bind.exec("r", config.app_cmds.app_launcher, {
 
 bind.special_workspace("s", "spotify", { "ALT" })
 bind.special_workspace("v", "vesktop", { "ALT" })
+bind.special_workspace("l", "launcher", { "ALT" })
 
 bind.focus_workspace("TAB", "e-1")
 bind.focus_workspace("TAB", "e+1", { "SHIFT" })
@@ -95,7 +96,30 @@ bind.exec("p", "hyprpicker -a -n", {
 	description = "Execute hyprpicker to extract hex code",
 })
 
-bind.exec("l", ",lock-session.sh", {
-	mods = { "ALT" },
-	description = "Lock the screen",
-})
+hl.bind("SUPER + ALT + h", function()
+	local layouts = { "scrolling", "dwindle", "master", "monocle" }
+	local workspace = hl.get_active_workspace()
+	if hl.get_active_special_workspace() then
+		workspace = hl.get_active_special_workspace()
+	end
+
+	local next_layout = "dwindle"
+
+	if not workspace then
+		return
+	end
+
+	for i = 1, #layouts do
+		if layouts[i] == workspace.tiled_layout then
+			local next_layout_idx = (i % #layouts) + 1
+			next_layout = layouts[next_layout_idx]
+			break
+		end
+	end
+
+	if workspace.special then
+		hl.workspace_rule({ workspace = tostring(workspace.name), layout = next_layout })
+	else
+		hl.workspace_rule({ workspace = tostring(workspace.id), layout = next_layout })
+	end
+end)

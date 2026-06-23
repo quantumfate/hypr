@@ -94,11 +94,19 @@ windowrule.tag_set_effects("media-browser", {
 windowrule.tag_props({
 	{ class = [[steam_app_\d+]] },
 	{ class = "(steam)" },
+	{ class = "steam_app_default", title = "Zenimax Online Studios Launcher" },
+	{ class = "steam_app_default" },
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
 	static = { workspace = "name:gaming", suppress_event = "activate activatefocus" },
 })
+
+windowrule.tag_props({
+	{ class = "(steam)" },
+	{ class = "steam_app_default", title = "Zenimax Online Studios Launcher" },
+	{ class = "net.lutris.Lutris" },
+}, "+launcher")
 
 hl.window_rule({ match = { class = [[steam_app_\d+]] }, fullscreen_state = "2 2" })
 hl.window_rule({ match = { class = "(steam)", title = "Friends List" }, move = { 300, 400 }, float = true })
@@ -180,6 +188,12 @@ hl.window_rule({
 	center = true,
 	rounding = 0,
 	opacity = "1 override 1 override",
+})
+
+hl.window_rule({
+	name = "workspace-launcher",
+	match = { tag = "launcher" },
+	workspace = "special:launcher",
 })
 
 hl.window_rule({
