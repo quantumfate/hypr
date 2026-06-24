@@ -76,6 +76,7 @@ hl.config({
 	},
 
 	misc = {
+		vrr = 2,
 		disable_hyprland_logo = true,
 		disable_splash_rendering = true,
 		focus_on_activate = true,

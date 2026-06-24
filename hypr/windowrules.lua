@@ -99,7 +99,7 @@ windowrule.tag_props({
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
-	static = { workspace = "name:gaming", suppress_event = "activate activatefocus" },
+	static = { workspace = "name:gaming", suppress_event = "activate activatefocus", fullscreen_state = "2 1" },
 })
 
 windowrule.tag_props({
