@@ -108,6 +108,10 @@ windowrule.tag_props({
 	{ class = "net.lutris.Lutris" },
 }, "+launcher")
 
+windowrule.tag_set_effects("launcher", {
+	static = { workspace = "special:launcher" },
+})
+
 hl.window_rule({ match = { class = [[steam_app_\d+]] }, fullscreen_state = "2 2" })
 hl.window_rule({ match = { class = "(steam)", title = "Friends List" }, move = { 300, 400 }, float = true })
 hl.window_rule({ match = { class = "(steam)", title = "Launching..." }, move = { 600, 600 } })
@@ -124,11 +128,11 @@ windowrule.tag_set_effects("steam-toast", {
 
 -- Comms
 windowrule.tag_props({
-	{ class = "(vesktop|whatsapp-electron)" },
+	{ class = "(vesktop|whatsapp-electron|signal)" },
 }, "+comms")
 
 windowrule.tag_set_effects("comms", {
-	static = { suppress_event = "activate activatefocus" },
+	static = { suppress_event = "activate activatefocus", workspace = "special:comms" },
 })
 
 -- Media apps (opacity fix)
@@ -161,6 +165,7 @@ windowrule.tag_props({
 	{ class = "^(gnome-calculator|galculator|blueman-manager|zoom|xdg-desktop-portal)$" },
 	{ class = [[^(org\.gnome\.Nautilus)$]] },
 	{ class = "(ffplay|clipse|Kitty-float)" },
+	{ tag = "launcher" },
 }, "+float-override")
 
 windowrule.tag_set_effects("float-override", {
@@ -190,20 +195,5 @@ hl.window_rule({
 	opacity = "1 override 1 override",
 })
 
-hl.window_rule({
-	name = "workspace-launcher",
-	match = { tag = "launcher" },
-	workspace = "special:launcher",
-})
-
-hl.window_rule({
-	name = "workspace-spotify",
-	match = { initial_class = "([Ss]potify)" },
-	workspace = "special:spotify",
-})
-
-hl.window_rule({
-	name = "workspace-vesktop",
-	match = { initial_class = "vesktop" },
-	workspace = "special:vesktop",
-})
+windowrule.tag_props({ { initial_class = "([Ss]potify)" } }, "+music")
+windowrule.tag_set_effects("music", { static = { workspace = "special:music" } })

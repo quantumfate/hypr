@@ -49,8 +49,8 @@ bind.exec("r", config.app_cmds.app_launcher, {
 	submap_universal = true,
 })
 
-bind.special_workspace("s", "spotify", { "ALT" })
-bind.special_workspace("v", "vesktop", { "ALT" })
+bind.special_workspace("s", "music", { "ALT" })
+bind.special_workspace("v", "comms", { "ALT" })
 bind.special_workspace("l", "launcher", { "ALT" })
 
 bind.focus_workspace("TAB", "e-1")

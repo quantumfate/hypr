@@ -65,6 +65,14 @@ _G.config = {
 						default_name = "gaming",
 						monitor = "eDP-1",
 					},
+					{
+						workspace = "special:comms",
+						layout = "scrolling",
+					},
+					{
+						workspace = "special:music",
+						layout = "scrolling",
+					},
 				},
 				workspace_keys = {
 					"plus",
@@ -115,6 +123,14 @@ _G.config = {
 						persistent = true,
 						default_name = "media",
 						monitor = "DP-2",
+						layout = "scrolling",
+					},
+					{
+						workspace = "special:comms",
+						layout = "scrolling",
+					},
+					{
+						workspace = "special:music",
 						layout = "scrolling",
 					},
 				},
