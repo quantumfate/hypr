@@ -4,7 +4,7 @@ local notify = require("hypr.lib.notify")
 local util = require("hypr.lib.util")
 
 ---@param mods string[]?
-local function parse_mods(mods)
+function M.parse_mods(mods)
 	return mods and "+" .. table.concat(mods, "+") .. "+" or "+"
 end
 
@@ -43,7 +43,7 @@ end
 function M.move_focused_to_workspace(key, workspace, mods)
 	local direction, ws_selector = get_workspace_direction(workspace)
 	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
+		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.window.move({ workspace = ws_selector, follow = true }),
 		{
 			description = ("Workspace: Move focused to %s"):format(direction),
@@ -58,7 +58,7 @@ end
 function M.focus_workspace(key, workspace, mods)
 	local direction, ws_selector = get_workspace_direction(workspace)
 	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
+		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.focus({ workspace = ws_selector }),
 		{ description = ("Workspace: Focus %s"):format(direction), submap_universal = true }
 	)
@@ -68,7 +68,7 @@ end
 ---@param description string
 ---@param mods string[]?
 function M.move_window_focus(key, direction, description, mods)
-	hl.bind(config.main_mod .. parse_mods(mods) .. key, function()
+	hl.bind(config.main_mod .. M.parse_mods(mods) .. key, function()
 		local ws = hl.get_active_workspace(hl.get_active_monitor())
 		if ws then
 			if ws.tiled_layout == "monocle" then
@@ -90,7 +90,7 @@ end
 ---@param mods string[]?
 function M.swap_windows(key, direction, description, mods)
 	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
+		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.window.swap({ direction = direction }),
 		{ description = description }
 	)
@@ -115,7 +115,7 @@ function M.exec(key, cmd, opts)
 	if opts.no_main then
 		prefix = opts.mods and (table.concat(opts.mods, "+") .. "+") or ""
 	else
-		prefix = config.main_mod .. parse_mods(opts.mods)
+		prefix = config.main_mod .. M.parse_mods(opts.mods)
 	end
 	hl.bind(prefix .. key, type(cmd) == "function" and cmd() or hl.dsp.exec_cmd(cmd), {
 		description = opts.description,
@@ -159,7 +159,7 @@ end
 ---@param mods string[]?
 function M.app(key, app, description, mods)
 	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
+		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.exec_cmd("uwsm app -- " .. app),
 		{ description = description, submap_universal = true }
 	)
@@ -177,7 +177,7 @@ end
 ---@param mods string[]?
 function M.special_workspace(key, name, mods)
 	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
+		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.workspace.toggle_special(name),
 		{ description = "Toggle Special Workspace " .. name, submap_universal = true }
 	)
@@ -202,7 +202,7 @@ function M.resize_split(key, x, y, mods)
 		return
 	end
 	hl.bind(
-		config.main_mod .. parse_mods(mods) .. key,
+		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.window.resize({ x = x, y = y, relative = true }),
 		{ description = ("Resize " .. description .. " by %s"):format(step), repeating = true }
 	)

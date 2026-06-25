@@ -6,6 +6,9 @@ config = nil
 
 ---@class Config
 ---@field main_mod string
+---@field primary_mod string
+---@field secondary_mod string
+---@field tertiary_mod string
 ---@field hyprlock_conf string
 ---@field app_cmds Commands
 ---@field host_configs table<string, Hosts>
@@ -24,6 +27,7 @@ config = nil
 ---@field password_manager string
 ---@field mail string
 ---@field calculator string
+---@field volume_control string
 ---@field app_launcher string
 
 ---@class Hosts

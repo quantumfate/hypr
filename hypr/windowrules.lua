@@ -165,6 +165,7 @@ windowrule.tag_props({
 	{ class = "^(gnome-calculator|galculator|blueman-manager|zoom|xdg-desktop-portal)$" },
 	{ class = [[^(org\.gnome\.Nautilus)$]] },
 	{ class = "(ffplay|clipse|Kitty-float)" },
+	{ class = "(Kitty-Yazi)" },
 	{ tag = "launcher" },
 }, "+float-override")
 
@@ -173,7 +174,22 @@ windowrule.tag_set_effects("float-override", {
 })
 
 hl.window_rule({ match = { class = "(clipse)" }, size = { 800, 600 } })
-hl.window_rule({ match = { class = "(Kitty-float)" }, size = { 1000, 800 }, center = true })
+-- hl.window_rule({ match = { class = "(Kitty-float)" }, size = { 1000, 800 }, center = true })
+--
+windowrule.tag_props({
+	{ initial_class = "Kitty-Yazi" },
+	{ initial_class = "Kitty-float" },
+	{ initial_class = "Kitty-Wiremix" },
+}, "+floating-terminal-app")
+
+windowrule.tag_set_effects("floating-terminal-app", {
+	static = {
+		float = true,
+		size = { "monitor_w * 0.5", "monitor_h * 0.8" },
+		center = true,
+	},
+	dynamic = {},
+})
 
 -- Gnome rounding
 windowrule.tag_props({
