@@ -47,7 +47,6 @@ function M.move_focused_to_workspace(key, workspace, mods)
 		hl.dsp.window.move({ workspace = ws_selector, follow = true }),
 		{
 			description = ("Workspace: Move focused to %s"):format(direction),
-			submap_universal = true,
 		}
 	)
 end
@@ -60,15 +59,14 @@ function M.focus_workspace(key, workspace, mods)
 	hl.bind(
 		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dsp.focus({ workspace = ws_selector }),
-		{ description = ("Workspace: Focus %s"):format(direction), submap_universal = true }
+		{ description = ("Workspace: Focus %s"):format(direction) }
 	)
 end
----@param key string
+---@param mods string[]?
 ---@param direction string
 ---@param description string
----@param mods string[]?
-function M.move_window_focus(key, direction, description, mods)
-	hl.bind(config.main_mod .. M.parse_mods(mods) .. key, function()
+function M.move_window_focus(mods, direction, description)
+	hl.bind(M.parse_mods(mods), function()
 		local ws = hl.get_active_workspace(hl.get_active_monitor())
 		if ws then
 			if ws.tiled_layout == "monocle" then
@@ -81,18 +79,17 @@ function M.move_window_focus(key, direction, description, mods)
 				hl.dispatch(hl.dsp.focus({ direction = direction }))
 			end
 		end
-	end, { description = description })
+	end, { description = description, submap_universal = true })
 end
 
----@param key string
+---@param mods string[]?
 ---@param direction string
 ---@param description string
----@param mods string[]?
-function M.swap_windows(key, direction, description, mods)
+function M.swap_windows(mods, direction, description)
 	hl.bind(
-		config.main_mod .. M.parse_mods(mods) .. key,
+		M.parse_mods(mods),
 		hl.dsp.window.swap({ direction = direction }),
-		{ description = description }
+		{ description = description, submap_universal = true }
 	)
 end
 
@@ -158,29 +155,42 @@ end
 ---@param description string
 ---@param mods string[]?
 function M.app(key, app, description, mods)
-	hl.bind(
-		config.main_mod .. M.parse_mods(mods) .. key,
-		hl.dsp.exec_cmd("uwsm app -- " .. app),
-		{ description = description, submap_universal = true }
-	)
+	hl.bind(M.parse_mods(mods) .. key, hl.dsp.exec_cmd("uwsm app -- " .. app), { description = description })
 end
 
 ---@param key string full binding string (mods + key)
 ---@param mode "window"|"output"|"region"
 ---@param description string
 function M.screenshot(key, mode, description)
-	hl.bind(key, hl.dsp.exec_cmd(",hyprshot.sh --" .. mode), { description = description, submap_universal = true })
+	hl.bind(key, hl.dsp.exec_cmd(",hyprshot.sh --" .. mode), { description = description })
 end
 
----@param key string
----@param name string special workspace name
 ---@param mods string[]?
-function M.special_workspace(key, name, mods)
+---@param name string special workspace name
+function M.special_workspace(mods, name)
 	hl.bind(
-		config.main_mod .. M.parse_mods(mods) .. key,
+		M.parse_mods(mods),
 		hl.dsp.workspace.toggle_special(name),
-		{ description = "Toggle Special Workspace " .. name, submap_universal = true }
+		{ description = "Toggle Special Workspace " .. name }
 	)
+end
+
+---@param mods string[] keystroke to invoke the submap
+---@param name string name of  the submap
+---@param bind_cb fun() binds
+function M.supmap(mods, name, bind_cb)
+	local recent_submap = "reset"
+	hl.bind(
+		M.parse_mods(mods),
+		hl.dispatch(function()
+			recent_submap = hl.get_current_submap()
+			return hl.dsp.submap(name)
+		end)
+	)
+	hl.define_submap(name, function()
+		bind_cb()
+		hl.bind("escape", hl.dsp.submap(recent_submap))
+	end)
 end
 
 ---@param key string
@@ -202,7 +212,7 @@ function M.resize_split(key, x, y, mods)
 		return
 	end
 	hl.bind(
-		config.main_mod .. M.parse_mods(mods) .. key,
+		M.parse_mods(mods) .. key,
 		hl.dsp.window.resize({ x = x, y = y, relative = true }),
 		{ description = ("Resize " .. description .. " by %s"):format(step), repeating = true }
 	)
