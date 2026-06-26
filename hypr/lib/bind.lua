@@ -58,7 +58,12 @@ function M.focus_workspace(key, workspace, mods)
 	local direction, ws_selector = get_workspace_direction(workspace)
 	hl.bind(
 		config.main_mod .. M.parse_mods(mods) .. key,
-		hl.dsp.focus({ workspace = ws_selector }),
+		hl.dispatch(function()
+			if hl.get_active_workspace().special then
+				hl.dsp.workspace.toggle_special()
+			end
+			return hl.dsp.focus({ workspace = ws_selector })
+		end),
 		{ description = ("Workspace: Focus %s"):format(direction) }
 	)
 end
