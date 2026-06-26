@@ -17,12 +17,15 @@ bind.brightness("Up", ",brightness.sh --inc")
 bind.brightness("Down", ',brightness.sh --dec ""')
 
 -- === Window management ===
-hl.bind(bind.parse_mods({ config.primary_mod }) .. " + F", hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(
-	bind.parse_mods({ config.primary_mod, config.secondary_mod }) .. " + F",
+	bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + M",
+	hl.dsp.window.fullscreen({ mode = "maximized" })
+)
+hl.bind(
+	bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + F",
 	hl.dsp.window.fullscreen({ mode = "fullscreen" })
 )
-hl.bind(bind.parse_mods({ config.primary_mod, config.secondary_mod }) .. " + T", hl.dsp.window.float())
+hl.bind(bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T", hl.dsp.window.float())
 
 hl.bind(
 	config.main_mod .. " + semicolon",
@@ -71,7 +74,6 @@ bind.resize_split("k", 0, 10, { config.tertiary_mod })
 
 -- === Mouse bindings ===
 
-hl.bind("SUPER + ALT_L", hl.dsp.window.resize(), { mouse = true })
 hl.bind(
 	config.main_mod .. " + " .. config.tertiary_mod .. " + mouse:272",
 	hl.dsp.window.drag(),
