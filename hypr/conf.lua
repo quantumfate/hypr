@@ -4,7 +4,7 @@ hl.config({
 	},
 
 	binds = {
-		workspace_back_and_forth = true,
+		workspace_back_and_forth = false,
 		hide_special_on_workspace_change = true,
 	},
 

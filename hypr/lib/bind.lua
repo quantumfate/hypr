@@ -22,6 +22,10 @@ function M.bind_workspaces()
 	end
 end
 
+--- TODO: indicisive about workspace names/digits
+--- TODO: the variable order of the call is wrong and doesn't work as intended
+--- TODO: it kind of works by accident because it always returns a number
+---
 ---@param workspace string
 ---@return string, string?
 local function get_workspace_direction(workspace)
@@ -59,7 +63,7 @@ function M.focus_workspace(key, workspace, mods)
 	hl.bind(
 		config.main_mod .. M.parse_mods(mods) .. key,
 		hl.dispatch(function()
-			if hl.get_active_workspace().special then
+			if hl.get_active_workspace() and hl.get_active_workspace().special then
 				hl.dsp.workspace.toggle_special()
 			end
 			return hl.dsp.focus({ workspace = ws_selector })

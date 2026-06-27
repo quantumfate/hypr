@@ -71,6 +71,7 @@ windowrule.tag_props({
 	{ initial_class = "(zen|zen-twilight|zen-beta)", title = "Add bookmark folder" },
 	{ initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
 	{ initial_class = "(wdisplays)" },
+	{ initial_class = "com.github.hluk.copyq" },
 }, "+floating-window")
 
 windowrule.tag_set_effects("floating-window", {
@@ -80,6 +81,8 @@ windowrule.tag_set_effects("floating-window", {
 
 windowrule.tag_props({
 	{ initial_class = "(Proton Pass|Proton Mail)" },
+	{ initial_class = "com.github.hluk.copyq" },
+	{ initial_class = "signal" },
 }, "+exclude-from-screenshare")
 
 windowrule.tag_set_effects("exclude-from-screenshare", {
