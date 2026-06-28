@@ -111,9 +111,14 @@ end
 ---@field repeating boolean?
 ---@field mouse boolean?
 
----Generic exec_cmd binding. Defaults: prefix with config.main_mod, no submap_universal/locked/repeating.
+---Generic binding. Defaults: prefix with config.main_mod, no submap_universal/locked/repeating.
+---`cmd` may be:
+---  - a string: wrapped in hl.dsp.exec_cmd
+---  - a HL.Dispatcher (e.g. hl.dsp.*): bound directly
+---  - a function: bound as the keypress callback. Call hl.dispatch(...) inside it
+---    (any number of times) to run dispatchers wrapped by Hyprland's bind rules.
 ---@param key string
----@param cmd string|function shell command
+---@param cmd string|HL.Dispatcher|function
 ---@param opts ExecOpts?
 function M.exec(key, cmd, opts)
 	opts = opts or {}
@@ -123,7 +128,9 @@ function M.exec(key, cmd, opts)
 	else
 		prefix = config.main_mod .. M.parse_mods(opts.mods)
 	end
-	hl.bind(prefix .. key, type(cmd) == "function" and cmd() or hl.dsp.exec_cmd(cmd), {
+	local action = type(cmd) == "string" and hl.dsp.exec_cmd(cmd) or cmd
+	---@cast action HL.Dispatcher|function
+	hl.bind(prefix .. key, action, {
 		description = opts.description,
 		submap_universal = opts.submap_universal,
 		locked = opts.locked,
@@ -199,6 +206,7 @@ function M.supmap(mods, name, bind_cb)
 	hl.define_submap(name, function()
 		bind_cb()
 		hl.bind("escape", hl.dsp.submap(recent_submap))
+		hl.bind("SHIFT + escape", hl.dsp.submap("reset"))
 	end)
 end
 

@@ -1,5 +1,6 @@
 local toggle_minimize = require("hypr.lib.minimize")
 local bind = require("hypr.lib.bind")
+local notify = require("hypr.lib.notify")
 
 -- === Audio controls ===
 bind.audio("RaiseVolume", ",volume.sh --inc", "Volume up", nil, true)
@@ -135,6 +136,18 @@ bind.screenshot(
 	"region",
 	"Screenshot a selected region"
 )
+
+local kb_layouts = { "Dvorak (custom)", "Programmer Dvorak" }
+local kb_idx = 1
+bind.exec("space", function()
+	hl.dispatch(hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
+	kb_idx = kb_idx % #kb_layouts + 1
+	notify:notify("Keyboard layout: " .. kb_layouts[kb_idx], 2000, notify.level.INFO)
+end, {
+	description = "Toggle keyboard layout (dvorak-custom / programmer dvorak)",
+	submap_universal = true,
+	locked = true,
+})
 
 bind.exec("p", "hyprpicker -a -n", {
 	no_main = true,
