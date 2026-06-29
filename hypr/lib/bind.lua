@@ -76,14 +76,29 @@ end
 ---@param description string
 function M.move_window_focus(mods, direction, description)
 	hl.bind(M.parse_mods(mods), function()
-		local ws = hl.get_active_workspace(hl.get_active_monitor())
+		local ws = hl.get_active_special_workspace() or hl.get_active_workspace()
+		if not ws then
+			return
+		end
 		if ws then
-			if ws.tiled_layout == "monocle" then
+			if ws.tiled_layout == "monocle" or ws.tiled_layout == "master" then
 				if direction == "l" or direction == "d" then
 					hl.dispatch(hl.dsp.layout("cycleprev"))
 				else
 					hl.dispatch(hl.dsp.layout("cyclenext"))
 				end
+			elseif ws.tiled_layout == "scrolling" then
+				if direction == "l" or direction == "d" then
+					hl.dispatch(hl.dsp.layout("focus l"))
+				else
+					hl.dispatch(hl.dsp.layout("focus r"))
+				end
+			-- elseif ws.tiled_layout == "dwindle" then
+			-- 	if direction == "l" or direction == "d" then
+			-- 		hl.dispatch(hl.dsp.layout("preselect left"))
+			-- 	else
+			-- 		hl.dispatch(hl.dsp.layout("preselect right"))
+			-- 	end
 			else
 				hl.dispatch(hl.dsp.focus({ direction = direction }))
 			end
