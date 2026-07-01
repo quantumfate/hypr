@@ -34,32 +34,32 @@ hl.bind(
 	{ description = "Close focused window", submap_universal = true }
 )
 
-bind.app("return", config.app_cmds.terminal, "Open the Terminal", { config.main_mod })
+bind.app({ config.main_mod, "return" }, config.app_cmds.terminal, "Open the Terminal")
 bind.app(
-	"return",
+
+	{ config.main_mod, config.primary_mod, "return" },
 	config.app_cmds.terminal_float,
-	"Open the floating Terminal",
-	{ config.main_mod, config.primary_mod }
+	"Open the floating Terminal"
 )
-bind.app("s", config.app_cmds.tmux, "Open Kitty with Tmux Session", { config.main_mod })
+bind.app({ config.main_mod, "s" }, config.app_cmds.tmux, "Open Kitty with Tmux Session")
 bind.exec("r", config.app_cmds.app_launcher, {
 	description = "Open Application Launcher",
 })
 
 bind.supmap({ config.main_mod, "a" }, "applications", function()
-	bind.app("d", config.app_cmds.media_browser, "Open Zen Browser media profile")
-	bind.app("b", config.app_cmds.main_browser, "Open the Browser")
-	bind.app("d", config.app_cmds.dev_browser, "Open the dev Browser", { config.primary_mod })
-	bind.app("c", config.app_cmds.calculator, "Open Calculator")
-	bind.app("m", config.app_cmds.password_manager, "Open Proton Pass")
-	bind.app("v", config.app_cmds.volume_control, "Open Wiremix")
-	bind.app("f", config.app_cmds.file_manager, "Open Yazi")
+	bind.app({ "d" }, config.app_cmds.media_browser, "Open Zen Browser media profile", true)
+	bind.app({ "b" }, config.app_cmds.main_browser, "Open the Browser", true)
+	bind.app({ config.primary_mod, "d" }, config.app_cmds.dev_browser, "Open the dev Browser", true)
+	bind.app({ "c" }, config.app_cmds.calculator, "Open Calculator", true)
+	bind.app({ "m" }, config.app_cmds.password_manager, "Open Proton Pass", true)
+	bind.app({ "v" }, config.app_cmds.volume_control, "Open Wiremix", true)
+	bind.app({ "f" }, config.app_cmds.file_manager, "Open Yazi", true)
 end)
 
 bind.supmap({ config.main_mod, "w" }, "special-ws", function()
-	bind.special_workspace({ "s" }, "music")
-	bind.special_workspace({ "v" }, "comms")
-	bind.special_workspace({ "l" }, "launcher")
+	bind.special_workspace({ "s" }, "music", true)
+	bind.special_workspace({ "v" }, "comms", true)
+	bind.special_workspace({ "l" }, "launcher", true)
 end)
 
 bind.focus_workspace("TAB", "e-1")

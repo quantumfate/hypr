@@ -3,6 +3,8 @@ local M = {}
 local notify = require("hypr.lib.notify")
 local util = require("hypr.lib.util")
 
+local prev_submap = "reset"
+
 ---@param mods string[]?
 function M.parse_mods(mods)
 	return mods and "+" .. table.concat(mods, "+") .. "+" or "+"
@@ -181,12 +183,17 @@ function M.audio(key, cmd, description, mods, repeating, callback)
 	end, { locked = true, repeating = repeating, description = description })
 end
 
----@param key string
+---@param mods string[]?
 ---@param app string
 ---@param description string
----@param mods string[]?
-function M.app(key, app, description, mods)
-	hl.bind(M.parse_mods(mods) .. key, hl.dsp.exec_cmd("uwsm app -- " .. app), { description = description })
+---@param supmap_active boolean?
+function M.app(mods, app, description, supmap_active)
+	hl.bind(M.parse_mods(mods), function()
+		hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. app))
+		if supmap_active then
+			hl.dispatch(hl.dsp.submap(prev_submap))
+		end
+	end, { description = description })
 end
 
 ---@param key string full binding string (mods + key)
@@ -196,31 +203,32 @@ function M.screenshot(key, mode, description)
 	hl.bind(key, hl.dsp.exec_cmd(",hyprshot.sh --" .. mode), { description = description })
 end
 
----@param mods string[]?
+---@param mods string[]
 ---@param name string special workspace name
-function M.special_workspace(mods, name)
-	hl.bind(
-		M.parse_mods(mods),
-		hl.dsp.workspace.toggle_special(name),
-		{ description = "Toggle Special Workspace " .. name }
-	)
+---@param submap_active boolean?
+function M.special_workspace(mods, name, submap_active)
+	hl.bind(M.parse_mods(mods), function()
+		hl.dispatch(hl.dsp.workspace.toggle_special(name))
+		if submap_active then
+			hl.dispatch(hl.dsp.submap(prev_submap))
+		end
+	end, { description = "Toggle Special Workspace " .. name })
 end
 
 ---@param mods string[] keystroke to invoke the submap
 ---@param name string name of  the submap
 ---@param bind_cb fun() binds
 function M.supmap(mods, name, bind_cb)
-	local recent_submap = "reset"
 	hl.bind(
 		M.parse_mods(mods),
 		hl.dispatch(function()
-			recent_submap = hl.get_current_submap()
+			prev_submap = hl.get_current_submap()
 			return hl.dsp.submap(name)
 		end)
 	)
 	hl.define_submap(name, function()
 		bind_cb()
-		hl.bind("escape", hl.dsp.submap(recent_submap))
+		hl.bind("escape", hl.dsp.submap(prev_submap))
 		hl.bind("SHIFT + escape", hl.dsp.submap("reset"))
 	end)
 end
