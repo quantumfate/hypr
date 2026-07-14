@@ -63,16 +63,7 @@ function M.reset()
 	hl.dispatch(hl.dsp.submap("reset"))
 end
 
----A node in a submap tree.
----@class SubmapEntry
----@field key string Key that triggers this entry within its submap.
----@field mods? string[] Modifiers held with `key` (e.g. { "CTRL" }).
----@field desc? string Description (shown in the cheatsheet).
----@field entries? SubmapEntry[] Present => a navigable group (nested submap).
----@field name? string Submap name for a group; defaults to "<parent>-<key>".
----@field action? HL.Dispatcher|fun() Present => a leaf; runs on press.
----@field stay? boolean Leaf only: stay in the submap (chainable) instead of exiting.
----@field repeating? boolean Leaf only: allow key repeat.
+-- SubmapEntry / SubmapSpec are defined in hypr/types.lua.
 
 ---Full "+MOD+...+key+" trigger string for an entry.
 ---@param e SubmapEntry
@@ -88,22 +79,40 @@ end
 
 ---@param name string
 ---@param entries SubmapEntry[]
-local function define(name, entries)
+---@param sticky boolean whether leaves stay in the submap by default (modal)
+local function define(name, entries, sticky)
 	hl.define_submap(name, function()
 		for _, e in ipairs(entries) do
 			if e.entries then
 				local child = e.name or (name .. "-" .. e.key)
+				local child_sticky = e.sticky
+				if child_sticky == nil then
+					child_sticky = sticky
+				end
 				hl.bind(combo(e), function()
+					if e.action then
+						run(e.action)
+					end
 					M.enter(child)
 				end, { description = (e.desc or child) .. "…" })
-				define(child, e.entries)
+				define(child, e.entries, child_sticky)
 			else
+				local stay = e.stay
+				if stay == nil then
+					stay = sticky
+				end
+				local opts = {}
+				for k, v in pairs(e.opts or {}) do
+					opts[k] = v
+				end
+				opts.description = opts.description or e.desc
+				opts.repeating = e.repeating
 				hl.bind(combo(e), function()
 					run(e.action)
-					if not e.stay then
+					if not stay then
 						M.exit()
 					end
-				end, { description = e.desc, repeating = e.repeating })
+				end, opts)
 			end
 		end
 		hl.bind(keystr({ "escape" }), function()
@@ -115,21 +124,15 @@ local function define(name, entries)
 	end)
 end
 
----A whichkey-style submap tree, opened by a keystroke.
----@class SubmapSpec
----@field mods string[] Keystroke that opens the root submap.
----@field name string Root submap name.
----@field desc? string Description for the opening keybind.
----@field entries SubmapEntry[]
-
 ---Define a submap tree. Entries with `entries` are navigable groups; entries
----with `action` are leaves that run then close the tree (unless `stay`).
+---with `action` are leaves that run then close the tree (unless `stay`, or the
+---submap is `sticky`, in which case leaves stay by default).
 ---@param spec SubmapSpec
 function M.tree(spec)
 	hl.bind(keystr(spec.mods), function()
 		M.enter(spec.name)
 	end, { description = (spec.desc or spec.name) .. "…" })
-	define(spec.name, spec.entries)
+	define(spec.name, spec.entries, spec.sticky or false)
 end
 
 return M

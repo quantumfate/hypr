@@ -142,3 +142,28 @@ config = nil
 ---@class WindowRuleScope
 ---@field props WindowRuleProps[]
 ---@field effects WindowRuleStaticEffects
+
+--- Submap trees (hypr/lib/submap.lua) -------------------------------------
+
+---One node of a submap tree. A *leaf* has an `action`; a *group* has `entries`
+---and opens a nested submap. A group may also carry an `action`, run just
+---before it is entered. One class covers both so trees nest uniformly.
+---@class SubmapEntry
+---@field key string Key that triggers this entry within its submap (e.g. "s", "F1", "mouse:274").
+---@field mods? string[] Modifiers held with `key` (e.g. { "CTRL" }, { config.main_mod, "ALT" }).
+---@field desc? string Description; shown in the cheatsheet.
+---@field action? HL.Dispatcher|fun() Leaf: runs on press. Group: runs before entering.
+---@field entries? SubmapEntry[] Present => a navigable group (nested submap).
+---@field name? string Group submap name; defaults to "<parent>-<key>".
+---@field stay? boolean Leaf: stay in the submap after running instead of exiting. Overrides `sticky`.
+---@field sticky? boolean Group: default `stay` for descendant leaves (modal submap). Inherited by children.
+---@field repeating? boolean Leaf: allow key repeat while held.
+---@field opts? HL.BindOptions Extra bind options merged into the keybind (e.g. release, transparent).
+
+---A which-key style submap tree, opened by a keystroke. Passed to `submap.tree`.
+---@class SubmapSpec
+---@field mods string[] Keystroke that opens the root submap (e.g. { config.main_mod, "s" }).
+---@field name string Root submap name.
+---@field desc? string Description for the opening keybind (cheatsheet); defaults to `name`.
+---@field sticky? boolean Leaves stay in the submap by default (modal); default false.
+---@field entries SubmapEntry[] The submap's entries.

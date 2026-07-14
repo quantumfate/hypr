@@ -85,6 +85,10 @@ _G.config = {
 						workspace = "special:launcher",
 						layout = "scrolling",
 					},
+					{
+						workspace = "special:ankama",
+						on_created_empty = "gamemoderun ankama-launcher",
+					},
 				},
 				workspace_keys = {
 					"plus",
@@ -172,6 +176,10 @@ _G.config = {
 					{
 						workspace = "special:launcher",
 						layout = "scrolling",
+					},
+					{
+						workspace = "special:ankama",
+						on_created_empty = "gamemoderun ankama-launcher",
 					},
 				},
 				workspace_keys = {

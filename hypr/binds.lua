@@ -74,6 +74,7 @@ submap.tree({
 		bind.special_ws_entry("s", "music"),
 		bind.special_ws_entry("v", "comms"),
 		bind.special_ws_entry("l", "launcher"),
+		bind.special_ws_entry("a", "ankama"),
 	},
 })
 

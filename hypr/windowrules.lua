@@ -160,6 +160,28 @@ windowrule.tag_set_effects("steam-toast", {
 	static = { no_initial_focus = true, pin = true },
 })
 
+-- Dofus / Ankama
+hl.window_rule({
+	match = { initial_class = "Dofus.x64" },
+	workspace = "name:gaming",
+	center = true,
+	content = "game",
+	opacity = "1.0 override",
+	no_anim = true,
+	suppress_event = "fullscreen",
+})
+hl.window_rule({
+	match = { initial_class = "Ankama Launcher" },
+	workspace = "special:ankama",
+})
+hl.window_rule({
+	match = { class = "Ankama Launcher", title = "overlay" },
+	workspace = "name:gaming",
+	float = true,
+	center = true,
+	tag = "+floating-window",
+})
+
 -- Comms
 windowrule.tag_props({
 	{ class = "(vesktop|whatsapp-electron|signal)" },
