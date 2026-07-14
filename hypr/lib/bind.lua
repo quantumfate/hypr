@@ -1,9 +1,20 @@
 local M = {}
 
 local notify = require("hypr.lib.notify")
-local util = require("hypr.lib.util")
 
-local prev_submap = "reset"
+---@param mods string[]?
+---@param action any
+---@param description string
+---@param submap_active boolean? when true this is a submap leaf: run then close
+---the whole submap tree (which-key style), returning to where it was opened.
+local function bind_dispatch(mods, action, description, submap_active)
+	hl.bind(M.parse_mods(mods), function()
+		hl.dispatch(action)
+		if submap_active then
+			require("hypr.lib.submap").exit()
+		end
+	end, { description = description })
+end
 
 ---@param mods string[]?
 function M.parse_mods(mods)
@@ -12,10 +23,7 @@ end
 
 ---Binds workspace focus and window move actions
 function M.bind_workspaces()
-	local host = util.host_config()
-	if not host then
-		return
-	end
+	local host = config.host
 	for i, key in ipairs(host.workspaces.workspace_keys) do
 		if host.workspaces.workspace_specs[i] then
 			M.focus_workspace(key, tostring(i))
@@ -73,50 +81,17 @@ function M.focus_workspace(key, workspace, mods)
 		{ description = ("Workspace: Focus %s"):format(direction) }
 	)
 end
----@param mods string[]?
----@param direction string
----@param description string
-function M.move_window_focus(mods, direction, description)
-	hl.bind(M.parse_mods(mods), function()
-		local ws = hl.get_active_special_workspace() or hl.get_active_workspace()
-		if not ws then
-			return
-		end
-		if ws then
-			if ws.tiled_layout == "monocle" or ws.tiled_layout == "master" then
-				if direction == "l" or direction == "d" then
-					hl.dispatch(hl.dsp.layout("cycleprev"))
-				else
-					hl.dispatch(hl.dsp.layout("cyclenext"))
-				end
-			elseif ws.tiled_layout == "scrolling" then
-				if direction == "l" or direction == "d" then
-					hl.dispatch(hl.dsp.layout("focus l"))
-				else
-					hl.dispatch(hl.dsp.layout("focus r"))
-				end
-			-- elseif ws.tiled_layout == "dwindle" then
-			-- 	if direction == "l" or direction == "d" then
-			-- 		hl.dispatch(hl.dsp.layout("preselect left"))
-			-- 	else
-			-- 		hl.dispatch(hl.dsp.layout("preselect right"))
-			-- 	end
-			else
-				hl.dispatch(hl.dsp.focus({ direction = direction }))
-			end
-		end
-	end, { description = description, submap_universal = true })
-end
 
+---Bind a key to a layout-aware action. The active workspace's `tiled_layout`
+---is resolved at press time and the handler registered for it (in
+---hypr/layouts/*) runs. See hypr/lib/layout.lua.
 ---@param mods string[]?
----@param direction string
+---@param action string action name, e.g. "focus_left" | "swap_right"
 ---@param description string
-function M.swap_windows(mods, direction, description)
-	hl.bind(
-		M.parse_mods(mods),
-		hl.dsp.window.swap({ direction = direction }),
-		{ description = description, submap_universal = true }
-	)
+function M.layout_action(mods, action, description)
+	hl.bind(M.parse_mods(mods), function()
+		require("hypr.lib.layout").dispatch(action)
+	end, { description = description, submap_universal = true })
 end
 
 ---@class ExecOpts
@@ -186,50 +161,61 @@ end
 ---@param mods string[]?
 ---@param app string
 ---@param description string
----@param supmap_active boolean?
-function M.app(mods, app, description, supmap_active)
-	hl.bind(M.parse_mods(mods), function()
-		hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. app))
-		if supmap_active then
-			hl.dispatch(hl.dsp.submap(prev_submap))
-		end
-	end, { description = description })
+---@param submap_active boolean?
+function M.app(mods, app, description, submap_active)
+	bind_dispatch(mods, hl.dsp.exec_cmd("uwsm app -- " .. app), description, submap_active)
 end
 
----@param key string full binding string (mods + key)
+---@param mods string[] full binding string (mods + key)
 ---@param mode "window"|"output"|"region"
 ---@param description string
-function M.screenshot(key, mode, description)
-	hl.bind(key, hl.dsp.exec_cmd(",hyprshot.sh --" .. mode), { description = description })
+---@param submap_active boolean
+function M.screenshot(mods, mode, description, submap_active)
+	bind_dispatch(mods, hl.dsp.exec_cmd(",hyprshot.sh --" .. mode), description, submap_active)
+end
+
+---Toggle recclip. Same bind starts and stops (recclip detects a running
+---recorder via its pidfile). `mode` only affects the START invocation.
+---@param mods string[] full binding string (mods + key)
+---@param mode "region"|"output"
+---@param audio boolean
+---@param description string
+function M.screenrecord(mods, mode, audio, description, submap_active)
+	local flags = ({ region = "", output = "-o" })[mode] or ""
+	local cmd = (",recclip.sh " .. flags):gsub("%s+$", "")
+	if audio then
+		cmd = cmd .. " -a"
+	end
+
+	bind_dispatch(mods, hl.dsp.exec_cmd(cmd), description, submap_active)
 end
 
 ---@param mods string[]
 ---@param name string special workspace name
 ---@param submap_active boolean?
 function M.special_workspace(mods, name, submap_active)
-	hl.bind(M.parse_mods(mods), function()
-		hl.dispatch(hl.dsp.workspace.toggle_special(name))
-		if submap_active then
-			hl.dispatch(hl.dsp.submap(prev_submap))
-		end
-	end, { description = "Toggle Special Workspace " .. name })
+	bind_dispatch(mods, hl.dsp.workspace.toggle_special(name), "Toggle Special Workspace " .. name, submap_active)
 end
 
+---Imperative submap. Backed by the shared navigation stack in hypr.lib.submap,
+---so nesting works: escape returns to the parent submap (the previous tree
+---member), shift+escape hard-resets. For a declarative tree, prefer submap.tree.
 ---@param mods string[] keystroke to invoke the submap
----@param name string name of  the submap
+---@param name string name of the submap
 ---@param bind_cb fun() binds
 function M.supmap(mods, name, bind_cb)
-	hl.bind(
-		M.parse_mods(mods),
-		hl.dispatch(function()
-			prev_submap = hl.get_current_submap()
-			return hl.dsp.submap(name)
-		end)
-	)
+	local submap = require("hypr.lib.submap")
+	hl.bind(M.parse_mods(mods), function()
+		submap.enter(name)
+	end)
 	hl.define_submap(name, function()
 		bind_cb()
-		hl.bind("escape", hl.dsp.submap(prev_submap))
-		hl.bind("SHIFT + escape", hl.dsp.submap("reset"))
+		hl.bind(M.parse_mods({ "escape" }), function()
+			submap.back()
+		end)
+		hl.bind(M.parse_mods({ "SHIFT", "escape" }), function()
+			submap.reset()
+		end)
 	end)
 end
 

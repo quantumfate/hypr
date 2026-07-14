@@ -34,14 +34,13 @@ hl.bind(
 	{ description = "Close focused window", submap_universal = true }
 )
 
-bind.app({ config.main_mod, "return" }, config.app_cmds.terminal, "Open the Terminal")
-bind.app(
+bind.supmap({ config.main_mod, "return" }, "terminal", function()
+	bind.app({ "return" }, config.app_cmds.terminal, "Open the Terminal", true)
+	bind.app({ config.main_mod, "f" }, config.app_cmds.terminal_float, "Open the floating Terminal", true)
 
-	{ config.main_mod, config.primary_mod, "return" },
-	config.app_cmds.terminal_float,
-	"Open the floating Terminal"
-)
-bind.app({ config.main_mod, "s" }, config.app_cmds.tmux, "Open Kitty with Tmux Session")
+	bind.app({ "s" }, config.app_cmds.tmux, "Open Kitty with Tmux Session", true)
+end)
+
 bind.exec("r", config.app_cmds.app_launcher, {
 	description = "Open Application Launcher",
 })
@@ -54,6 +53,7 @@ bind.supmap({ config.main_mod, "a" }, "applications", function()
 	bind.app({ "m" }, config.app_cmds.password_manager, "Open Proton Pass", true)
 	bind.app({ "v" }, config.app_cmds.volume_control, "Open Wiremix", true)
 	bind.app({ "f" }, config.app_cmds.file_manager, "Open Yazi", true)
+	bind.app({ "s" }, config.app_cmds.package_manager_ui, "Open Shelly", true)
 end)
 
 bind.supmap({ config.main_mod, "w" }, "special-ws", function()
@@ -67,15 +67,34 @@ bind.focus_workspace("TAB", "e+1", { config.secondary_mod })
 
 bind.bind_workspaces()
 
-bind.move_window_focus({ config.main_mod, "h" }, "l", "Move window focus to the left")
-bind.move_window_focus({ config.main_mod, "l" }, "r", "Move window focus to the right")
-bind.move_window_focus({ config.main_mod, "j" }, "u", "Move window focus up")
-bind.move_window_focus({ config.main_mod, "k" }, "d", "Move window focus down")
+bind.layout_action({ config.main_mod, "h" }, "focus_left", "Move window focus to the left")
+bind.layout_action({ config.main_mod, "l" }, "focus_right", "Move window focus to the right")
+bind.layout_action({ config.main_mod, "j" }, "focus_up", "Move window focus up")
+bind.layout_action({ config.main_mod, "k" }, "focus_down", "Move window focus down")
 
-bind.swap_windows({ config.main_mod, config.secondary_mod, "h" }, "l", "Swap current with the left window")
-bind.swap_windows({ config.main_mod, config.secondary_mod, "l" }, "r", "Swap current with the right window")
-bind.swap_windows({ config.main_mod, config.secondary_mod, "j" }, "u", "Swap current with the window above")
-bind.swap_windows({ config.main_mod, config.secondary_mod, "k" }, "d", "Swap current with the window below")
+bind.layout_action({ config.main_mod, config.secondary_mod, "h" }, "swap_left", "Swap current with the left window")
+bind.layout_action({ config.main_mod, config.secondary_mod, "l" }, "swap_right", "Swap current with the right window")
+bind.layout_action({ config.main_mod, config.secondary_mod, "j" }, "swap_up", "Swap current with the window above")
+bind.layout_action({ config.main_mod, config.secondary_mod, "k" }, "swap_down", "Swap current with the window below")
+
+-- Layout messages, per layout, in a which-key submap tree:
+--   SUPER+x  ->  d (dwindle) | m (master) | s (scrolling)  ->  layout op.
+-- Each layout declares its own ops (see hypr/layouts/*); this just composes them
+-- into groups, so it never needs touching when a layout gains a new op.
+local layout_groups = {}
+for _, submap in ipairs(require("hypr.lib.layout").get_submaps()) do
+	layout_groups[#layout_groups + 1] = {
+		key = submap.key,
+		name = "layout-" .. submap.layout,
+		desc = submap.layout,
+		entries = submap.entries,
+	}
+end
+require("hypr.lib.submap").tree({
+	mods = { config.main_mod, "x" },
+	name = "layout",
+	entries = layout_groups,
+})
 
 bind.supmap({ config.main_mod, config.secondary_mod, "r" }, "window-management", function()
 	bind.resize_split("h", -10, 0)
@@ -128,14 +147,19 @@ hl.bind(config.main_mod .. " + " .. config.tertiary_mod .. " + m", function()
 	toggle_minimize:toggle_minimize()
 end, { description = "Minimize Window", submap_universal = true })
 
+bind.supmap({ config.main_mod, "s" }, "screencapture", function()
+	bind.supmap({ "s" }, "screen-shot", function()
+		bind.screenshot({ "w" }, "window", "Screenshot current window", true)
+		bind.screenshot({ "o" }, "output", "Screenshot current output", true)
+		bind.screenshot({ "r" }, "region", "Screenshot a selected region", true)
+	end)
+	bind.supmap({ "r" }, "screen-record", function()
+		bind.screenrecord({ "r" }, "region", true, "Record a region (again to stop)", true)
+		bind.screenrecord({ "o" }, "output", true, "Record current output (again to stop)", true)
+	end)
+end)
+
 -- === Utility ===
-bind.screenshot(config.main_mod .. " + PRINT", "window", "Screenshot current window")
-bind.screenshot("PRINT", "output", "Screenshot current output")
-bind.screenshot(
-	config.main_mod .. " + " .. config.secondary_mod .. " + PRINT",
-	"region",
-	"Screenshot a selected region"
-)
 
 local kb_layouts = { "Dvorak (custom)", "Programmer Dvorak" }
 local kb_idx = 1

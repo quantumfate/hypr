@@ -2,6 +2,7 @@ local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.confi
 package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 
 ---@type Config
+---@diagnostic disable-next-line: missing-fields
 _G.config = {
 	main_mod = "SUPER",
 	primary_mod = "CTRL",
@@ -20,14 +21,16 @@ _G.config = {
 		mail = "proton-mail",
 		calculator = "qalculate-qt",
 		app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
+		package_manager_ui = "shelly-ui",
 	},
-	hyprlock_conf = os.getenv("HOME")
-		.. (
-			require("hypr.lib.util").hostname() == "quantum-desktop" and "/.config/hypr/hyprlock.conf"
-			or "/.config/hypr/hyprlock-laptop.conf"
-		),
 	host_configs = {
 		["quantum-laptop"] = {
+			primary_monitor = "eDP-1",
+			secondary_monitor = "HDMI-A-1",
+			hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock-laptop.conf",
+			kb_options = "caps:swapescape",
+			-- workspace_specs use monitor = "primary" as a sentinel, resolved to
+			-- primary_monitor by the post-build pass at the bottom of this file.
 			workspaces = {
 				workspace_specs = {
 					{
@@ -36,28 +39,28 @@ _G.config = {
 						default = true,
 						default_name = "code",
 						layout = "monocle",
-						monitor = "eDP-1",
+						monitor = "primary",
 					},
 					{
 						workspace = "2",
 						persistent = true,
 						default_name = "study",
 						layout = "scrolling",
-						monitor = "eDP-1",
+						monitor = "primary",
 					},
 					{
 						workspace = "3",
 						persistent = true,
 						default_name = "proton",
 						layout = "scrolling",
-						monitor = "eDP-1",
+						monitor = "primary",
 					},
 					{
 						workspace = "4",
 						persistent = true,
 						default_name = "media",
 						layout = "scrolling",
-						monitor = "eDP-1",
+						monitor = "primary",
 					},
 					{
 						workspace = "5",
@@ -68,7 +71,7 @@ _G.config = {
 						decorate = false,
 						layout = "monocle",
 						default_name = "gaming",
-						monitor = "eDP-1",
+						monitor = "primary",
 					},
 					{
 						workspace = "special:comms",
@@ -76,6 +79,10 @@ _G.config = {
 					},
 					{
 						workspace = "special:music",
+						layout = "scrolling",
+					},
+					{
+						workspace = "special:launcher",
 						layout = "scrolling",
 					},
 				},
@@ -94,23 +101,38 @@ _G.config = {
 			},
 		},
 		["quantum-desktop"] = {
+			primary_monitor = "DP-1",
+			secondary_monitor = "DP-2",
+			hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock.conf",
 			workspaces = {
 				workspace_specs = {
+					-- layout_opts overrides the global dwindle default_split_ratio
+					-- (see hypr/layouts/dwindle.lua) per workspace: 1.25 on the
+					-- widescreen primary, 1.0 on normal-aspect monitors.
 					{
 						workspace = "1",
 						persistent = true,
 						default = true,
 						default_name = "code",
-						monitor = "DP-1",
-						layout = "master",
+						monitor = "primary",
+						layout = "dwindle",
+						layout_opts = { ["dwindle:default_split_ratio"] = 1.25 },
 					},
-					{ workspace = "2", persistent = true, default_name = "study", monitor = "DP-1", layout = "master" },
+					{
+						workspace = "2",
+						persistent = true,
+						default_name = "study",
+						monitor = "primary",
+						layout = "dwindle",
+						layout_opts = { ["dwindle:default_split_ratio"] = 1.25 },
+					},
 					{
 						workspace = "3",
 						persistent = true,
 						default_name = "proton",
-						monitor = "DP-1",
+						monitor = "primary",
 						layout = "dwindle",
+						layout_opts = { ["dwindle:default_split_ratio"] = 1.25 },
 					},
 					{
 						workspace = "4",
@@ -121,21 +143,34 @@ _G.config = {
 						decorate = false,
 						default_name = "gaming",
 						layout = "monocle",
-						monitor = "DP-1",
+						monitor = "primary",
 					},
 					{
 						workspace = "5",
 						persistent = true,
 						default_name = "media",
-						monitor = "DP-2",
-						layout = "scrolling",
+						monitor = "secondary",
+						layout = "dwindle",
+						layout_opts = { ["dwindle:default_split_ratio"] = 1.0 },
+					},
+					{
+						workspace = "6",
+						persistent = true,
+						default_name = "misc",
+						monitor = "secondary",
+						layout = "dwindle",
+						layout_opts = { ["dwindle:default_split_ratio"] = 1.0 },
 					},
 					{
 						workspace = "special:comms",
-						layout = "scrolling",
+						layout = "dwindle",
 					},
 					{
 						workspace = "special:music",
+						layout = "scrolling",
+					},
+					{
+						workspace = "special:launcher",
 						layout = "scrolling",
 					},
 				},
@@ -155,5 +190,27 @@ _G.config = {
 		},
 	},
 }
+
+_G.config.__index = _G.config
+
+-- Resolve the current host once, so every consumer reads `config.host.*`
+-- without ever computing the hostname itself.
+_G.config.host = assert(_G.config.host_configs[require("hypr.lib.util").hostname()], "no host_config for this hostname")
+
+-- Resolve the "primary"/"secondary" monitor sentinels in workspace_specs to the
+-- host's monitors. Done as a post-build pass since a Lua table constructor
+-- cannot reference its own fields while being built.
+local monitor_aliases = {
+	primary = _G.config.host.primary_monitor,
+	secondary = _G.config.host.secondary_monitor,
+}
+for _, spec in ipairs(_G.config.host.workspaces.workspace_specs) do
+	if spec.monitor == "primary" or spec.monitor == "secondary" then
+		spec.monitor = assert(
+			monitor_aliases[spec.monitor],
+			"workspace " .. tostring(spec.workspace) .. " uses '" .. spec.monitor .. "' but host has no such monitor"
+		)
+	end
+end
 
 require("hypr")
