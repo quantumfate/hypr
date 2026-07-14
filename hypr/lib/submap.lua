@@ -4,8 +4,8 @@ local M = {}
 --
 -- Hyprland submaps are a single global runtime state, so nesting needs a stack
 -- on our side to know where "back" and "out" lead. This module owns that stack
--- and is shared by every submap in the config (the declarative M.tree below and
--- bind.supmap both drive it), so navigation is consistent everywhere:
+-- and is the single way submaps are built in this config (via M.tree), so
+-- navigation is consistent everywhere:
 --   * entering a group      -> push, so escape can return to the parent
 --   * using a leaf action    -> pop the whole tree, back to where we started
 --   * escape                 -> pop one level (the previous tree member)
@@ -66,12 +66,25 @@ end
 ---A node in a submap tree.
 ---@class SubmapEntry
 ---@field key string Key that triggers this entry within its submap.
+---@field mods? string[] Modifiers held with `key` (e.g. { "CTRL" }).
 ---@field desc? string Description (shown in the cheatsheet).
 ---@field entries? SubmapEntry[] Present => a navigable group (nested submap).
 ---@field name? string Submap name for a group; defaults to "<parent>-<key>".
 ---@field action? HL.Dispatcher|fun() Present => a leaf; runs on press.
 ---@field stay? boolean Leaf only: stay in the submap (chainable) instead of exiting.
 ---@field repeating? boolean Leaf only: allow key repeat.
+
+---Full "+MOD+...+key+" trigger string for an entry.
+---@param e SubmapEntry
+---@return string
+local function combo(e)
+	local parts = {}
+	for _, m in ipairs(e.mods or {}) do
+		parts[#parts + 1] = m
+	end
+	parts[#parts + 1] = e.key
+	return keystr(parts)
+end
 
 ---@param name string
 ---@param entries SubmapEntry[]
@@ -80,12 +93,12 @@ local function define(name, entries)
 		for _, e in ipairs(entries) do
 			if e.entries then
 				local child = e.name or (name .. "-" .. e.key)
-				hl.bind(keystr({ e.key }), function()
+				hl.bind(combo(e), function()
 					M.enter(child)
 				end, { description = (e.desc or child) .. "…" })
 				define(child, e.entries)
 			else
-				hl.bind(keystr({ e.key }), function()
+				hl.bind(combo(e), function()
 					run(e.action)
 					if not e.stay then
 						M.exit()

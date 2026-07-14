@@ -1,21 +1,5 @@
 local M = {}
 
-local notify = require("hypr.lib.notify")
-
----@param mods string[]?
----@param action any
----@param description string
----@param submap_active boolean? when true this is a submap leaf: run then close
----the whole submap tree (which-key style), returning to where it was opened.
-local function bind_dispatch(mods, action, description, submap_active)
-	hl.bind(M.parse_mods(mods), function()
-		hl.dispatch(action)
-		if submap_active then
-			require("hypr.lib.submap").exit()
-		end
-	end, { description = description })
-end
-
 ---@param mods string[]?
 function M.parse_mods(mods)
 	return mods and "+" .. table.concat(mods, "+") .. "+" or "+"
@@ -158,92 +142,71 @@ function M.audio(key, cmd, description, mods, repeating, callback)
 	end, { locked = true, repeating = repeating, description = description })
 end
 
----@param mods string[]?
----@param app string
+-- === Submap entry factories ===
+-- Each returns a SubmapEntry (see hypr/lib/submap.lua) for use in submap.tree,
+-- so submaps have a single, declarative construction path.
+
+---Launch an app via uwsm. Closes the submap on use (which-key style).
+---@param key string
+---@param app string app command
 ---@param description string
----@param submap_active boolean?
-function M.app(mods, app, description, submap_active)
-	bind_dispatch(mods, hl.dsp.exec_cmd("uwsm app -- " .. app), description, submap_active)
+---@param mods string[]?
+---@return SubmapEntry
+function M.app_entry(key, app, description, mods)
+	return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd("uwsm app -- " .. app) }
 end
 
----@param mods string[] full binding string (mods + key)
+---Take a screenshot via hyprshot.
+---@param key string
 ---@param mode "window"|"output"|"region"
 ---@param description string
----@param submap_active boolean
-function M.screenshot(mods, mode, description, submap_active)
-	bind_dispatch(mods, hl.dsp.exec_cmd(",hyprshot.sh --" .. mode), description, submap_active)
+---@return SubmapEntry
+function M.screenshot_entry(key, mode, description)
+	return { key = key, desc = description, action = hl.dsp.exec_cmd(",hyprshot.sh --" .. mode) }
 end
 
 ---Toggle recclip. Same bind starts and stops (recclip detects a running
----recorder via its pidfile). `mode` only affects the START invocation.
----@param mods string[] full binding string (mods + key)
+---recorder via its pidfile); `mode`/`audio` only affect the START invocation.
+---@param key string
 ---@param mode "region"|"output"
 ---@param audio boolean
 ---@param description string
-function M.screenrecord(mods, mode, audio, description, submap_active)
+---@return SubmapEntry
+function M.screenrecord_entry(key, mode, audio, description)
 	local flags = ({ region = "", output = "-o" })[mode] or ""
 	local cmd = (",recclip.sh " .. flags):gsub("%s+$", "")
 	if audio then
 		cmd = cmd .. " -a"
 	end
-
-	bind_dispatch(mods, hl.dsp.exec_cmd(cmd), description, submap_active)
+	return { key = key, desc = description, action = hl.dsp.exec_cmd(cmd) }
 end
 
----@param mods string[]
+---Toggle a special workspace.
+---@param key string
 ---@param name string special workspace name
----@param submap_active boolean?
-function M.special_workspace(mods, name, submap_active)
-	bind_dispatch(mods, hl.dsp.workspace.toggle_special(name), "Toggle Special Workspace " .. name, submap_active)
+---@return SubmapEntry
+function M.special_ws_entry(key, name)
+	return { key = key, desc = "Toggle special workspace " .. name, action = hl.dsp.workspace.toggle_special(name) }
 end
 
----Imperative submap. Backed by the shared navigation stack in hypr.lib.submap,
----so nesting works: escape returns to the parent submap (the previous tree
----member), shift+escape hard-resets. For a declarative tree, prefer submap.tree.
----@param mods string[] keystroke to invoke the submap
----@param name string name of the submap
----@param bind_cb fun() binds
----@param description string? label for the opening key (shown in the cheatsheet).
----Defaults to the submap name with an ellipsis so it reads as "leads somewhere".
-function M.supmap(mods, name, bind_cb, description)
-	local submap = require("hypr.lib.submap")
-	hl.bind(M.parse_mods(mods), function()
-		submap.enter(name)
-	end, { description = description or (name .. "…") })
-	hl.define_submap(name, function()
-		bind_cb()
-		hl.bind(M.parse_mods({ "escape" }), function()
-			submap.back()
-		end)
-		hl.bind(M.parse_mods({ "SHIFT", "escape" }), function()
-			submap.reset()
-		end)
-	end)
-end
-
+---Relative split resize. Stays in the submap and repeats so a hold resizes
+---continuously. Exactly one of x/y should be non-zero.
 ---@param key string
 ---@param x integer
 ---@param y integer
 ---@param mods string[]?
-function M.resize_split(key, x, y, mods)
-	local description, step = "", 0
-	if x == 0 and y > 0 then
-		description, step = "horizontally", y
-	elseif x > 0 and y == 0 then
-		description, step = "vertically", x
-	elseif x == 0 and y < 0 then
-		description, step = "horizontally", y
-	elseif x < 0 and y == 0 then
-		description, step = "vertically", x
-	else
-		notify:notify("Undefined resize behaviour. Not binding resize", 3000, "WARNING")
-		return
-	end
-	hl.bind(
-		M.parse_mods(mods) .. key,
-		hl.dsp.window.resize({ x = x, y = y, relative = true }),
-		{ description = ("Resize " .. description .. " by %s"):format(step), repeating = true }
-	)
+---@return SubmapEntry
+function M.resize_entry(key, x, y, mods)
+	local step = x ~= 0 and x or y
+	local axis = x ~= 0 and "vertically" or "horizontally"
+	return {
+		key = key,
+		mods = mods,
+		stay = true,
+		repeating = true,
+		desc = ("Resize %s by %s"):format(axis, step),
+		action = hl.dsp.window.resize({ x = x, y = y, relative = true }),
+	}
 end
 
 return M

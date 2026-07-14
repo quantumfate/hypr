@@ -1,5 +1,6 @@
 local toggle_minimize = require("hypr.lib.minimize")
 local bind = require("hypr.lib.bind")
+local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
 
 -- === Audio controls ===
@@ -34,33 +35,47 @@ hl.bind(
 	{ description = "Close focused window", submap_universal = true }
 )
 
-bind.supmap({ config.main_mod, "return" }, "terminal", function()
-	bind.app({ "return" }, config.app_cmds.terminal, "Open the Terminal", true)
-	bind.app({ config.main_mod, "f" }, config.app_cmds.terminal_float, "Open the floating Terminal", true)
-
-	bind.app({ "s" }, config.app_cmds.tmux, "Open Kitty with Tmux Session", true)
-end, "Terminal")
+submap.tree({
+	mods = { config.main_mod, "return" },
+	name = "terminal",
+	desc = "Terminal",
+	entries = {
+		bind.app_entry("return", config.app_cmds.terminal, "Open the Terminal"),
+		bind.app_entry("f", config.app_cmds.terminal_float, "Open the floating Terminal", { config.main_mod }),
+		bind.app_entry("s", config.app_cmds.tmux, "Open Kitty with Tmux Session"),
+	},
+})
 
 bind.exec("r", config.app_cmds.app_launcher, {
 	description = "Open Application Launcher",
 })
 
-bind.supmap({ config.main_mod, "a" }, "applications", function()
-	bind.app({ "d" }, config.app_cmds.media_browser, "Open Zen Browser media profile", true)
-	bind.app({ "b" }, config.app_cmds.main_browser, "Open the Browser", true)
-	bind.app({ config.primary_mod, "d" }, config.app_cmds.dev_browser, "Open the dev Browser", true)
-	bind.app({ "c" }, config.app_cmds.calculator, "Open Calculator", true)
-	bind.app({ "m" }, config.app_cmds.password_manager, "Open Proton Pass", true)
-	bind.app({ "v" }, config.app_cmds.volume_control, "Open Wiremix", true)
-	bind.app({ "f" }, config.app_cmds.file_manager, "Open Yazi", true)
-	bind.app({ "s" }, config.app_cmds.package_manager_ui, "Open Shelly", true)
-end, "Applications")
+submap.tree({
+	mods = { config.main_mod, "a" },
+	name = "applications",
+	desc = "Applications",
+	entries = {
+		bind.app_entry("d", config.app_cmds.media_browser, "Open Zen Browser media profile"),
+		bind.app_entry("b", config.app_cmds.main_browser, "Open the Browser"),
+		bind.app_entry("d", config.app_cmds.dev_browser, "Open the dev Browser", { config.primary_mod }),
+		bind.app_entry("c", config.app_cmds.calculator, "Open Calculator"),
+		bind.app_entry("m", config.app_cmds.password_manager, "Open Proton Pass"),
+		bind.app_entry("v", config.app_cmds.volume_control, "Open Wiremix"),
+		bind.app_entry("f", config.app_cmds.file_manager, "Open Yazi"),
+		bind.app_entry("s", config.app_cmds.package_manager_ui, "Open Shelly"),
+	},
+})
 
-bind.supmap({ config.main_mod, "w" }, "special-ws", function()
-	bind.special_workspace({ "s" }, "music", true)
-	bind.special_workspace({ "v" }, "comms", true)
-	bind.special_workspace({ "l" }, "launcher", true)
-end, "Special workspaces")
+submap.tree({
+	mods = { config.main_mod, "w" },
+	name = "special-ws",
+	desc = "Special workspaces",
+	entries = {
+		bind.special_ws_entry("s", "music"),
+		bind.special_ws_entry("v", "comms"),
+		bind.special_ws_entry("l", "launcher"),
+	},
+})
 
 bind.focus_workspace("TAB", "e-1")
 bind.focus_workspace("TAB", "e+1", { config.secondary_mod })
@@ -82,60 +97,60 @@ bind.layout_action({ config.main_mod, config.secondary_mod, "k" }, "swap_down", 
 -- Each layout declares its own ops (see hypr/layouts/*); this just composes them
 -- into groups, so it never needs touching when a layout gains a new op.
 local layout_groups = {}
-for _, submap in ipairs(require("hypr.lib.layout").get_submaps()) do
+for _, ls in ipairs(require("hypr.lib.layout").get_submaps()) do
 	layout_groups[#layout_groups + 1] = {
-		key = submap.key,
-		name = "layout-" .. submap.layout,
-		desc = submap.layout,
-		entries = submap.entries,
+		key = ls.key,
+		name = "layout-" .. ls.layout,
+		desc = ls.layout,
+		entries = ls.entries,
 	}
 end
-require("hypr.lib.submap").tree({
-	mods = { config.main_mod, "x" },
+
+submap.tree({
+	mods = { config.main_mod, "m" },
 	name = "layout",
 	desc = "Layout messages",
 	entries = layout_groups,
 })
 
-bind.supmap({ config.main_mod, config.secondary_mod, "r" }, "window-management", function()
-	bind.resize_split("h", -10, 0)
-	bind.resize_split("l", 10, 0)
-	bind.resize_split("j", 0, -10)
-	bind.resize_split("k", 0, 10)
+local function cycle_workspace_layout()
+	local layouts = { "scrolling", "dwindle", "master", "monocle" }
+	local workspace = hl.get_active_special_workspace() or hl.get_active_workspace()
+	if not workspace then
+		return
+	end
 
-	bind.resize_split("h", -20, 0, { config.tertiary_mod })
-	bind.resize_split("l", 20, 0, { config.tertiary_mod })
-	bind.resize_split("j", 0, -20, { config.tertiary_mod })
-	bind.resize_split("k", 0, 20, { config.tertiary_mod })
-
-	hl.bind(bind.parse_mods({ "e" }), function()
-		local layouts = { "scrolling", "dwindle", "master", "monocle" }
-		local workspace = hl.get_active_workspace()
-		if hl.get_active_special_workspace() then
-			workspace = hl.get_active_special_workspace()
+	local next_layout = "dwindle"
+	for i = 1, #layouts do
+		if layouts[i] == workspace.tiled_layout then
+			next_layout = layouts[(i % #layouts) + 1]
+			break
 		end
+	end
 
-		local next_layout = "dwindle"
+	if workspace.special then
+		hl.workspace_rule({ workspace = tostring(workspace.name), layout = next_layout })
+	else
+		hl.workspace_rule({ workspace = tostring(workspace.id), layout = next_layout })
+	end
+end
 
-		if not workspace then
-			return
-		end
-
-		for i = 1, #layouts do
-			if layouts[i] == workspace.tiled_layout then
-				local next_layout_idx = (i % #layouts) + 1
-				next_layout = layouts[next_layout_idx]
-				break
-			end
-		end
-
-		if workspace.special then
-			hl.workspace_rule({ workspace = tostring(workspace.name), layout = next_layout })
-		else
-			hl.workspace_rule({ workspace = tostring(workspace.id), layout = next_layout })
-		end
-	end, { description = "Cycle the workspace layout" })
-end, "Window management")
+submap.tree({
+	mods = { config.main_mod, config.secondary_mod, "r" },
+	name = "window-management",
+	desc = "Window management",
+	entries = {
+		bind.resize_entry("h", -10, 0),
+		bind.resize_entry("l", 10, 0),
+		bind.resize_entry("j", 0, -10),
+		bind.resize_entry("k", 0, 10),
+		bind.resize_entry("h", -20, 0, { config.tertiary_mod }),
+		bind.resize_entry("l", 20, 0, { config.tertiary_mod }),
+		bind.resize_entry("j", 0, -20, { config.tertiary_mod }),
+		bind.resize_entry("k", 0, 20, { config.tertiary_mod }),
+		{ key = "e", desc = "Cycle the workspace layout", stay = true, action = cycle_workspace_layout },
+	},
+})
 
 -- === Mouse bindings ===
 
@@ -148,17 +163,32 @@ hl.bind(config.main_mod .. " + " .. config.tertiary_mod .. " + m", function()
 	toggle_minimize:toggle_minimize()
 end, { description = "Minimize Window", submap_universal = true })
 
-bind.supmap({ config.main_mod, "s" }, "screencapture", function()
-	bind.supmap({ "s" }, "screen-shot", function()
-		bind.screenshot({ "w" }, "window", "Screenshot current window", true)
-		bind.screenshot({ "o" }, "output", "Screenshot current output", true)
-		bind.screenshot({ "r" }, "region", "Screenshot a selected region", true)
-	end, "Screenshot")
-	bind.supmap({ "r" }, "screen-record", function()
-		bind.screenrecord({ "r" }, "region", true, "Record a region (again to stop)", true)
-		bind.screenrecord({ "o" }, "output", true, "Record current output (again to stop)", true)
-	end, "Screen record")
-end, "Screen capture")
+submap.tree({
+	mods = { config.main_mod, "s" },
+	name = "screencapture",
+	desc = "Screen capture",
+	entries = {
+		{
+			key = "s",
+			name = "screen-shot",
+			desc = "Screenshot",
+			entries = {
+				bind.screenshot_entry("w", "window", "Screenshot current window"),
+				bind.screenshot_entry("o", "output", "Screenshot current output"),
+				bind.screenshot_entry("r", "region", "Screenshot a selected region"),
+			},
+		},
+		{
+			key = "r",
+			name = "screen-record",
+			desc = "Screen record",
+			entries = {
+				bind.screenrecord_entry("r", "region", true, "Record a region (again to stop)"),
+				bind.screenrecord_entry("o", "output", true, "Record current output (again to stop)"),
+			},
+		},
+	},
+})
 
 -- === Utility ===
 
