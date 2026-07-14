@@ -203,11 +203,13 @@ end
 ---@param mods string[] keystroke to invoke the submap
 ---@param name string name of the submap
 ---@param bind_cb fun() binds
-function M.supmap(mods, name, bind_cb)
+---@param description string? label for the opening key (shown in the cheatsheet).
+---Defaults to the submap name with an ellipsis so it reads as "leads somewhere".
+function M.supmap(mods, name, bind_cb, description)
 	local submap = require("hypr.lib.submap")
 	hl.bind(M.parse_mods(mods), function()
 		submap.enter(name)
-	end)
+	end, { description = description or (name .. "…") })
 	hl.define_submap(name, function()
 		bind_cb()
 		hl.bind(M.parse_mods({ "escape" }), function()

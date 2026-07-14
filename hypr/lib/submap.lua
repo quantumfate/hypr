@@ -82,7 +82,7 @@ local function define(name, entries)
 				local child = e.name or (name .. "-" .. e.key)
 				hl.bind(keystr({ e.key }), function()
 					M.enter(child)
-				end, { description = e.desc })
+				end, { description = (e.desc or child) .. "…" })
 				define(child, e.entries)
 			else
 				hl.bind(keystr({ e.key }), function()
@@ -115,7 +115,7 @@ end
 function M.tree(spec)
 	hl.bind(keystr(spec.mods), function()
 		M.enter(spec.name)
-	end, { description = spec.desc })
+	end, { description = (spec.desc or spec.name) .. "…" })
 	define(spec.name, spec.entries)
 end
 

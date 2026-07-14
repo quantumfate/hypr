@@ -39,7 +39,7 @@ bind.supmap({ config.main_mod, "return" }, "terminal", function()
 	bind.app({ config.main_mod, "f" }, config.app_cmds.terminal_float, "Open the floating Terminal", true)
 
 	bind.app({ "s" }, config.app_cmds.tmux, "Open Kitty with Tmux Session", true)
-end)
+end, "Terminal")
 
 bind.exec("r", config.app_cmds.app_launcher, {
 	description = "Open Application Launcher",
@@ -54,13 +54,13 @@ bind.supmap({ config.main_mod, "a" }, "applications", function()
 	bind.app({ "v" }, config.app_cmds.volume_control, "Open Wiremix", true)
 	bind.app({ "f" }, config.app_cmds.file_manager, "Open Yazi", true)
 	bind.app({ "s" }, config.app_cmds.package_manager_ui, "Open Shelly", true)
-end)
+end, "Applications")
 
 bind.supmap({ config.main_mod, "w" }, "special-ws", function()
 	bind.special_workspace({ "s" }, "music", true)
 	bind.special_workspace({ "v" }, "comms", true)
 	bind.special_workspace({ "l" }, "launcher", true)
-end)
+end, "Special workspaces")
 
 bind.focus_workspace("TAB", "e-1")
 bind.focus_workspace("TAB", "e+1", { config.secondary_mod })
@@ -93,6 +93,7 @@ end
 require("hypr.lib.submap").tree({
 	mods = { config.main_mod, "x" },
 	name = "layout",
+	desc = "Layout messages",
 	entries = layout_groups,
 })
 
@@ -133,8 +134,8 @@ bind.supmap({ config.main_mod, config.secondary_mod, "r" }, "window-management",
 		else
 			hl.workspace_rule({ workspace = tostring(workspace.id), layout = next_layout })
 		end
-	end)
-end)
+	end, { description = "Cycle the workspace layout" })
+end, "Window management")
 
 -- === Mouse bindings ===
 
@@ -152,12 +153,12 @@ bind.supmap({ config.main_mod, "s" }, "screencapture", function()
 		bind.screenshot({ "w" }, "window", "Screenshot current window", true)
 		bind.screenshot({ "o" }, "output", "Screenshot current output", true)
 		bind.screenshot({ "r" }, "region", "Screenshot a selected region", true)
-	end)
+	end, "Screenshot")
 	bind.supmap({ "r" }, "screen-record", function()
 		bind.screenrecord({ "r" }, "region", true, "Record a region (again to stop)", true)
 		bind.screenrecord({ "o" }, "output", true, "Record current output (again to stop)", true)
-	end)
-end)
+	end, "Screen record")
+end, "Screen capture")
 
 -- === Utility ===
 
