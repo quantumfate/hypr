@@ -11,10 +11,10 @@ function M.hostname()
 	return name
 end
 
----@return Hosts?
+---Current host config. Resolved once in hyprland.lua; prefer `config.host`.
+---@return Hosts
 function M.host_config()
-	local name = M.hostname()
-	return name and config.host_configs[name] or nil
+	return config.host
 end
 
 return M

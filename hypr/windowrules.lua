@@ -20,7 +20,7 @@ windowrule.tag_set_effects("code", {
 
 windowrule.tag_props({
 	{ initial_class = "(obsidian)" },
-}, "study")
+}, "+study")
 
 windowrule.tag_set_effects("study", {
 	static = { workspace = "name:study" },
@@ -29,10 +29,19 @@ windowrule.tag_set_effects("study", {
 windowrule.tag_props({
 	{ initial_class = "(Proton Mail)" },
 	{ initial_class = "(Proton Pass)" },
-}, "proton")
+}, "+proton")
 
 windowrule.tag_set_effects("proton", {
 	static = { workspace = "name:proton" },
+})
+windowrule.tag_props({
+	{ initial_class = "(Archon App)" },
+	{ initial_class = "(ckb-next)" },
+	{ initial_class = "com.shellyorg.shelly" },
+}, "misc")
+
+windowrule.tag_set_effects("misc", {
+	static = { workspace = "name:misc" },
 })
 
 windowrule.tag_props({
@@ -59,24 +68,47 @@ windowrule.tag_set_effects("pip", {
 })
 
 windowrule.tag_props({
-	{
-		initial_class = [[(protonvpn-app|Impala|About|Wiremix|com.gabm.satty|Calos|TUI.float|io\.github\.Qalculate\.qalculate-qt)]],
+
+	{ initial_class = "(zen|zen-twilight|zen-beta)", title = "(Library)" },
+	{ initial_class = "(zen|zen-twilight|zen-beta)", title = "Add bookmark folder" },
+	{ initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
+	{ initial_class = "com.shellyorg.shelly" },
+	{ initial_class = "(wdisplays)" },
+}, "+large-floating-window")
+
+windowrule.tag_set_effects("large-floating-window", {
+	static = { float = true, center = true, fullscreen_state = "0 0" },
+	dynamic = {
+		min_size = { "monitor_w * 0.7", "monitor_h * 0.7" },
+		-- max_size = { "monitor_w * 0.7", "monitor_h * 0.7" },
+		persistent_size = true,
 	},
-	{ initial_class = "(Ranger-tui|Wiremix-tui|Btop-tui|Parui-tui|Blue-tui)" },
+})
+
+windowrule.tag_props({
 	{
 		initial_class = "(xdg-desktop-portal-hyprland|xdg-desktop-portal-gtk|sublime_text|DesktopEditors)",
 		title = "(Open.*Files?|Save.*Files?|Save.*As|All Files|Save)",
 	},
+	{
+		initial_class = [[(protonvpn-app|Impala|About|Wiremix|com.gabm.satty|Calos|TUI.float|io\.github\.Qalculate\.qalculate-qt)]],
+	},
+	{ initial_class = "(Ranger-tui|Wiremix-tui|Btop-tui|Parui-tui|Blue-tui)" },
 	{ initial_class = "(zen|zen-twilight|zen-beta)", title = "(Library)" },
 	{ initial_class = "(zen|zen-twilight|zen-beta)", title = "Add bookmark folder" },
 	{ initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
-	{ initial_class = "(wdisplays)" },
 	{ initial_class = "com.github.hluk.copyq" },
-}, "+floating-window")
+	{ initial_class = "com.shellyorg.shelly" },
+	{ initial_class = "ckb-next" },
+}, "+medium-floating-window")
 
-windowrule.tag_set_effects("floating-window", {
+windowrule.tag_set_effects("medium-floating-window", {
 	static = { float = true, center = true, fullscreen_state = "0 0" },
-	dynamic = { max_size = { "monitor_w * 0.7", "monitor_h * 0.7" }, persistent_size = true },
+	dynamic = {
+		min_size = { "monitor_w * 0.4", "monitor_h * 0.4" },
+		max_size = { "monitor_w * 0.5", "monitor_h * 0.5" },
+		persistent_size = true,
+	},
 })
 
 windowrule.tag_props({
@@ -97,7 +129,6 @@ windowrule.tag_set_effects("media-browser", {
 windowrule.tag_props({
 	{ class = [[steam_app_\d+]] },
 	{ class = "(steam)" },
-	{ class = "steam_app_default", title = "Zenimax Online Studios Launcher" },
 	{ class = "steam_app_default" },
 }, "+gaming")
 
@@ -112,7 +143,7 @@ windowrule.tag_props({
 }, "+launcher")
 
 windowrule.tag_set_effects("launcher", {
-	static = { workspace = "special:launcher" },
+	static = { workspace = "special:launcher", size = { "monitor_w * 0.4", "monitor_h * 0.6" }, move = { 100, 100 } },
 })
 
 hl.window_rule({ match = { class = [[steam_app_\d+]] }, fullscreen_state = "2 2" })

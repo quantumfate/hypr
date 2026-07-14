@@ -9,9 +9,9 @@ config = nil
 ---@field primary_mod string
 ---@field secondary_mod string
 ---@field tertiary_mod string
----@field hyprlock_conf string
 ---@field app_cmds Commands
----@field host_configs table<string, Hosts>
+---@field host_configs table<string, Hosts> Per-host definitions, keyed by hostname.
+---@field host Hosts The current host's config, resolved at load. Use this everywhere.
 
 ---@class Workspaces
 ---@field workspace_specs HL.WorkspaceRuleSpec[]
@@ -29,8 +29,13 @@ config = nil
 ---@field calculator string
 ---@field volume_control string
 ---@field app_launcher string
+---@field package_manager_ui string
 
 ---@class Hosts
+---@field primary_monitor string
+---@field secondary_monitor string?
+---@field hyprlock_conf string
+---@field kb_options string?
 ---@field workspaces Workspaces
 
 ---@class WindowRuleProps
@@ -101,7 +106,7 @@ config = nil
 ---@field opacity	string?	Opacity multiplier. "0.8", "0.9 0.7" (active/inactive), "1 0.8 0.9" (active/inactive/fullscreen). Append " override" for absolute.
 ---@field tag	string?	Apply tag. "+t" set, "-t" unset, "t" toggle.
 ---@field max_size	(string|number)[]?	Max size for floating. E.g. {800, 600}.
----@field min_size	number[]?	Min size for floating. E.g. {200, 150}.
+---@field min_size	(string|number)[]?	Min size for floating. E.g. {200, 150}.
 ---@field border_size	integer?	Border size.
 ---@field rounding	integer?	Force rounding px, ignore default.
 ---@field rounding_power	number?	Override rounding power.
