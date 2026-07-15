@@ -20,27 +20,20 @@ local function running()
 	return code == 0
 end
 
----Toggle the dofus_swap.py auto turn-swap detector for a team.
----Kills it if running, else starts it detached with the team's character names.
----@param team string[]? character names (default: selected team)
-function M.toggle(team)
-	team = team or common.team()
-
+---Toggle the dofus_swap.py auto turn-swap detector.
+---Kills it if running, else starts it detached. The script reads its roster
+---from the shared team.json store itself (and re-reads it live), so no team is
+---passed here — the UI/store is the single source of truth.
+function M.toggle()
 	if running() then
 		hl.exec_cmd("pkill -f '" .. PGREP_PATTERN .. "'")
 		notify:notify("Swap OFF", 2000, notify.level.INFO)
 		return
 	end
 
-	local args = {}
-	for _, name in ipairs(team) do
-		args[#args + 1] = "'" .. name .. "'"
-	end
-
-	local cmd = ("mkdir -p '%s'; setsid '%s' run --characters %s >> '%s' 2>&1 </dev/null &"):format(
+	local cmd = ("mkdir -p '%s'; setsid '%s' run >> '%s' 2>&1 </dev/null &"):format(
 		LOG_DIR,
 		SWAP_SCRIPT,
-		table.concat(args, " "),
 		LOG_FILE
 	)
 	hl.exec_cmd(cmd)
