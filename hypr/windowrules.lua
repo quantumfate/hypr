@@ -125,26 +125,53 @@ windowrule.tag_set_effects("media-browser", {
 	static = { workspace = "name:media" },
 })
 
+local not_eso_launcher = { class = "steam_app_default", title = "[^(Zenimax Online Studios Launcher)]" }
+local eso_launcher = { class = "steam_app_default", title = "Zenimax Online Studios Launcher" }
+local arbitrary_steam_app = { class = [[steam_app_\d+]] }
+local default_steam_app = { class = "steam_app_default" }
+local steam = { class = "(steam)" }
+local lutris = { class = "net.lutris.Lutris" }
+
 -- Gaming
 windowrule.tag_props({
-	{ class = [[steam_app_\d+]] },
-	{ class = "(steam)" },
-	{ class = "steam_app_default" },
+	arbitrary_steam_app,
+	default_steam_app,
+	not_eso_launcher,
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
-	static = { workspace = "name:gaming", suppress_event = "activate activatefocus", fullscreen_state = "2 1" },
+	static = { workspace = "name:gaming", suppress_event = "activate activatefocus", fullscreen_state = "2 3" },
 })
 
 windowrule.tag_props({
-	{ class = "(steam)" },
-	{ class = "steam_app_default", title = "Zenimax Online Studios Launcher" },
-	{ class = "net.lutris.Lutris" },
+	steam,
+	eso_launcher,
+	lutris,
 }, "+launcher")
 
-windowrule.tag_set_effects("launcher", {
-	static = { workspace = "special:launcher", size = { "monitor_w * 0.4", "monitor_h * 0.6" }, move = { 100, 100 } },
+windowrule.tag_props({ lutris }, "+left-float")
+windowrule.tag_props({ eso_launcher }, "+right-float")
+
+windowrule.tag_set_effects("left-float", {
+	static = {
+		move = { 200, 200 },
+	},
 })
+
+windowrule.tag_set_effects("right-float", {
+	static = {
+		move = { "(monitor_w / 2)", 100 },
+	},
+})
+
+windowrule.tag_set_effects("launcher", {
+	static = {
+		workspace = "special:launcher",
+		fullscreen_state = "0 1",
+	},
+})
+
+hl.window_rule({ match = lutris, size = { "monitor_w * 0.35", "monitor_h * 0.8" } })
 
 hl.window_rule({ match = { class = [[steam_app_\d+]] }, fullscreen_state = "2 2" })
 hl.window_rule({ match = { class = "(steam)", title = "Friends List" }, move = { 300, 400 }, float = true })
