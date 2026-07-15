@@ -2,6 +2,7 @@ local dofus_launch = require("hypr.services.dofus.launch")
 local common = require("hypr.services.dofus.common")
 local team = require("hypr.services.dofus.team")
 local swap = require("hypr.services.dofus.swap")
+local ipc = require("hypr.services.dofus.ipc")
 local submap = require("hypr.lib.submap")
 
 -- Window rules live in hypr/windowrules.lua; the special:ankama workspace (with
@@ -89,7 +90,21 @@ submap.tree({
 	name = "dofus",
 	desc = "Dofus",
 	sticky = true,
+	-- Entering/leaving the Dofus tree shows/hides the Quickshell team panel.
+	on_enter = function()
+		ipc.panel("show")
+	end,
+	on_leave = function()
+		ipc.panel("hide")
+	end,
 	entries = {
+		{
+			key = "space",
+			desc = "Toggle team panel",
+			action = function()
+				ipc.panel("toggle")
+			end,
+		},
 		{
 			key = "d",
 			desc = "Toggle launch-on-open",
@@ -111,6 +126,11 @@ submap.tree({
 			desc = "Pioneer team",
 			action = function()
 				common.select("pioneer")
+			end,
+			-- Push the selection into the running UI so the panel reflects the
+			-- active team submap immediately (store write is the durable truth).
+			on_enter = function()
+				ipc.select("pioneer")
 			end,
 			entries = team_pioneer_entries,
 		},

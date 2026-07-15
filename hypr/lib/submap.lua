@@ -14,6 +14,12 @@ local M = {}
 -- The path of submap names currently entered. #stack == depth in the tree.
 ---@type string[]
 local stack = {}
+-- Per-submap lifecycle callbacks, keyed by submap name. `enter` fires just
+-- after a submap becomes active; `leave` fires when it is popped (via back,
+-- a leaf action's exit, or reset). Used to sync external state — e.g. tell the
+-- Quickshell UI which team submap is active. Registered from tree specs.
+---@type table<string, { enter?: fun(), leave?: fun() }>
+local hooks = {}
 -- The submap that was active before the tree's root was entered; where a leaf
 -- action or a full exit returns to.
 local base = "reset"
@@ -33,6 +39,16 @@ local function run(action)
 	end
 end
 
+---Fire a submap's lifecycle callback, if registered.
+---@param name string
+---@param phase "enter"|"leave"
+local function fire(name, phase)
+	local h = hooks[name]
+	if h and h[phase] then
+		h[phase]()
+	end
+end
+
 ---Enter a submap, remembering where we came from.
 ---@param name string
 function M.enter(name)
@@ -41,24 +57,33 @@ function M.enter(name)
 	end
 	stack[#stack + 1] = name
 	hl.dispatch(hl.dsp.submap(name))
+	fire(name, "enter")
 end
 
 ---Go back one level: to the parent submap, or the base if at the top.
 function M.back()
-	table.remove(stack)
+	local leaving = table.remove(stack)
+	if leaving then
+		fire(leaving, "leave")
+	end
 	hl.dispatch(hl.dsp.submap(stack[#stack] or base))
 end
 
 ---Leave the whole tree: clear the stack and return to the base submap. This is
 ---the which-key "picked a command, close the menu" behaviour.
 function M.exit()
-	local target = base
+	for i = #stack, 1, -1 do
+		fire(stack[i], "leave")
+	end
 	stack = {}
-	hl.dispatch(hl.dsp.submap(target))
+	hl.dispatch(hl.dsp.submap(base))
 end
 
 ---Hard reset to the root ("reset") submap regardless of depth.
 function M.reset()
+	for i = #stack, 1, -1 do
+		fire(stack[i], "leave")
+	end
 	stack = {}
 	hl.dispatch(hl.dsp.submap("reset"))
 end
@@ -89,6 +114,7 @@ local function define(name, entries, sticky)
 				if child_sticky == nil then
 					child_sticky = sticky
 				end
+				hooks[child] = { enter = e.on_enter, leave = e.on_leave }
 				hl.bind(combo(e), function()
 					if e.action then
 						run(e.action)
@@ -129,6 +155,7 @@ end
 ---submap is `sticky`, in which case leaves stay by default).
 ---@param spec SubmapSpec
 function M.tree(spec)
+	hooks[spec.name] = { enter = spec.on_enter, leave = spec.on_leave }
 	hl.bind(keystr(spec.mods), function()
 		M.enter(spec.name)
 	end, { description = (spec.desc or spec.name) .. "…" })

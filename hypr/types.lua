@@ -158,6 +158,8 @@ config = nil
 ---@field stay? boolean Leaf: stay in the submap after running instead of exiting. Overrides `sticky`.
 ---@field sticky? boolean Group: default `stay` for descendant leaves (modal submap). Inherited by children.
 ---@field repeating? boolean Leaf: allow key repeat while held.
+---@field on_enter? fun() Group: runs just after this submap becomes active (e.g. sync external UI state).
+---@field on_leave? fun() Group: runs when this submap is popped (back / leaf exit / reset).
 ---@field opts? HL.BindOptions Extra bind options merged into the keybind (e.g. release, transparent).
 
 ---A which-key style submap tree, opened by a keystroke. Passed to `submap.tree`.
@@ -166,4 +168,6 @@ config = nil
 ---@field name string Root submap name.
 ---@field desc? string Description for the opening keybind (cheatsheet); defaults to `name`.
 ---@field sticky? boolean Leaves stay in the submap by default (modal); default false.
+---@field on_enter? fun() Runs just after the root submap becomes active.
+---@field on_leave? fun() Runs when the root submap is popped (tree fully exited).
 ---@field entries SubmapEntry[] The submap's entries.
