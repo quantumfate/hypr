@@ -2,6 +2,7 @@ local toggle_minimize = require("hypr.lib.minimize")
 local bind = require("hypr.lib.bind")
 local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
+local qs = require("hypr.lib.qs")
 
 -- === Audio controls ===
 bind.audio("RaiseVolume", ",volume.sh --inc", "Volume up", nil, true)
@@ -214,4 +215,24 @@ bind.exec("p", "hyprpicker -a -n", {
 bind.exec("slash", "qs -c quantumfate ipc call cheatsheet toggle", {
 	description = "Show keybind cheatsheet",
 	submap_universal = true,
+})
+
+-- Quickshell control: which-key menu exposing the rest of the shell's IPC
+-- surface (theme, cheatsheet, team panel, store queries). Actions that take an
+-- argument are reached elsewhere: `dofus select` via the team submap, and
+-- `theme set <palette>` is covered here by `cycle`.
+submap.tree({
+	mods = { config.main_mod, "q" },
+	name = "shell",
+	desc = "Shell / Quickshell",
+	entries = {
+		{ key = "slash", desc = "Toggle cheatsheet", action = function() qs.call("cheatsheet", "toggle") end },
+		{ key = "p", desc = "Toggle team panel", action = function() qs.call("dofusPanel", "toggle") end },
+		{ key = "r", desc = "Reload team store", action = function() qs.call("dofus", "reload") end },
+		{ key = "n", desc = "Show roster", action = function() qs.notify("Dofus roster", "dofus", "team") end },
+		{ key = "s", desc = "Selected team", action = function() qs.notify("Dofus team", "dofus", "selected") end },
+		{ key = "t", desc = "Cycle theme", stay = true, action = function() qs.call("theme", "cycle") end },
+		{ key = "i", desc = "Theme info", action = function() qs.notify("Theme", "theme", "get") end },
+		{ key = "h", desc = "IPC help", action = function() qs.notify("Quickshell IPC", "help", "all") end },
+	},
 })

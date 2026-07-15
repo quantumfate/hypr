@@ -1,33 +1,27 @@
--- Thin wrapper over the Quickshell IPC surface (services in the quickshell
--- repo: DofusState -> target "dofus", DofusTeam -> target "dofusPanel").
--- Commands (not state) go over IPC; state goes through the shared team.json
--- store. Calls are fire-and-forget so they never block the compositor thread.
+-- Dofus-specific view of the Quickshell IPC surface (DofusState -> target
+-- "dofus", DofusTeam -> target "dofusPanel"). Commands go over IPC; state goes
+-- through the shared team.json store. Built on the generic hypr/lib/qs helper.
+local qs = require("hypr.lib.qs")
+
 local M = {}
-
-local BASE = "qs -c quantumfate ipc call"
-
----@param args string ipc "target function [arg...]"
-local function call(args)
-	hl.exec_cmd(BASE .. " " .. args)
-end
 
 ---Select the active team in the running UI (instant; the store write in
 ---common.select is the durable truth, this just pushes it without waiting for
 ---the file watch).
 ---@param team string
 function M.select(team)
-	call("dofus select " .. team)
+	qs.call("dofus", "select", team)
 end
 
 ---Control the team panel window. cmd = "show" | "hide" | "toggle".
 ---@param cmd string
 function M.panel(cmd)
-	call("dofusPanel " .. cmd)
+	qs.call("dofusPanel", cmd)
 end
 
 ---Ask the UI to re-read team.json from disk now.
 function M.reload()
-	call("dofus reload")
+	qs.call("dofus", "reload")
 end
 
 return M
