@@ -5,6 +5,8 @@ package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 ---@diagnostic disable-next-line: missing-fields
 _G.config = {
 	main_mod = "SUPER",
+	-- Passive peek cheatsheet: how long to dwell in a submap before it fades in.
+	peek_delay_ms = 2000,
 	primary_mod = "CTRL",
 	secondary_mod = "SHIFT",
 	tertiary_mod = "ALT",

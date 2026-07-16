@@ -25,6 +25,17 @@ hl.layer_rule({
 	ignore_alpha = 0.6,
 })
 
+-- Passive peek cheatsheet: non-interactive contextual panel (no dim backdrop,
+-- no keyboard focus — see CheatSheetPeek.qml). The fade is owned by the QML
+-- (fast in, slower out, independent timing), so the compositor maps it with no
+-- animation of its own — it just frosts the card, like the Dofus HUD.
+hl.layer_rule({
+	match = { namespace = "quickshell-cheatsheet-peek" },
+	animation = "none",
+	blur = true,
+	ignore_alpha = 0.1,
+})
+
 -- Window rename widget: small centered modal, same feel as the cheatsheet.
 hl.layer_rule({
 	match = { namespace = "quickshell-window-rename" },

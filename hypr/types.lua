@@ -6,6 +6,7 @@ config = nil
 
 ---@class Config
 ---@field main_mod string
+---@field peek_delay_ms integer Dwell time in a submap before the passive peek cheatsheet fades in.
 ---@field primary_mod string
 ---@field secondary_mod string
 ---@field tertiary_mod string
