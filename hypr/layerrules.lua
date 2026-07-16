@@ -14,12 +14,13 @@ hl.layer_rule({
 	ignore_alpha = 0.1,
 })
 
--- Cheatsheet: fullscreen overlay (dim backdrop + solid-ish card). Fade in, and
--- frost only the card: ignore_alpha above the backdrop's alpha (~0.5) so the
--- thin dim passes through unblurred while the card gets a blur.
+-- Cheatsheet: fullscreen overlay (dim backdrop + solid-ish card). Pop in with a
+-- subtle zoom (reads better than a flat fade for a centered modal), and frost
+-- only the card: ignore_alpha above the backdrop's alpha (~0.5) so the thin dim
+-- passes through unblurred while the card gets a blur.
 hl.layer_rule({
 	match = { namespace = "quickshell-cheatsheet" },
-	animation = "fade",
+	animation = "popin 92%",
 	blur = true,
 	ignore_alpha = 0.6,
 })
