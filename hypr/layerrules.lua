@@ -25,6 +25,14 @@ hl.layer_rule({
 	ignore_alpha = 0.6,
 })
 
+-- Window rename widget: small centered modal, same feel as the cheatsheet.
+hl.layer_rule({
+	match = { namespace = "quickshell-window-rename" },
+	animation = "popin 92%",
+	blur = true,
+	ignore_alpha = 0.6,
+})
+
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })

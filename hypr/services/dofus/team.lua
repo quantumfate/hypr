@@ -1,9 +1,20 @@
 local common = require("hypr.services.dofus.common")
+local qs = require("hypr.lib.qs")
 
 local DOFUS_CLASS = "Dofus.x64"
 local DOUBLE_CLICK_TAG = "dofus-double-click"
 
 local M = {}
+
+---Open the Quickshell rename widget for the focused window. The pid is captured
+---now (while the window is focused) and passed to the widget, which then grabs
+---keyboard focus itself — so the correct window is renamed.
+function M.rename_prompt()
+	local active = hl.get_active_window()
+	if active then
+		qs.call("window", "prompt", tostring(active.pid))
+	end
+end
 
 ---Active window is a Dofus client?
 ---@return boolean

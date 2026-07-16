@@ -24,6 +24,13 @@ local team_entries = {
 			ipc.panel("toggle")
 		end,
 	},
+	{
+		key = "n",
+		desc = "Rename focused window",
+		action = function()
+			team.rename_prompt()
+		end,
+	},
 }
 for i = 1, 8 do
 	team_entries[#team_entries + 1] = {
