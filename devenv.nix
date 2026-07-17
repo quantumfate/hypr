@@ -10,7 +10,7 @@
     shfmt
     shellcheck
     yamllint
-    nodePackages.prettier
+    prettier
   ];
 
   # Install the shared pre-commit hooks on shell entry.
