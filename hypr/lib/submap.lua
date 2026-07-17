@@ -69,6 +69,12 @@ function M.back()
 	hl.dispatch(hl.dsp.submap(stack[#stack] or base))
 end
 
+-- Optional global callback fired whenever the tree is fully left via M.exit
+-- (i.e. a non-sticky submap closing after a button press). Set by config to,
+-- e.g., dismiss the which-key cheatsheet. Not fired by back/reset/escape.
+---@type fun()?
+M.on_exit = nil
+
 ---Leave the whole tree: clear the stack and return to the base submap. This is
 ---the which-key "picked a command, close the menu" behaviour.
 function M.exit()
@@ -77,6 +83,9 @@ function M.exit()
 	end
 	stack = {}
 	hl.dispatch(hl.dsp.submap(base))
+	if M.on_exit then
+		M.on_exit()
+	end
 end
 
 ---Hard reset to the root ("reset") submap regardless of depth.

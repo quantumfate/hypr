@@ -4,6 +4,12 @@ local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
 
+-- Dismiss the which-key cheatsheet when a non-sticky submap closes after a
+-- button press (M.exit). Sticky submaps stay open, so this leaves them alone.
+submap.on_exit = function()
+	qs.call("cheatsheet", "hide")
+end
+
 -- === Audio controls ===
 bind.audio("RaiseVolume", ",volume.sh --inc", "Volume up", nil, true)
 bind.audio("LowerVolume", ",volume.sh --dec", "Volume down", nil, true)
@@ -226,7 +232,7 @@ submap.tree({
 	name = "shell",
 	desc = "Shell / Quickshell",
 	entries = {
-		{ key = "slash", desc = "Toggle cheatsheet", action = function() qs.call("cheatsheet", "toggle") end },
+		-- (cheatsheet toggle is the global super+/ bind, which is submap_universal)
 		{ key = "p", desc = "Toggle team panel", action = function() qs.call("dofusPanel", "toggle") end },
 		{ key = "r", desc = "Reload team store", action = function() qs.call("dofus", "reload") end },
 		{ key = "n", desc = "Show roster", action = function() qs.notify("Dofus roster", "dofus", "team") end },
