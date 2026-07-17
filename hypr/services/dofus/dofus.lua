@@ -17,100 +17,100 @@ local submap = require("hypr.lib.submap")
 -- enter), so one set is reused by every team submap. Sticky: keys repeat while
 -- the submap stays open.
 local team_entries = {
-	{
-		key = "space",
-		desc = "Toggle order widget",
-		action = function()
-			ipc.panel("toggle")
-		end,
-	},
-	{
-		key = "n",
-		desc = "Rename focused window",
-		action = function()
-			team.rename_prompt()
-		end,
-	},
+  {
+    key = "space",
+    desc = "Toggle order widget",
+    action = function()
+      ipc.panel("toggle")
+    end,
+  },
+  {
+    key = "n",
+    desc = "Rename focused window",
+    action = function()
+      team.rename_prompt()
+    end,
+  },
 }
 for i = 1, 8 do
-	team_entries[#team_entries + 1] = {
-		key = "F" .. i,
-		desc = "Activate team member " .. i,
-		action = function()
-			team.activate(common.team(), i)
-		end,
-	}
+  team_entries[#team_entries + 1] = {
+    key = "F" .. i,
+    desc = "Activate team member " .. i,
+    action = function()
+      team.activate(common.team(), i)
+    end,
+  }
 end
 for _, e in ipairs({
-	{
-		key = "right",
-		desc = "Next team member",
-		action = function()
-			team.iterate(common.team(), false)
-		end,
-	},
-	{
-		key = "F23",
-		desc = "Next team member",
-		action = function()
-			team.iterate(common.team(), false)
-		end,
-	},
-	{
-		key = "left",
-		desc = "Previous team member",
-		action = function()
-			team.iterate(common.team(), true)
-		end,
-	},
-	{
-		key = "F23",
-		mods = { config.main_mod },
-		desc = "Previous team member",
-		action = function()
-			team.iterate(common.team(), true)
-		end,
-	},
-	{
-		key = "up",
-		desc = "Press current member",
-		action = function()
-			team.press(common.team())
-		end,
-	},
-	{
-		key = "mouse:274",
-		desc = "Press current member",
-		action = function()
-			team.press(common.team())
-		end,
-	},
-	{
-		key = "s",
-		desc = "Toggle swap",
-		action = function()
-			swap.toggle()
-		end,
-	},
-	{
-		key = "F10",
-		mods = { config.main_mod },
-		desc = "Start double-click",
-		action = function()
-			team.double_click_start()
-		end,
-	},
-	{
-		key = "F11",
-		mods = { config.main_mod },
-		desc = "Stop double-click",
-		opts = { release = true, transparent = true },
-		action = function()
-			team.double_click_stop()
-		end,
-	},
+  {
+    key = "right",
+    desc = "Next team member",
+    action = function()
+      team.iterate(common.team(), false)
+    end,
+  },
+  {
+    key = "F23",
+    desc = "Next team member",
+    action = function()
+      team.iterate(common.team(), false)
+    end,
+  },
+  {
+    key = "left",
+    desc = "Previous team member",
+    action = function()
+      team.iterate(common.team(), true)
+    end,
+  },
+  {
+    key = "F23",
+    mods = { config.main_mod },
+    desc = "Previous team member",
+    action = function()
+      team.iterate(common.team(), true)
+    end,
+  },
+  {
+    key = "up",
+    desc = "Press current member",
+    action = function()
+      team.press(common.team())
+    end,
+  },
+  {
+    key = "mouse:274",
+    desc = "Press current member",
+    action = function()
+      team.press(common.team())
+    end,
+  },
+  {
+    key = "s",
+    desc = "Toggle swap",
+    action = function()
+      swap.toggle()
+    end,
+  },
+  {
+    key = "F10",
+    mods = { config.main_mod },
+    desc = "Start double-click",
+    action = function()
+      team.double_click_start()
+    end,
+  },
+  {
+    key = "F11",
+    mods = { config.main_mod },
+    desc = "Stop double-click",
+    opts = { release = true, transparent = true },
+    action = function()
+      team.double_click_stop()
+    end,
+  },
 }) do
-	team_entries[#team_entries + 1] = e
+  team_entries[#team_entries + 1] = e
 end
 
 -- Build a team submap group. Entering it selects `team_key` everywhere:
@@ -122,41 +122,41 @@ end
 ---@param desc string cheatsheet label
 ---@return SubmapEntry
 local function team_group(key, name, team_key, desc)
-	return {
-		key = key,
-		name = name,
-		desc = desc,
-		action = function()
-			common.select(team_key)
-		end,
-		on_enter = function()
-			ipc.select(team_key)
-		end,
-		entries = team_entries,
-	}
+  return {
+    key = key,
+    name = name,
+    desc = desc,
+    action = function()
+      common.select(team_key)
+    end,
+    on_enter = function()
+      ipc.select(team_key)
+    end,
+    entries = team_entries,
+  }
 end
 
 submap.tree({
-	mods = { config.main_mod, "d" },
-	name = "dofus",
-	desc = "Dofus",
-	sticky = true,
-	-- Leaving the whole tree hides the order widget (it is opened on demand from
-	-- inside a team submap, not automatically).
-	on_leave = function()
-		ipc.panel("hide")
-	end,
-	entries = {
-		{
-			key = "d",
-			desc = "Toggle launch-on-open",
-			action = function()
-				dofus_launch:toggle_enable()
-			end,
-		},
-		{ key = "a", desc = "Launch Ankama launcher", action = hl.dsp.exec_cmd("gamemoderun ankama-launcher") },
-		-- One group per team. Add a team = add a line here (and its roster to the
-		-- store); everything else is shared.
-		team_group("p", "team_pioneer", "pioneer", "Pioneer team"),
-	},
+  mods = { config.main_mod, "d" },
+  name = "dofus",
+  desc = "Dofus",
+  sticky = true,
+  -- Leaving the whole tree hides the order widget (it is opened on demand from
+  -- inside a team submap, not automatically).
+  on_leave = function()
+    ipc.panel("hide")
+  end,
+  entries = {
+    {
+      key = "d",
+      desc = "Toggle launch-on-open",
+      action = function()
+        dofus_launch:toggle_enable()
+      end,
+    },
+    { key = "a", desc = "Launch Ankama launcher", action = hl.dsp.exec_cmd("gamemoderun ankama-launcher") },
+    -- One group per team. Add a team = add a line here (and its roster to the
+    -- store); everything else is shared.
+    team_group("p", "team_pioneer", "pioneer", "Pioneer team"),
+  },
 })

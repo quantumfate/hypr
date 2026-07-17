@@ -16,21 +16,21 @@ local submap_subs = {}
 local last_submap = nil
 
 hl.on("keybinds.submap", function()
-	local cur = hl.get_current_submap() -- "" at root/global
-	if cur == last_submap then
-		return
-	end
-	last_submap = cur
-	for _, cb in ipairs(submap_subs) do
-		cb(cur)
-	end
+  local cur = hl.get_current_submap() -- "" at root/global
+  if cur == last_submap then
+    return
+  end
+  last_submap = cur
+  for _, cb in ipairs(submap_subs) do
+    cb(cur)
+  end
 end)
 
 ---React to submap changes. `cb` gets the new submap name ("" = root). Fires on
 ---every transition, in registration order.
 ---@param cb fun(submap: string)
 function M.on_submap_change(cb)
-	submap_subs[#submap_subs + 1] = cb
+  submap_subs[#submap_subs + 1] = cb
 end
 
 ---A one-shot timer that runs `cb` after `ms` milliseconds. Returns the handle
@@ -39,7 +39,7 @@ end
 ---@param cb fun()
 ---@return HL.Timer
 function M.oneshot(ms, cb)
-	return hl.timer(cb, { timeout = ms, type = "oneshot" })
+  return hl.timer(cb, { timeout = ms, type = "oneshot" })
 end
 
 return M

@@ -11,16 +11,16 @@ log_info "Setting up development environment..."
 
 # Git hooks via pre-commit.
 if have pre-commit; then
-  pre-commit install --hook-type pre-commit --hook-type commit-msg -f
-  log_ok "Git hooks installed"
+    pre-commit install --hook-type pre-commit --hook-type commit-msg -f
+    log_ok "Git hooks installed"
 else
-  log_warn "pre-commit not found - install it, then re-run this script"
+    log_warn "pre-commit not found - install it, then re-run this script"
 fi
 
 # Conventional-commit message template.
 if [[ -f ".gitmessage" ]]; then
-  git config commit.template .gitmessage
-  log_ok "Commit template enabled"
+    git config commit.template .gitmessage
+    log_ok "Commit template enabled"
 fi
 
 log_ok "Setup complete."

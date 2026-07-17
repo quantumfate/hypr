@@ -10,18 +10,18 @@ local M = {}
 ---the file watch).
 ---@param team string
 function M.select(team)
-	qs.call("dofus", "select", team)
+  qs.call("dofus", "select", team)
 end
 
 ---Control the team panel window. cmd = "show" | "hide" | "toggle".
 ---@param cmd string
 function M.panel(cmd)
-	qs.call("dofusPanel", cmd)
+  qs.call("dofusPanel", cmd)
 end
 
 ---Ask the UI to re-read team.json from disk now.
 function M.reload()
-	qs.call("dofus", "reload")
+  qs.call("dofus", "reload")
 end
 
 return M

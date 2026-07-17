@@ -7,18 +7,18 @@ local notify = require("hypr.lib.notify")
 ---@param table any
 ---@return table
 function M.reverse_index_lookup(table)
-	return setmetatable(table, {
-		__index = function(t, k)
-			for key, value in pairs(t) do
-				if fn.any(function(e)
-					return e == k
-				end, value) then
-					return key
-				end
-			end
-			notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
-		end,
-	})
+  return setmetatable(table, {
+    __index = function(t, k)
+      for key, value in pairs(t) do
+        if fn.any(function(e)
+          return e == k
+        end, value) then
+          return key
+        end
+      end
+      notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
+    end,
+  })
 end
 
 ---Searches only in a specific field a given table
@@ -26,36 +26,36 @@ end
 ---@param target_key string
 ---@return table
 function M.reverse_index_lookup_by_key(table, target_key)
-	return setmetatable(table, {
-		__index = function(t, k)
-			for key, _ in pairs(t) do
-				if fn.any(function(e)
-					return e == k
-				end, t[key][target_key]) then
-					return key
-				end
-			end
-			notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
-		end,
-	})
+  return setmetatable(table, {
+    __index = function(t, k)
+      for key, _ in pairs(t) do
+        if fn.any(function(e)
+          return e == k
+        end, t[key][target_key]) then
+          return key
+        end
+      end
+      notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
+    end,
+  })
 end
 
 ---Attaches a metatable to a given table that returns the table in a list of tables of which the index is found first
 ---@param table any
 ---@return table
 function M.list_reverse_index_lookup_by_key(table)
-	return setmetatable(table, {
-		__index = function(t, k)
-			for idx, _ in ipairs(t) do
-				if fn.any_in_table(function(_, value)
-					return value == k
-				end, t[idx]) then
-					return t[idx]
-				end
-			end
-			notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
-		end,
-	})
+  return setmetatable(table, {
+    __index = function(t, k)
+      for idx, _ in ipairs(t) do
+        if fn.any_in_table(function(_, value)
+          return value == k
+        end, t[idx]) then
+          return t[idx]
+        end
+      end
+      notify:notify(("Reverse lookup failed for '%s'"):format(k), 3000, "ERROR")
+    end,
+  })
 end
 
 return M
