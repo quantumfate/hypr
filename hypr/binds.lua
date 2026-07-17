@@ -4,18 +4,6 @@ local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
 
--- Peek the which-key cheatsheet whenever a submap is entered; it auto-hides a
--- few seconds later (timer lives in the Quickshell widget, reset on each peek).
-submap.on_enter = function(name)
-	qs.call("cheatsheet", "peek", name)
-end
-
--- Dismiss it immediately when a non-sticky submap closes after a button press
--- (M.exit). Sticky submaps stay open, so this leaves them alone.
-submap.on_exit = function()
-	qs.call("cheatsheet", "hide")
-end
-
 -- === Audio controls ===
 bind.audio("RaiseVolume", ",volume.sh --inc", "Volume up", nil, true)
 bind.audio("LowerVolume", ",volume.sh --dec", "Volume down", nil, true)
