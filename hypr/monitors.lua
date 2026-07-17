@@ -7,8 +7,8 @@
 
 -- Default catch-all monitor configuration (auto resolution/position/scale).
 hl.monitor({
-	output = "",
-	mode = "preferred",
-	position = "auto",
-	scale = "auto",
+  output = "",
+  mode = "preferred",
+  position = "auto",
+  scale = "auto",
 })
