@@ -6,8 +6,8 @@ local qs = require("hypr.lib.qs")
 
 -- Peek the which-key cheatsheet whenever a submap is entered; it auto-hides a
 -- few seconds later (timer lives in the Quickshell widget, reset on each peek).
-submap.on_enter = function()
-	qs.call("cheatsheet", "peek")
+submap.on_enter = function(name)
+	qs.call("cheatsheet", "peek", name)
 end
 
 -- Dismiss it immediately when a non-sticky submap closes after a button press
