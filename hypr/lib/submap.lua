@@ -49,6 +49,11 @@ local function fire(name, phase)
 	end
 end
 
+-- Optional global callback fired whenever *any* submap is entered (including
+-- nested ones). Set by config to, e.g., peek the which-key cheatsheet.
+---@type fun(name: string)?
+M.on_enter = nil
+
 ---Enter a submap, remembering where we came from.
 ---@param name string
 function M.enter(name)
@@ -58,6 +63,9 @@ function M.enter(name)
 	stack[#stack + 1] = name
 	hl.dispatch(hl.dsp.submap(name))
 	fire(name, "enter")
+	if M.on_enter then
+		M.on_enter(name)
+	end
 end
 
 ---Go back one level: to the parent submap, or the base if at the top.
