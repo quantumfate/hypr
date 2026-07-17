@@ -1,0 +1,5 @@
+type(scope): short description
+
+# Types: feat, fix, refactor, perf, style, test, build, ops, docs, chore, revert
+# Rules: lowercase type, scope optional, description <= 100 chars
+# Body (optional): what & why, wrap at 72 cols

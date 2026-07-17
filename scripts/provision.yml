@@ -1,0 +1,49 @@
+---
+# System toolchain provisioning. Run: just provision
+# ansible.builtin.package auto-selects the host package manager; names are
+# chosen per OS family below. Add a family key to extend to other distros.
+- name: Provision development toolchain
+  hosts: localhost
+  connection: local
+  become: true
+  vars:
+    toolchain_packages:
+      Archlinux:
+        - git
+        - just
+        - pre-commit
+        - stylua
+        - lua-language-server
+        - luarocks
+        - shfmt
+        - shellcheck
+        - yamllint
+        - prettier
+      Debian:
+        - git
+        - just
+        - pre-commit
+        - stylua
+        - lua-language-server
+        - luarocks
+        - shfmt
+        - shellcheck
+        - yamllint
+        - prettier
+      RedHat:
+        - git
+        - just
+        - pre-commit
+        - stylua
+        - lua-language-server
+        - luarocks
+        - shfmt
+        - shellcheck
+        - yamllint
+        - prettier
+  tasks:
+    - name: Install toolchain packages
+      ansible.builtin.package:
+        name: "{{ toolchain_packages[ansible_facts['os_family']]
+          | default(toolchain_packages['Archlinux']) }}"
+        state: present
