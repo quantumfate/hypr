@@ -57,58 +57,29 @@ local function existing_titles(team, existing)
   return titles
 end
 
----Focus next/prev Dofus window in a team's turn order, wrapping around.
----Workspace is monocle, so we compute the target ourselves instead of move_window_focus.
----@param team string[] character names (turn order)
+---Focus next/prev Dofus window in turn order, wrapping around.
+---Delegates the whole name<->window<->focus join to the Quickshell UI, which
+---maintains it live (DofusWindows service); the compositor no longer queries
+---clients here. `team` is unused (the UI owns team order) but kept for the
+---shared call sites. Guarded so it only acts while a Dofus window is focused.
+---@param team string[] unused (UI-owned turn order); kept for call compat
 ---@param reversed boolean true = previous, false = next
 function M.iterate(team, reversed)
   if not on_dofus() then
     return
   end
-
-  local existing, current = dofus_windows()
-  if not current then
-    return
-  end
-
-  local titles = existing_titles(team, existing)
-  if #titles == 0 then
-    return
-  end
-
-  local idx
-  for i, title in ipairs(titles) do
-    if title == current.title then
-      idx = i
-      break
-    end
-  end
-  if not idx then
-    return
-  end
-
-  local n = #titles
-  local next_idx = reversed and ((idx - 2 + n) % n + 1) or (idx % n + 1)
-
-  hl.config({ animations = { enabled = false } })
-  hl.dispatch(hl.dsp.focus({ window = "title:" .. titles[next_idx] }))
-  hl.dispatch(hl.dsp.window.bring_to_top())
-  hl.config({ animations = { enabled = true } })
+  qs.call("dofusWindows", reversed and "prev" or "next")
 end
 
----Focus a single team member by index (1-based) and raise it.
----@param team string[]
----@param i integer
+---Focus a single team member by 1-based turn index and raise it. Delegates to
+---the UI join (0-based there); guarded to only act while on a Dofus window.
+---@param team string[] unused (UI-owned turn order); kept for call compat
+---@param i integer 1-based position in the team
 function M.activate(team, i)
   if not on_dofus() then
     return
   end
-  local name = team[i]
-  if not name then
-    return
-  end
-  hl.dispatch(hl.dsp.focus({ window = "title:" .. common.title_prefix .. name }))
-  hl.dispatch(hl.dsp.window.bring_to_top())
+  qs.call("dofusWindows", "activate", tostring(i - 1))
 end
 
 ---@param title string
