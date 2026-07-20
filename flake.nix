@@ -46,7 +46,7 @@
           # --- shell / launcher / session ---
           quickshell # the bar (autostarted: `uwsm app -- qs -c quantumfate`)
           uwsm # session-scoped app launches
-          rofi-wayland # menus
+          rofi # menus (rofi-wayland was merged into rofi in nixpkgs)
           kitty # terminal
           foot # terminal (alttab preview)
           # --- tools invoked from binds / lua / scripts ---
