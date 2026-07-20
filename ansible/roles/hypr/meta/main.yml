@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: hypr
+  namespace: quantumfate
+  author: quantumfate
+  description: Deploy the quantumfate Hyprland (Lua) config + its runtime deps.
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Archlinux
+      versions:
+        - all
+  galaxy_tags:
+    - hyprland
+    - wayland
+    - desktop
+    - dotfiles
+dependencies: []

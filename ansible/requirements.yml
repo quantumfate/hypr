@@ -1,0 +1,18 @@
+---
+# Collections this role needs (install with: ansible-galaxy collection install -r requirements.yml).
+collections:
+  - name: community.general   # pacman module
+
+# --- Consuming this from a controller ------------------------------------------
+# This repo's role lives at ansible/roles/hypr. To import it into another
+# controller/playbook, either add it as a git submodule and put ansible/roles on
+# your `roles_path`, or vendor it. Then in your playbook:
+#
+#   - hosts: workstation
+#     roles:
+#       - role: hypr
+#         vars:
+#           hypr_repo_path: /path/to/checkout
+#
+# Pairs with the sibling `quickshell` role (the bar); deploy both for the full
+# desktop. This mirrors how a Nix flake exposes a module for another to import.

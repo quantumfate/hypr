@@ -1,0 +1,15 @@
+---
+# Standalone entrypoint — deploy this Hyprland config to the local machine:
+#
+#   ansible-playbook ansible/playbook.yml --ask-become-pass
+#
+# From a separate controller, import instead of running directly (see README):
+#   - import_playbook: path/to/hypr/ansible/playbook.yml
+# or include just the role:
+#   roles: [{ role: hypr }]   # with ansible/roles on your roles_path
+- name: Deploy quantumfate Hyprland config
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  roles:
+    - role: hypr
