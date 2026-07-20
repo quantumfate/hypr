@@ -1,7 +1,9 @@
+-- NotifyWrapper — routes WM feedback (swap on/off, launch enable, layout hints)
+-- through the Quickshell notification daemon instead of Hyprland's internal
+-- overlay. These are all transient: shown once, never kept in history.
+-- Public API is unchanged (text, duration, level) so call sites need no edits.
 ---@class NotifyWrapper
 local M = {}
-
-local colors = require("hypr.themes.macchiato")
 
 ---@enum NotifyLevel
 M.level = {
@@ -10,21 +12,20 @@ M.level = {
   ERROR = "ERROR",
 }
 
-M.colors = {
-  [M.level.INFO] = colors.mauve,
-  [M.level.WARNING] = colors.peach,
-  [M.level.ERROR] = colors.red,
+-- WM levels → the shell's toast levels (it has no distinct "warning").
+local qs_level = {
+  INFO = "info",
+  WARNING = "info",
+  ERROR = "error",
 }
 
 ---@param text string
----@param duration integer
+---@param _duration integer unused — the daemon owns toast lifetime (kept for API compat)
 ---@param level NotifyLevel
-function M:notify(text, duration, level)
-  hl.notification.create({
-    text = text,
-    duration = duration,
-    color = self.colors[level],
-  })
+function M:notify(text, _duration, level)
+  local lvl = qs_level[level] or "info"
+  -- Transient `notify toast`: feedback-only, excluded from history.
+  hl.exec_cmd(("qs -c quantumfate ipc call notify toast %q %q"):format(text, lvl))
 end
 
 M.__index = M

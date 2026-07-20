@@ -277,5 +277,27 @@ submap.tree({
         qs.notify("Quickshell IPC", "help", "all")
       end,
     },
+    {
+      key = "m",
+      desc = "Toggle system monitor",
+      action = function()
+        qs.call("sysmon", "toggle")
+      end,
+    },
+    {
+      key = "b",
+      desc = "Toggle notifications",
+      action = function()
+        qs.call("notifications", "toggle")
+      end,
+    },
+    {
+      key = "d",
+      desc = "Toggle do-not-disturb",
+      stay = true,
+      action = function()
+        qs.call("notify", "dnd")
+      end,
+    },
   },
 })
