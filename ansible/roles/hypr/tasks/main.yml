@@ -1,0 +1,40 @@
+---
+- name: Install Hyprland runtime packages
+  become: true
+  community.general.pacman:
+    name: "{{ hypr_packages }}"
+    state: present
+  when: hypr_install_packages | bool
+
+- name: Install extra (AUR) packages
+  become: true
+  community.general.pacman:
+    name: "{{ hypr_extra_packages }}"
+    state: present
+  when: hypr_install_extra_packages | bool
+
+- name: Ensure the ~/.config directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_user_dir }}/.config"
+    state: directory
+    mode: "0755"
+
+# Deploy the config by symlinking it to the checkout — unless the checkout IS
+# the config dir already (editing in place), in which case there's nothing to do.
+- name: Symlink the config into place
+  ansible.builtin.file:
+    src: "{{ hypr_repo_path | realpath }}"
+    dest: "{{ hypr_config_dir }}"
+    state: link
+    force: true
+  when: (hypr_repo_path | realpath) != (hypr_config_dir | realpath)
+
+# Shared Dofus state (team.json) lives in XDG_STATE_HOME and is written by both
+# this config (hypr/lib/store.lua) and the quickshell UI. Seed the directory.
+- name: Ensure the XDG state directory exists
+  ansible.builtin.file:
+    path: >-
+      {{ (ansible_env.XDG_STATE_HOME | default(ansible_user_dir + '/.local/state'))
+         + '/dofus' }}
+    state: directory
+    mode: "0755"
