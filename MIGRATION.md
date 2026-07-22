@@ -14,26 +14,26 @@ dual-delivered (nix + ansible), validate-in-CI environment. See ARCHITECTURE.md.
 - [x] `ARCHITECTURE.md`, `session/README.md`.
 
 ## Phase 2 — ansible delivery (non-nix path)
-- [ ] Split package vars: `hypr_packages` (repo) vs `hypr_aur_packages`.
-- [ ] Correct AUR set: grim-hyprland-git, catppuccin-sddm-theme-*, qt6ct-kde,
-      greetd-dms-greeter-git (drop stale greetd-tuigreet-fork-bin).
-- [ ] AUR helper task (paru/yay) for `hypr_aur_packages`.
-- [ ] Deploy `session/**` files (uwsm env, user units, greeter fragment).
-- [ ] Enable user units (hypridle, hyprpaper, hyprsunset, hyprpolkitagent).
-- [ ] `hypr_gpu` var gating the NVIDIA env block.
-- [ ] galaxy `meta/main.yml` completeness (platforms, min_ansible_version).
+- [x] Split package vars: `hypr_packages` (repo) vs `hypr_aur_packages`.
+- [x] Correct AUR set: grim-hyprland-git, catppuccin-sddm-theme-*, qt6ct-kde,
+      greetd-dms-greeter-git (dropped stale greetd-tuigreet-fork-bin).
+- [x] AUR helper task (paru/yay) for `hypr_aur_packages`.
+- [x] Deploy `session/**` files (uwsm env, user units, greeter fragment).
+- [x] Enable user units (hypridle, hyprpaper, hyprsunset, hyprpolkitagent).
+- [x] `hypr_gpu` var gating the NVIDIA env block.
+- [ ] galaxy `meta/main.yml` completeness — verify before any publish.
 
 ## Phase 3 — nix delivery (nix path)
-- [ ] flake: add `nixosModules.hypr` + `homeModules.hypr`.
-- [ ] home module: deploy config dir + session files via home-manager.
-- [ ] nixos module: enable programs.hyprland, portals, packages, user units.
-- [ ] Keep devShell; `nix flake check` green.
+- [x] flake: `nixosModules.hypr` + `homeManagerModules.hypr`.
+- [x] home module: deploy config dir + session files via home-manager.
+- [x] nixos module: programs.hyprland, portals, ecosystem packages.
+- [ ] `nix flake check` green — unverified locally (no nix on host); CI gates.
 
 ## Phase 4 — CI (validate-only)
-- [ ] `flake check` job.
-- [ ] `ansible-lint` + `yamllint` job.
-- [ ] stylua --check, shellcheck, shfmt (already partly in pre-commit).
-- [ ] Matrix/caching; no publish step yet.
+- [x] `flake check` job.
+- [x] ansible syntax-check + ansible-lint (via `just check-all`).
+- [x] stylua --check, shellcheck, shfmt, yamllint (via `just check-all`).
+- [ ] Confirm green on first PR run; no publish step (deferred).
 
 ## Phase 5 — retire from chezmoi (LIVE SYSTEM — do last, with confirm)
 - [ ] Remove absorbed files from chezmoi source.

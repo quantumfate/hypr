@@ -4,8 +4,12 @@ on:
   push:
     branches: [main, master]
   pull_request:
+
+# Validate-only: format, lint, and evaluate both delivery paths (nix + ansible).
+# No publishing (Galaxy / cachix) until the structure stabilises.
 jobs:
-  check:
+  # Format + lua/shell/yaml lint + ansible syntax/lint, all inside the devShell.
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,4 +17,15 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
-      - run: nix develop --command just check
+      - run: nix develop --command just check-all
+
+  # Nix delivery path: evaluate the flake (modules + devShell) end to end.
+  flake-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - run: nix flake check

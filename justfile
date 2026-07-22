@@ -27,6 +27,18 @@ lint:
 # CI/pre-commit gate: formatting + tests (lint is advisory)
 check: fmt-check
 
+# Validate the ansible delivery path (syntax + lint), no changes applied
+check-ansible:
+	ansible-playbook ansible/playbook.yml --syntax-check
+	ansible-lint ansible/
+
+# Validate the nix delivery path (evaluates modules + devShell)
+check-nix:
+	nix flake check
+
+# Full validate-only gate used by CI across both delivery paths
+check-all: check lint check-ansible
+
 # Bootstrap the local dev environment (hooks, toolchain, PATH)
 setup:
 	./scripts/setup.sh
