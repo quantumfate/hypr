@@ -20,6 +20,10 @@ Add `-e hypr_install_aur_packages=true` to also install the AUR set
 (`grim-hyprland-git`, `qt6ct-kde`, `greetd-dms-greeter-git`,
 `catppuccin-sddm-theme-*`) via your AUR helper.
 
+Ride the rolling **git** channel (whole hypr\* ecosystem from AUR `-git`, built
+as one coupled group) with `-e hypr_channel=git`. See the compatibility model
+in [ARCHITECTURE.md](./ARCHITECTURE.md); update the group with `paru -Sua`.
+
 Nix host: import `nixosModules.hypr` (system) and `homeManagerModules.hypr`
 (home-manager) from this flake and set `programs.hyprEnvironment.enable = true`.
 

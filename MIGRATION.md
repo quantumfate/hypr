@@ -35,6 +35,15 @@ dual-delivered (nix + ansible), validate-in-CI environment. See ARCHITECTURE.md.
 - [x] stylua --check, shellcheck, shfmt, yamllint (via `just check-all`).
 - [ ] Confirm green on first PR run; no publish step (deferred).
 
+## Phase 4b — ecosystem release channel (stable | git)
+- [x] Scout soname coupling (libhyprutils universal) + AUR -git set.
+- [x] Ansible: `hypr_channel`, split core/git/tool package vars, paru group.
+- [x] Nix: Hyprland + daemon flake inputs, `follows`-unified libs, hyprGit
+      overlay, `channel` module option.
+- [x] Document compatibility model in ARCHITECTURE.md.
+- [ ] `nix flake lock` + `flake check` — unverified locally (no nix); CI gates.
+- [ ] LIVE swap to git (heavy compositor rebuild) — do only on confirm.
+
 ## Phase 5 — retire from chezmoi (LIVE SYSTEM — do last, with confirm)
 - [ ] Remove absorbed files from chezmoi source.
 - [ ] Fold hypr package entries out of chezmoi `packages.yaml`.

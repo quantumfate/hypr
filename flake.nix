@@ -4,38 +4,102 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    # === git channel: the coupled hypr* ecosystem, locked as one set ===
+    # The Hyprland flake locks its libs (aquamarine, hyprutils, hyprlang,
+    # hyprgraphics, hyprcursor, hyprwayland-scanner) via its own flake.lock.
+    # Each daemon flake below unifies those shared libs onto THIS hyprland via
+    # `follows`, so the whole ecosystem shares one hyprutils/hyprlang/… → one
+    # soname → compatible. flake.lock pins the commit set (reproducible rolling;
+    # `nix flake update` bumps them together). See ARCHITECTURE.md.
+    hyprland.url = "github:hyprwm/Hyprland";
+
+    hypridle.url = "github:hyprwm/hypridle";
+    hypridle.inputs.nixpkgs.follows = "nixpkgs";
+    hypridle.inputs.hyprlang.follows = "hyprland/hyprlang";
+    hypridle.inputs.hyprutils.follows = "hyprland/hyprutils";
+
+    hyprlock.url = "github:hyprwm/hyprlock";
+    hyprlock.inputs.nixpkgs.follows = "nixpkgs";
+    hyprlock.inputs.hyprlang.follows = "hyprland/hyprlang";
+    hyprlock.inputs.hyprutils.follows = "hyprland/hyprutils";
+    hyprlock.inputs.hyprgraphics.follows = "hyprland/hyprgraphics";
+
+    hyprpaper.url = "github:hyprwm/hyprpaper";
+    hyprpaper.inputs.nixpkgs.follows = "nixpkgs";
+    hyprpaper.inputs.hyprlang.follows = "hyprland/hyprlang";
+    hyprpaper.inputs.hyprutils.follows = "hyprland/hyprutils";
+    hyprpaper.inputs.hyprgraphics.follows = "hyprland/hyprgraphics";
+
+    hyprsunset.url = "github:hyprwm/hyprsunset";
+    hyprsunset.inputs.nixpkgs.follows = "nixpkgs";
+    hyprsunset.inputs.hyprlang.follows = "hyprland/hyprlang";
+    hyprsunset.inputs.hyprutils.follows = "hyprland/hyprutils";
+
+    hyprpicker.url = "github:hyprwm/hyprpicker";
+    hyprpicker.inputs.nixpkgs.follows = "nixpkgs";
+    hyprpicker.inputs.hyprutils.follows = "hyprland/hyprutils";
+
+    xdph.url = "github:hyprwm/xdg-desktop-portal-hyprland";
+    xdph.inputs.nixpkgs.follows = "nixpkgs";
+    xdph.inputs.hyprland-protocols.follows = "hyprland/hyprland-protocols";
+    xdph.inputs.hyprlang.follows = "hyprland/hyprlang";
+    xdph.inputs.hyprutils.follows = "hyprland/hyprutils";
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs =
+    { self, nixpkgs, flake-utils
+    , hyprland, hypridle, hyprlock, hyprpaper, hyprsunset, hyprpicker, xdph
+    }:
     let
-      # === Ecosystem package set, shared by the nixos module and the devShell ===
-      # Mirrors ansible/roles/hypr defaults. Package names track the binaries
-      # scanned from hypr/**.lua, *.conf and scripts/*.sh.
+      # Ecosystem package set (stable channel), shared by module + devShell.
+      # Mirrors ansible hypr_core_packages + hypr_tool_packages.
       runtimeDeps = pkgs: with pkgs; [
-        # compositor + hypr* ecosystem (own .conf files in this repo)
-        hyprland hypridle hyprlock hyprpaper hyprsunset hyprpicker hyprshot
+        hyprland hypridle hyprlock hyprpaper hyprsunset hyprpicker
         hyprpolkitagent hyprcursor
         xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
-        # shell / launcher / session
         quickshell uwsm rofi kitty foot
-        # tools invoked from binds / lua / scripts
         xdotool brightnessctl gamemode satty grim jq libnotify procps
         xorg.setxkbmap inetutils
-        # Not declared (host/proprietary): ankama-launcher, nvidia driver,
-        # hyprqt6engine — install per-host.
       ];
+
+      # git channel: swap the coupled hypr* packages for the flake builds (all
+      # sharing one hyprutils/hyprlang via follows). Same package NAMES, git
+      # implementations — mirrors ansible hypr_channel=git.
+      hyprGitOverlay = final: prev: {
+        hyprland = hyprland.packages.${prev.system}.hyprland;
+        hypridle = hypridle.packages.${prev.system}.hypridle;
+        hyprlock = hyprlock.packages.${prev.system}.hyprlock;
+        hyprpaper = hyprpaper.packages.${prev.system}.hyprpaper;
+        hyprsunset = hyprsunset.packages.${prev.system}.hyprsunset;
+        hyprpicker = hyprpicker.packages.${prev.system}.hyprpicker;
+        xdg-desktop-portal-hyprland = xdph.packages.${prev.system}.xdg-desktop-portal-hyprland;
+      };
     in
-    # System-agnostic outputs: modules other flakes/NixOS/home-manager import.
     {
-      # NixOS module — system scope: enable Hyprland, portals, ecosystem pkgs.
+      overlays.hyprGit = hyprGitOverlay;
+
+      # NixOS module — system scope: Hyprland, portals, ecosystem packages, and
+      # the release channel (stable = nixpkgs, git = the pinned flake set).
       nixosModules.hypr = { config, lib, pkgs, ... }:
         let cfg = config.programs.hyprEnvironment;
         in {
-          options.programs.hyprEnvironment.enable =
-            lib.mkEnableOption "the quantumfate Hyprland environment (system scope)";
+          options.programs.hyprEnvironment = {
+            enable = lib.mkEnableOption "the quantumfate Hyprland environment (system scope)";
+            channel = lib.mkOption {
+              type = lib.types.enum [ "stable" "git" ];
+              default = "stable";
+              description = "stable = nixpkgs; git = the coupled hypr* flake set (soname-unified via follows).";
+            };
+          };
 
           config = lib.mkIf cfg.enable {
-            programs.hyprland.enable = true;               # compositor + session
+            # git channel swaps the whole coupled set at once via the overlay.
+            nixpkgs.overlays = lib.mkIf (cfg.channel == "git") [ hyprGitOverlay ];
+            programs.hyprland = {
+              enable = true;
+              package = pkgs.hyprland;   # follows the overlay on the git channel
+            };
             xdg.portal = {
               enable = true;
               extraPortals = [ pkgs.xdg-desktop-portal-gtk ];

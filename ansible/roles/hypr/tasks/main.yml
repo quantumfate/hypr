@@ -1,10 +1,33 @@
 ---
-- name: Install Hyprland runtime packages
+# Channel-independent tools (always from official repos).
+- name: Install Hyprland tool packages
   become: true
   community.general.pacman:
-    name: "{{ hypr_packages }}"
+    name: "{{ hypr_tool_packages }}"
     state: present
   when: hypr_install_packages | bool
+
+# Coupled ecosystem — STABLE channel: official repos.
+- name: Install hypr* ecosystem (stable channel)
+  become: true
+  community.general.pacman:
+    name: "{{ hypr_core_packages }}"
+    state: present
+  when:
+    - hypr_install_packages | bool
+    - hypr_channel == 'stable'
+
+# Coupled ecosystem — GIT channel: the -git group in one paru transaction so
+# they build against each other's HEAD. hyprland-git pulls the -git libs as
+# deps; --needed skips already-current builds. Not run as root (paru refuses).
+- name: Install hypr* ecosystem (git channel, AUR)
+  ansible.builtin.command:
+    cmd: "{{ hypr_aur_helper }} -S --needed --noconfirm {{ hypr_git_packages | join(' ') }}"
+  register: hypr_git_result
+  changed_when: "'there is nothing to do' not in hypr_git_result.stdout | lower"
+  when:
+    - hypr_install_packages | bool
+    - hypr_channel == 'git'
 
 # AUR packages via the configured helper (paru/yay). community.general.pacman
 # can't build AUR, so shell out to the helper as the login user (not root).

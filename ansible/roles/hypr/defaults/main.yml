@@ -9,24 +9,56 @@ hypr_config_dir: "{{ ansible_facts.user_dir }}/.config/hypr"
 
 # Runtime packages (Arch). Set false to manage them yourself.
 hypr_install_packages: true
-hypr_packages:
-  # --- compositor + hypr* ecosystem (each has its own .conf in this repo) ---
+
+# === Release channel for the coupled hypr* ecosystem ===
+# stable = official repos (default). git = AUR -git group, built atomically.
+#
+# WHY A CHANNEL: the hypr* ecosystem is soname-coupled — every daemon links
+# libhyprutils.so (and most link libhyprlang/graphics/aquamarine/wire). A lib
+# soname bump forces every consumer to be rebuilt against it. So the ecosystem
+# moves as ONE unit; you cannot mix a git compositor with stable daemons.
+# `hyprland-git` already *declares* the -git libs as dependencies, so paru pulls
+# the whole lib chain; we only add the daemons. See ARCHITECTURE.md.
+hypr_channel: stable                 # stable | git
+
+# Coupled ecosystem, STABLE channel (official repos). Installed when
+# hypr_channel == stable. hyprpolkitagent is Qt-only (soname-decoupled) but
+# grouped here for a coherent stable set.
+hypr_core_packages:
   - hyprland                    # the compositor
   - hypridle                    # hypridle.conf (idle → lock/dpms)
   - hyprlock                    # hyprlock.conf / hyprlock-laptop.conf
   - hyprpaper                   # hyprpaper.conf (wallpaper)
   - hyprsunset                  # hyprsunset.conf (night light)
   - hyprpicker                  # color-pick bind
-  - hyprshot                    # screenshot binds
   - hyprpolkitagent             # polkit agent (session user unit)
   - xdg-desktop-portal-hyprland # portal backend
+
+# Coupled ecosystem, GIT channel (AUR, built as one paru transaction when
+# hypr_channel == git). The -git libs (hyprutils/hyprlang/hyprgraphics/
+# aquamarine/hyprcursor/hyprwire/hyprwayland-scanner/hyprland-protocols/
+# hyprland-guiutils) arrive automatically as hyprland-git dependencies — only
+# the daemons are listed, since they link the libs but aren't pulled by it.
+hypr_git_packages:
+  - hyprland-git
+  - hyprland-qt-support-git
+  - hyprlock-git
+  - hypridle-git
+  - hyprpaper-git
+  - hyprsunset-git
+  - hyprpicker-git
+  - xdg-desktop-portal-hyprland-git
+  # hyprpolkitagent stays stable (Qt-only, decoupled); add -git if desired.
+
+# Channel-independent tools (not soname-coupled to the compositor). Always
+# installed from official repos.
+hypr_tool_packages:
+  - hyprshot                    # screenshot binds
   - xdg-desktop-portal-gtk      # portal (file pickers / settings)
-  # --- shell / launcher / session ---
   - uwsm                        # session-scoped app launches (autostart qs)
-  - rofi-wayland                # menus
+  - rofi-wayland               # menus
   - kitty                       # terminal
   - foot                        # terminal (alttab preview)
-  # --- tools invoked from binds / lua / scripts ---
   - xdotool                     # window poke / click-repeat helpers
   - brightnessctl               # brightness binds
   - gamemode                    # gamemoderun (Dofus launch)
