@@ -17,20 +17,32 @@
     - hypr_install_packages | bool
     - hypr_channel == 'stable'
 
+# In-place swap: remove the stable coupled set first so the -git build has no
+# conflicts to confirm (ansible has no TTY; --noconfirm can't remove conflicts).
+# -Rdd skips dep checks and keeps reverse-dep files; only installed packages are
+# passed, so this is a no-op on a fresh host. Opt-in (hypr_channel_replace_stable).
+- name: Remove stable hypr* before git swap (opt-in)
+  become: true
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      installed=$(pacman -Qq {{ hypr_stable_conflicts | join(' ') }} 2>/dev/null | tr '\n' ' ');
+      if [ -n "$installed" ]; then pacman -Rdd --noconfirm $installed; else echo "nothing to remove"; fi
+    executable: /bin/bash
+  register: hypr_stable_removed
+  changed_when: "'nothing to remove' not in hypr_stable_removed.stdout"
+  when:
+    - hypr_install_packages | bool
+    - hypr_channel == 'git'
+    - hypr_channel_replace_stable | bool
+
 # Coupled ecosystem — GIT channel: the -git group in one paru transaction so
 # they build against each other's HEAD. hyprland-git pulls the -git libs as
 # deps; --needed skips already-current builds. Not run as root (paru refuses).
-#
-# The -git packages conflict/provide their stable counterparts, so switching
-# channels REPLACES the stable stack. --noconfirm refuses conflict removal on
-# its own, so --ask=4 (pacman CONFLICT_PKG bit) auto-answers exactly that
-# expected stable→git replacement. Override hypr_aur_ask to 0 to force a manual
-# confirm (needs a TTY — run the command by hand, not via ansible).
+# Conflict-free here: either a fresh host, or the stable set was just removed.
 - name: Install hypr* ecosystem (git channel, AUR)
   ansible.builtin.command:
-    cmd: >-
-      {{ hypr_aur_helper }} -S --needed --noconfirm --ask={{ hypr_aur_ask }}
-      {{ hypr_git_packages | join(' ') }}
+    cmd: "{{ hypr_aur_helper }} -S --needed --noconfirm {{ hypr_git_packages | join(' ') }}"
   register: hypr_git_result
   changed_when: "'there is nothing to do' not in hypr_git_result.stdout | lower"
   when:

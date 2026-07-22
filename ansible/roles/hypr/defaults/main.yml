@@ -21,10 +21,35 @@ hypr_install_packages: true
 # the whole lib chain; we only add the daemons. See ARCHITECTURE.md.
 hypr_channel: stable                 # stable | git
 
-# pacman --ask bitmask for the git-channel swap. 4 = CONFLICT_PKG: auto-confirm
-# replacing the stable hypr* packages with their -git counterparts (the expected
-# conflict). Set 0 to disable (then run the paru command by hand, with a TTY).
-hypr_aur_ask: 4
+# In-place stable→git swap (automated path). The -git packages conflict with the
+# installed stable ones, and modern pacman refuses conflict removal under
+# --noconfirm (no TTY in ansible). When true, remove the stable coupled set first
+# (-Rdd keeps reverse-dep files; we reinstall as -git next), so the build runs
+# conflict-free. DANGER: a failed AUR build then leaves the host without a
+# compositor. Fresh installs (no stable present) skip removal and don't need this.
+# Prefer the interactive `just channel-git` on a machine you're logged into.
+hypr_channel_replace_stable: false
+
+# Installed stable packages the -git set replaces (the conflict list from paru).
+# Removed first when hypr_channel_replace_stable is true.
+hypr_stable_conflicts:
+  - hyprland
+  - hyprland-qt-support
+  - hyprland-guiutils
+  - hyprlock
+  - hypridle
+  - hyprpaper
+  - hyprsunset
+  - hyprpicker
+  - xdg-desktop-portal-hyprland
+  - aquamarine
+  - hyprcursor
+  - hyprgraphics
+  - hyprlang
+  - hyprutils
+  - hyprwayland-scanner
+  - hyprwire
+  - hyprtoolkit
 
 # Coupled ecosystem, STABLE channel (official repos). Installed when
 # hypr_channel == stable. hyprpolkitagent is Qt-only (soname-decoupled) but

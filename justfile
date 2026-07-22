@@ -50,3 +50,14 @@ provision:
 # Enter the reproducible nix dev shell
 dev:
 	nix develop
+
+# Swap the hypr* ecosystem to the rolling git channel (interactive: confirm the
+# stable→git replacements + review PKGBUILDs as the compositor rebuilds).
+channel-git:
+	paru -S --needed hyprland-git hyprland-qt-support-git hyprlock-git \
+		hypridle-git hyprpaper-git hyprsunset-git hyprpicker-git \
+		xdg-desktop-portal-hyprland-git
+
+# Update the git-channel ecosystem (rebuild all -git packages together)
+channel-update:
+	paru -Sua
