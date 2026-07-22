@@ -47,7 +47,7 @@ hl.config({
     float_gaps = -1,
     layout = "master",
     allow_tearing = false,
-    resize_on_border = false,
+    resize_on_border = true,
     no_focus_fallback = true,
 
     snap = {
