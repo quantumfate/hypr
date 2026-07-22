@@ -71,15 +71,30 @@ function M.iterate(team, reversed)
   qs.call("dofusWindows", reversed and "prev" or "next")
 end
 
----Focus a single team member by 1-based turn index and raise it. Delegates to
----the UI join (0-based there); guarded to only act while on a Dofus window.
+---Overload for MOD+H / MOD+L: while on a Dofus window, walk the team left/right,
+---spilling into stray Dofus windows (focus-recency order) at the ends. Returns
+---true when it handled the key, so the caller can fall back to normal focus-move.
+---@param reversed boolean true = left/prev, false = right/next
+---@return boolean handled
+function M.nav(reversed)
+  if not on_dofus() then
+    return false
+  end
+  qs.call("dofusWindows", reversed and "prevAll" or "nextAll")
+  return true
+end
+
+---Focus the 1-based Nth PRESENT (alive) team member and raise it. Mapping is
+---dense over open windows only: with 2 windows open, F1/F2 hit them regardless
+---of their raw team position. Delegates to the UI join (0-based there); guarded
+---to only act while on a Dofus window.
 ---@param team string[] unused (UI-owned turn order); kept for call compat
----@param i integer 1-based position in the team
+---@param i integer 1-based position among present windows
 function M.activate(team, i)
   if not on_dofus() then
     return
   end
-  qs.call("dofusWindows", "activate", tostring(i - 1))
+  qs.call("dofusWindows", "activatePresent", tostring(i - 1))
 end
 
 ---@param title string

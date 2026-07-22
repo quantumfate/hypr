@@ -11,12 +11,17 @@ local function base()
   return "qs -c " .. M.config .. " ipc call "
 end
 
----Call an IPC function (fire-and-forget).
+---Call an IPC function (fire-and-forget). Extra args are appended, each shell-
+---quoted so names with spaces survive.
 ---@param target string
 ---@param fn string
----@param arg string? optional single argument
-function M.call(target, fn, arg)
-  hl.exec_cmd(base() .. target .. " " .. fn .. (arg and (" " .. arg) or ""))
+---@param ... string? optional positional arguments
+function M.call(target, fn, ...)
+  local cmd = base() .. target .. " " .. fn
+  for _, arg in ipairs({ ... }) do
+    cmd = cmd .. " " .. ("%q"):format(arg)
+  end
+  hl.exec_cmd(cmd)
 end
 
 ---Call an IPC query and show its stdout as a desktop notification.

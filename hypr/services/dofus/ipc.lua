@@ -24,4 +24,31 @@ function M.reload()
   qs.call("dofus", "reload")
 end
 
+---Push a character's class into the running UI (instant). The durable write is
+---common.set_class; this just pushes without waiting for the file watch. Pass
+---cls = "" to clear.
+---@param name string character name
+---@param cls string class key ("" clears)
+function M.set_class(name, cls)
+  qs.call("dofus", "setClass", name, cls or "")
+end
+
+---Notify the class key currently set for a character.
+---@param name string character name
+function M.class_of(name)
+  qs.notify("Dofus class", "dofus", "classOf " .. ("%q"):format(name))
+end
+
+---Open/close the team selector widget. cmd = "show" | "hide" | "toggle".
+---@param cmd string
+function M.team_selector(cmd)
+  qs.call("teamSelector", cmd)
+end
+
+---Open/close the class assigner widget. cmd = "show" | "hide" | "toggle".
+---@param cmd string
+function M.class_assigner(cmd)
+  qs.call("classAssigner", cmd)
+end
+
 return M

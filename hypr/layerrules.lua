@@ -44,6 +44,15 @@ hl.layer_rule({
   ignore_alpha = 0.6,
 })
 
+-- Team selector: small top-right panel, no dim backdrop. Frost the card,
+-- slide in from the right edge.
+hl.layer_rule({
+  match = { namespace = "quickshell-team-selector" },
+  animation = "slidefade 20%",
+  blur = true,
+  ignore_alpha = 0.1,
+})
+
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })

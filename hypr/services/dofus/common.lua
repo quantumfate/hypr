@@ -2,6 +2,7 @@
 ---@field default_team string
 ---@field selected string currently selected team key (from team.json)
 ---@field characters table<string, string[]> team key -> ordered names
+---@field classes table<string, string> character name -> class key
 ---@field title_prefix string
 ---
 --- Single source of truth for the Dofus team is a shared JSON store, also read
@@ -39,6 +40,34 @@ function M.select(name)
   store:set({ selected = name })
 end
 
+---Class key for a character, or nil when unset. `classes` is a side map keyed
+---by character name (mirrors DofusState.classes in the Quickshell UI).
+---@param name string character name
+---@return string?
+function M.class_of(name)
+  return store:get("classes", name)
+end
+
+---Set (cls given) or clear (cls nil/"") a character's class, persisting to the
+---store — the durable truth the UI reacts to. Uses update() to merge the nested
+---classes map rather than clobber it.
+---@param name string character name
+---@param cls string? class key ("" / nil clears)
+function M.set_class(name, cls)
+  if not name or name == "" then
+    return
+  end
+  store:update(function(t)
+    t.classes = t.classes or {}
+    if cls and cls ~= "" then
+      t.classes[name] = cls
+    else
+      t.classes[name] = nil
+    end
+    return t
+  end)
+end
+
 -- Field access (M.selected / M.title_prefix / M.characters) reads live from the
 -- store; the functions above take priority over this fallback.
 setmetatable(M, {
@@ -49,6 +78,10 @@ setmetatable(M, {
       return store:get("title_prefix") or "Dofus "
     elseif k == "characters" then
       return store:get("teams") or {}
+    elseif k == "pool" then
+      return store:get("pool") or {}
+    elseif k == "classes" then
+      return store:get("classes") or {}
     end
     return nil
   end,

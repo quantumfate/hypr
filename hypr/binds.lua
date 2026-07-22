@@ -84,8 +84,25 @@ bind.focus_workspace("TAB", "e+1", { config.secondary_mod })
 
 bind.bind_workspaces()
 
-bind.layout_action({ config.main_mod, "h" }, "focus_left", "Move window focus to the left")
-bind.layout_action({ config.main_mod, "l" }, "focus_right", "Move window focus to the right")
+-- MOD+H/L move window focus, but on a Dofus window they walk the team instead
+-- (spilling into stray Dofus windows at the ends — see dofus.team.nav).
+local dofus_team = require("hypr.services.dofus.team")
+local function focus_or_dofus(action, reversed)
+  return function()
+    if dofus_team.nav(reversed) then
+      return
+    end
+    require("hypr.lib.layout").dispatch(action)
+  end
+end
+hl.bind(bind.parse_mods({ config.main_mod, "h" }), focus_or_dofus("focus_left", true), {
+  description = "Move focus left (Dofus: prev character)",
+  submap_universal = true,
+})
+hl.bind(bind.parse_mods({ config.main_mod, "l" }), focus_or_dofus("focus_right", false), {
+  description = "Move focus right (Dofus: next character)",
+  submap_universal = true,
+})
 bind.layout_action({ config.main_mod, "j" }, "focus_up", "Move window focus up")
 bind.layout_action({ config.main_mod, "k" }, "focus_down", "Move window focus down")
 
