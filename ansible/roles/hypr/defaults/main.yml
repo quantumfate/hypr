@@ -5,7 +5,7 @@ hypr_repo_path: "{{ playbook_dir }}/.."
 
 # Where the live config lives. The role symlinks it to hypr_repo_path unless they
 # already resolve to the same path (i.e. you edit the config in place).
-hypr_config_dir: "{{ ansible_user_dir }}/.config/hypr"
+hypr_config_dir: "{{ ansible_facts.user_dir }}/.config/hypr"
 
 # Runtime packages (Arch). Set false to manage them yourself.
 hypr_install_packages: true

@@ -19,7 +19,7 @@
 
 - name: Ensure the ~/.config directory exists
   ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.config"
+    path: "{{ ansible_facts.user_dir }}/.config"
     state: directory
     mode: "0755"
 
@@ -38,7 +38,7 @@
 - name: Ensure the XDG state directory exists
   ansible.builtin.file:
     path: >-
-      {{ (ansible_env.XDG_STATE_HOME | default(ansible_user_dir + '/.local/state'))
+      {{ (ansible_facts.env.XDG_STATE_HOME | default(ansible_facts.user_dir + '/.local/state'))
          + '/dofus' }}
     state: directory
     mode: "0755"
@@ -51,7 +51,7 @@
   block:
     - name: Ensure uwsm config dir exists
       ansible.builtin.file:
-        path: "{{ ansible_user_dir }}/.config/uwsm"
+        path: "{{ ansible_facts.user_dir }}/.config/uwsm"
         state: directory
         mode: "0755"
 
@@ -59,7 +59,7 @@
     # the file is portable (see session/uwsm/env-hyprland).
     - name: Deploy uwsm env-hyprland (GPU block gated by hypr_gpu)
       ansible.builtin.copy:
-        dest: "{{ ansible_user_dir }}/.config/uwsm/env-hyprland"
+        dest: "{{ ansible_facts.user_dir }}/.config/uwsm/env-hyprland"
         mode: "0644"
         content: |
           {% for line in lookup('file', hypr_repo_path ~ '/session/uwsm/env-hyprland').splitlines() %}
@@ -68,14 +68,14 @@
 
     - name: Ensure systemd user dir exists
       ansible.builtin.file:
-        path: "{{ ansible_user_dir }}/.config/systemd/user"
+        path: "{{ ansible_facts.user_dir }}/.config/systemd/user"
         state: directory
         mode: "0755"
 
     - name: Deploy custom hypr* user units
       ansible.builtin.copy:
         src: "{{ hypr_repo_path }}/session/systemd/{{ item }}"
-        dest: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+        dest: "{{ ansible_facts.user_dir }}/.config/systemd/user/{{ item }}"
         mode: "0644"
       loop: "{{ hypr_custom_units }}"
 
@@ -91,7 +91,7 @@
 - name: Deploy DMS greeter Hyprland fragment
   ansible.builtin.copy:
     src: "{{ hypr_repo_path }}/session/greeter/dms-hypr.conf"
-    dest: "{{ ansible_user_dir }}/.config/{{ hypr_greeter_config_subdir }}/dms-hypr.conf"
+    dest: "{{ ansible_facts.user_dir }}/.config/{{ hypr_greeter_config_subdir }}/dms-hypr.conf"
     mode: "0644"
   when:
     - hypr_deploy_session | bool
