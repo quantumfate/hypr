@@ -5,32 +5,101 @@ hypr_repo_path: "{{ playbook_dir }}/.."
 
 # Where the live config lives. The role symlinks it to hypr_repo_path unless they
 # already resolve to the same path (i.e. you edit the config in place).
-hypr_config_dir: "{{ ansible_user_dir }}/.config/hypr"
+hypr_config_dir: "{{ ansible_facts.user_dir }}/.config/hypr"
 
 # Runtime packages (Arch). Set false to manage them yourself.
 hypr_install_packages: true
-hypr_packages:
-  # --- compositor + hypr* ecosystem (each has its own .conf in this repo) ---
+
+# === Release channel for the coupled hypr* ecosystem ===
+# stable = official repos (default). git = AUR -git group, built atomically.
+#
+# WHY A CHANNEL: the hypr* ecosystem is soname-coupled — every daemon links
+# libhyprutils.so (and most link libhyprlang/graphics/aquamarine/wire). A lib
+# soname bump forces every consumer to be rebuilt against it. So the ecosystem
+# moves as ONE unit; you cannot mix a git compositor with stable daemons.
+# `hyprland-git` already *declares* the -git libs as dependencies, so paru pulls
+# the whole lib chain; we only add the daemons. See ARCHITECTURE.md.
+hypr_channel: stable                 # stable | git
+
+# In-place stable→git swap (automated path). The -git packages conflict with the
+# installed stable ones, and modern pacman refuses conflict removal under
+# --noconfirm (no TTY in ansible). When true, remove the stable coupled set first
+# (-Rdd keeps reverse-dep files; we reinstall as -git next), so the build runs
+# conflict-free. DANGER: a failed AUR build then leaves the host without a
+# compositor. Fresh installs (no stable present) skip removal and don't need this.
+# Prefer the interactive `just channel-git` on a machine you're logged into.
+hypr_channel_replace_stable: false
+
+# Source-signature keys the -git PKGBUILDs verify, pre-imported from a reliable
+# keyserver so non-interactive builds don't stall on the flaky default one.
+# Extend as the git dep set grows (a build error names the missing key).
+hypr_git_keyserver: keyserver.ubuntu.com
+hypr_git_gpg_keys:
+  - A5DD905196EF3973280DA13CB965BC5D279F42ED  # udis86-git (hyprland-git makedep)
+
+# Installed stable packages the -git set replaces (the conflict list from paru).
+# Removed first when hypr_channel_replace_stable is true.
+hypr_stable_conflicts:
+  - hyprland
+  - hyprland-qt-support
+  - hyprland-guiutils
+  - hyprlock
+  - hypridle
+  - hyprpaper
+  - hyprsunset
+  - hyprpicker
+  - xdg-desktop-portal-hyprland
+  - aquamarine
+  - hyprcursor
+  - hyprgraphics
+  - hyprlang
+  - hyprutils
+  - hyprwayland-scanner
+  - hyprwire
+  - hyprtoolkit
+
+# Coupled ecosystem, STABLE channel (official repos). Installed when
+# hypr_channel == stable. hyprpolkitagent is Qt-only (soname-decoupled) but
+# grouped here for a coherent stable set.
+hypr_core_packages:
   - hyprland                    # the compositor
   - hypridle                    # hypridle.conf (idle → lock/dpms)
   - hyprlock                    # hyprlock.conf / hyprlock-laptop.conf
   - hyprpaper                   # hyprpaper.conf (wallpaper)
   - hyprsunset                  # hyprsunset.conf (night light)
   - hyprpicker                  # color-pick bind
-  - hyprshot                    # screenshot binds
+  - hyprpolkitagent             # polkit agent (session user unit)
   - xdg-desktop-portal-hyprland # portal backend
+
+# Coupled ecosystem, GIT channel (AUR, built as one paru transaction when
+# hypr_channel == git). The -git libs (hyprutils/hyprlang/hyprgraphics/
+# aquamarine/hyprcursor/hyprwire/hyprwayland-scanner/hyprland-protocols/
+# hyprland-guiutils) arrive automatically as hyprland-git dependencies — only
+# the daemons are listed, since they link the libs but aren't pulled by it.
+hypr_git_packages:
+  - hyprland-git
+  - hyprland-qt-support-git
+  - hyprlock-git
+  - hypridle-git
+  - hyprpaper-git
+  - hyprsunset-git
+  - hyprpicker-git
+  - xdg-desktop-portal-hyprland-git
+  # hyprpolkitagent stays stable (Qt-only, decoupled); add -git if desired.
+
+# Channel-independent tools (not soname-coupled to the compositor). Always
+# installed from official repos.
+hypr_tool_packages:
+  - hyprshot                    # screenshot binds
   - xdg-desktop-portal-gtk      # portal (file pickers / settings)
-  # --- shell / launcher / session ---
   - uwsm                        # session-scoped app launches (autostart qs)
-  - rofi-wayland                # menus
+  - rofi-wayland               # menus
   - kitty                       # terminal
   - foot                        # terminal (alttab preview)
-  # --- tools invoked from binds / lua / scripts ---
   - xdotool                     # window poke / click-repeat helpers
   - brightnessctl               # brightness binds
   - gamemode                    # gamemoderun (Dofus launch)
   - satty                       # screenshot annotate
-  - grim                        # screenshot capture
   - jq                          # JSON parsing in lua/scripts
   - libnotify                   # notify-send (fallback path)
   - procps-ng                   # pgrep / pkill
@@ -39,10 +108,38 @@ hypr_packages:
   # The bar itself (`qs -c quantumfate`) is deployed by the sibling quickshell
   # repo's role; its package is pulled in there. Listed as a reminder, not here.
 
-# AUR / proprietary bits the config touches but can't be installed from the
-# official repos — install these yourself (paru/yay). Enable to have the role
-# attempt them via community.general.pacman with an AUR helper you configure.
-hypr_install_extra_packages: false
-hypr_extra_packages:
-  - hyprqt6engine    # hyprqt6engine.conf (Qt theming) — AUR
+# AUR packages the ecosystem actually uses on this host. Installed via an AUR
+# helper (see hypr_aur_helper) when hypr_install_aur_packages is true. Classified
+# by querying the live system (pacman -Qm) — not guesswork.
+hypr_install_aur_packages: false
+hypr_aur_helper: paru               # paru | yay
+hypr_aur_packages:
+  - grim-hyprland-git               # screenshot capture (hypr fork; replaces grim)
+  - qt6ct-kde                       # Qt6 theming control
+  - greetd-dms-greeter-git          # DMS greeter (deploys session/greeter/dms-hypr.conf)
+  - catppuccin-sddm-theme-macchiato # login theme
+  - catppuccin-sddm-theme-latte     # login theme (light)
+  # hyprqt6engine — hyprqt6engine.conf (Qt theming); add if present on host.
   # ankama-launcher (Dofus) is proprietary; install manually.
+  # NOTE: dropped stale `greetd-tuigreet-fork-bin` (not installed; DMS is used).
+
+# --- session glue (session/**) -------------------------------------------------
+# Deploy the uwsm env, hypr* systemd user units, and greeter fragment, then
+# enable the units. Mirrors the nix home-module.
+hypr_deploy_session: true
+
+# GPU profile: "nvidia" keeps the NVIDIA env block in uwsm/env-hyprland; any
+# other value comments it out (portable to Intel/AMD hosts).
+hypr_gpu: nvidia
+
+# DMS greeter config subdir under ~/.config (matches the path chezmoi used).
+hypr_greeter_config_subdir: dms-greeter-chezmoi
+
+# Packaged user units to enable (own their unit files; we only enable them).
+hypr_enable_units:
+  - hyprsunset.service
+  - hyprpolkitagent.service
+# Custom units shipped in session/systemd (deployed then enabled).
+hypr_custom_units:
+  - hypridle.service
+  - hyprpaper.service

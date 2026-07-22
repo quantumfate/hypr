@@ -1,0 +1,20 @@
+# uwsm environment for the Hyprland session. Sourced by uwsm at session start.
+# Deployed to ~/.config/uwsm/env-hyprland by both delivery paths.
+#
+# Split: the XDG/session block is portable; the GPU block below is host-specific
+# (NVIDIA). On non-NVIDIA hosts the GPU block is a no-op-to-harmful — both
+# delivery paths gate it behind a host flag (hypr_gpu == "nvidia").
+
+# --- portable session identity ---
+export XDG_CURRENT_DESKTOP=Hyprland
+export XDG_SESSION_DESKTOP=Hyprland
+export XDG_PICTURES_DIR=$HOME/Pictures
+export XDG_SCREENSHOTS_DIR=$HOME/Pictures/screens
+export HYPRSHOT_DIR=$HOME/Pictures/screens
+export GSK_RENDERER=gl
+
+# --- host GPU (NVIDIA) — gated by delivery path on non-NVIDIA machines ---
+export GBM_BACKEND=nvidia-drm
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export LIBVA_DRIVER_NAME=nvidia
+export NVD_BACKEND=direct
