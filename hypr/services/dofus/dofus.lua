@@ -70,10 +70,16 @@ end, { desc = "Dofus: next team member" })
 dofus_bind(config.main_mod .. " + F23", function()
   team.iterate(common.team(), true)
 end, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod })
--- Plain click bind (not mouse=true → that is bindm/drag, which passes through).
-dofus_bind("mouse:274", function()
-  team.press(common.team())
-end, { desc = "Dofus: press current member (middle click)" })
+
+-- Middle click, i.e. pressing the mouse wheel in (mouse:274 — the button, not
+-- the mouse_down scroll axis) on a Dofus window: press-all (iterate windows +
+-- click), same as the `up` bind. non_consuming so the click still reaches the
+-- window as normal everywhere; the guard limits the extra action to Dofus.
+hl.bind("mouse:274", function()
+  if on_dofus() then
+    team.press(common.team())
+  end
+end, { description = "Dofus: press current member (middle click)", non_consuming = true })
 
 -- Press the current member (single click at the cursor across the team).
 dofus_bind("up", function()
