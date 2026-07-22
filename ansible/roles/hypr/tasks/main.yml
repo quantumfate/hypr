@@ -36,19 +36,21 @@
     - hypr_channel == 'git'
     - hypr_channel_replace_stable | bool
 
-# Pre-import source-signature keys the -git PKGBUILDs verify, from a reliable
-# keyserver. Fixes non-interactive builds where makepkg's default keyserver is
-# flaky (the udis86-git key that broke the swap). Runs as the build user (its
-# keyring is what makepkg checks); idempotent — re-import of a held key is a
-# no-op. Retried against keyserver hiccups.
-- name: Pre-import AUR source-signature keys
-  ansible.builtin.command:
-    cmd: "gpg --keyserver {{ hypr_git_keyserver }} --recv-keys {{ hypr_git_gpg_keys | join(' ') }}"
+# Pre-import source-signature keys the -git PKGBUILDs verify. Fetched over HTTPS
+# from the keyserver's pks/lookup endpoint (not gpg --recv-keys / dirmngr, whose
+# HKP port is blocked here — it fails instantly). Runs as the build user (its
+# keyring is what makepkg checks); re-import of a held key is a no-op.
+- name: Pre-import AUR source-signature keys (HTTPS)
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      for k in {{ hypr_git_gpg_keys | join(' ') }}; do
+        curl -fsSL "https://{{ hypr_git_keyserver }}/pks/lookup?op=get&options=mr&search=0x$k"
+        | gpg --import || exit 1;
+      done
+    executable: /bin/bash
   register: hypr_git_keys
   changed_when: "'imported' in hypr_git_keys.stderr"
-  retries: 3
-  delay: 5
-  until: hypr_git_keys.rc == 0
   when:
     - hypr_install_packages | bool
     - hypr_channel == 'git'
