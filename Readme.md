@@ -33,27 +33,27 @@ Nix host: import `nixosModules.hypr` (system) and `homeManagerModules.hypr`
 
 ### Delivery model
 
-Dual, full, equal delivery of the whole Hyprland *environment* (compositor
+Dual, full, equal delivery of the whole Hyprland _environment_ (compositor
 config + the `hypr*` ecosystem session glue). See [ARCHITECTURE.md](./ARCHITECTURE.md)
 and the phased [MIGRATION.md](./MIGRATION.md).
 
-| Path        | Target machines                    | Installs + deploys via              |
-| ----------- | ---------------------------------- | ----------------------------------- |
-| **Ansible** | Arch/CachyOS and other non-nix     | `ansible/roles/hypr` (pacman + AUR) |
-| **Nix**     | NixOS / nix-managed hosts          | `flake.nix` nix modules             |
+| Path        | Target machines                | Installs + deploys via              |
+| ----------- | ------------------------------ | ----------------------------------- |
+| **Ansible** | Arch/CachyOS and other non-nix | `ansible/roles/hypr` (pacman + AUR) |
+| **Nix**     | NixOS / nix-managed hosts      | `flake.nix` nix modules             |
 
 ### Ansible path — knobs
 
 Override role vars with `-e` or a group_vars file:
 
-| Var                          | Default   | Effect                                      |
-| ---------------------------- | --------- | ------------------------------------------- |
-| `hypr_install_packages`      | `true`    | Install the official-repo ecosystem set.    |
-| `hypr_install_aur_packages`  | `false`   | Install `hypr_aur_packages` via a helper.   |
-| `hypr_aur_helper`            | `paru`    | AUR helper (`paru`/`yay`).                  |
-| `hypr_deploy_session`        | `true`    | Deploy `session/**` + enable user units.    |
-| `hypr_gpu`                   | `nvidia`  | `nvidia` keeps the GPU env block; else strips it. |
-| `hypr_repo_path`             | this repo | Checkout path when run from a controller.   |
+| Var                         | Default   | Effect                                            |
+| --------------------------- | --------- | ------------------------------------------------- |
+| `hypr_install_packages`     | `true`    | Install the official-repo ecosystem set.          |
+| `hypr_install_aur_packages` | `false`   | Install `hypr_aur_packages` via a helper.         |
+| `hypr_aur_helper`           | `paru`    | AUR helper (`paru`/`yay`).                        |
+| `hypr_deploy_session`       | `true`    | Deploy `session/**` + enable user units.          |
+| `hypr_gpu`                  | `nvidia`  | `nvidia` keeps the GPU env block; else strips it. |
+| `hypr_repo_path`            | this repo | Checkout path when run from a controller.         |
 
 The role installs the ecosystem, symlinks this repo to `~/.config/hypr` (skipped
 when you already edit in place), deploys the session glue

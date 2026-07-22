@@ -1,15 +1,15 @@
 # Architecture — hypr environment packaging
 
 This repo is the **single source of truth** for a self-contained Hyprland
-*environment*: the compositor config plus the surrounding `hypr*` ecosystem
+_environment_: the compositor config plus the surrounding `hypr*` ecosystem
 session glue, delivered reproducibly to two classes of machine.
 
 ## Delivery model — dual, full, equal
 
-| Path       | Target machines                  | Installs + deploys via            |
-| ---------- | -------------------------------- | --------------------------------- |
-| **Nix**    | NixOS / nix-managed hosts        | `flake.nix` → NixOS + home-manager modules |
-| **Ansible**| everything else (Arch/CachyOS, other unix) | `ansible/roles/hypr` → pacman + AUR + file deploy |
+| Path        | Target machines                            | Installs + deploys via                            |
+| ----------- | ------------------------------------------ | ------------------------------------------------- |
+| **Nix**     | NixOS / nix-managed hosts                  | `flake.nix` → NixOS + home-manager modules        |
+| **Ansible** | everything else (Arch/CachyOS, other unix) | `ansible/roles/hypr` → pacman + AUR + file deploy |
 
 Both paths are first-class and kept in sync: same package set, same deployed
 files, same end state. Nix is for nix machines; Ansible is for non-nix ones.
@@ -52,7 +52,7 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
   `ankama-launcher` (proprietary) is intentionally excluded.
 - **quickshell** (sibling repo — deps owned there, not duplicated in this role).
   Its package pulls the hard deps (qt6-base/declarative/svg/wayland, libpipewire,
-  polkit). Two QML needs are *not* hard deps and must be provided by the
+  polkit). Two QML needs are _not_ hard deps and must be provided by the
   quickshell packaging: `Qt5Compat.GraphicalEffects` → `qt6-5compat`, and
   `Services.UPower` → the `upower` service. Integration binaries it shells out to
   (`hyprctl`, `notify-send`, `pkill`, `bash`) are all covered by the hypr set.
@@ -70,14 +70,14 @@ cannot run a git compositor against stable daemons. Only `hyprpolkitagent`
 
 Two channels, selected per delivery path:
 
-| Channel  | Ansible                                    | Nix |
-| -------- | ------------------------------------------ | --- |
-| `stable` | official-repo packages (`hypr_core_packages`) | nixpkgs packages |
+| Channel  | Ansible                                                        | Nix                          |
+| -------- | -------------------------------------------------------------- | ---------------------------- |
+| `stable` | official-repo packages (`hypr_core_packages`)                  | nixpkgs packages             |
 | `git`    | AUR `-git` group in one paru transaction (`hypr_git_packages`) | the Hyprland + daemon flakes |
 
 **How compatibility is enforced:**
 
-- **Ansible/AUR** — `hyprland-git` *declares the `-git` libs as dependencies*
+- **Ansible/AUR** — `hyprland-git` _declares the `-git` libs as dependencies_
   (aquamarine-git, hyprutils-git, hyprlang-git, hyprgraphics-git, hyprcursor-git,
   hyprwire-git, hyprland-protocols-git, hyprwayland-scanner-git,
   hyprland-guiutils-git), so paru pulls the whole lib chain and builds it in one
@@ -94,7 +94,7 @@ Two channels, selected per delivery path:
   `programs.hyprEnvironment.channel = "git"`.
 
 Note: on CachyOS the official repos are already very fresh (often ahead of the
-AUR `.SRCINFO` snapshots), so `git` mainly buys *unreleased* commits (e.g. the
+AUR `.SRCINFO` snapshots), so `git` mainly buys _unreleased_ commits (e.g. the
 `hyprctl binds -j` serializer fix) at the cost of local rebuilds.
 
 ## Package classification (Arch/AUR)
