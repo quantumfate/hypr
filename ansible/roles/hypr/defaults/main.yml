@@ -30,6 +30,13 @@ hypr_channel: stable                 # stable | git
 # Prefer the interactive `just channel-git` on a machine you're logged into.
 hypr_channel_replace_stable: false
 
+# Source-signature keys the -git PKGBUILDs verify, pre-imported from a reliable
+# keyserver so non-interactive builds don't stall on the flaky default one.
+# Extend as the git dep set grows (a build error names the missing key).
+hypr_git_keyserver: keyserver.ubuntu.com
+hypr_git_gpg_keys:
+  - A5DD905196EF3973280DA13CB965BC5D279F42ED  # udis86-git (hyprland-git makedep)
+
 # Installed stable packages the -git set replaces (the conflict list from paru).
 # Removed first when hypr_channel_replace_stable is true.
 hypr_stable_conflicts:

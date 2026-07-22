@@ -36,13 +36,34 @@
     - hypr_channel == 'git'
     - hypr_channel_replace_stable | bool
 
+# Pre-import source-signature keys the -git PKGBUILDs verify, from a reliable
+# keyserver. Fixes non-interactive builds where makepkg's default keyserver is
+# flaky (the udis86-git key that broke the swap). Runs as the build user (its
+# keyring is what makepkg checks); idempotent — re-import of a held key is a
+# no-op. Retried against keyserver hiccups.
+- name: Pre-import AUR source-signature keys
+  ansible.builtin.command:
+    cmd: "gpg --keyserver {{ hypr_git_keyserver }} --recv-keys {{ hypr_git_gpg_keys | join(' ') }}"
+  register: hypr_git_keys
+  changed_when: "'imported' in hypr_git_keys.stderr"
+  retries: 3
+  delay: 5
+  until: hypr_git_keys.rc == 0
+  when:
+    - hypr_install_packages | bool
+    - hypr_channel == 'git'
+    - hypr_git_gpg_keys | length > 0
+
 # Coupled ecosystem — GIT channel: the -git group in one paru transaction so
 # they build against each other's HEAD. hyprland-git pulls the -git libs as
-# deps; --needed skips already-current builds. Not run as root (paru refuses).
-# Conflict-free here: either a fresh host, or the stable set was just removed.
+# deps; --needed skips already-built devel packages, so re-runs are no-ops.
+# Fully non-interactive: conflict-free (stable removed / fresh host), review
+# skipped, keys pre-imported. Not run as root (paru refuses).
 - name: Install hypr* ecosystem (git channel, AUR)
   ansible.builtin.command:
-    cmd: "{{ hypr_aur_helper }} -S --needed --noconfirm {{ hypr_git_packages | join(' ') }}"
+    cmd: >-
+      {{ hypr_aur_helper }} -S --needed --noconfirm --skipreview --removemake
+      {{ hypr_git_packages | join(' ') }}
   register: hypr_git_result
   changed_when: "'there is nothing to do' not in hypr_git_result.stdout | lower"
   when:
