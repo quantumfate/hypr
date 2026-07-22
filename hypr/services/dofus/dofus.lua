@@ -55,8 +55,9 @@ for i = 1, 8 do
   end, { desc = "Dofus: activate team member " .. i })
 end
 
--- Turn-order cycling: arrows + spare F23 (a mouse-side button on some setups)
--- + middle mouse. `right`/`F23`/middle = next, `left`/SUPER+F23 = previous.
+-- Turn-order cycling: arrows + spare F23 (a mouse-side button on some setups).
+-- `right`/`F23` = next, `left`/SUPER+F23 = previous. Middle mouse is separate
+-- below (press-all, not cycle).
 dofus_bind("right", function()
   team.iterate(common.team(), false)
 end, { desc = "Dofus: next team member" })
@@ -69,9 +70,10 @@ end, { desc = "Dofus: next team member" })
 dofus_bind(config.main_mod .. " + F23", function()
   team.iterate(common.team(), true)
 end, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod })
+-- Plain click bind (not mouse=true → that is bindm/drag, which passes through).
 dofus_bind("mouse:274", function()
-  team.iterate(common.team(), false)
-end, { desc = "Dofus: next team member (middle click)", mouse = true })
+  team.press(common.team())
+end, { desc = "Dofus: press current member (middle click)" })
 
 -- Press the current member (single click at the cursor across the team).
 dofus_bind("up", function()
