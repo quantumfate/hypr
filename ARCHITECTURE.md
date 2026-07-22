@@ -44,6 +44,19 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 - `.github/` — CI: validate-only (flake check, ansible-lint, stylua,
   shellcheck). Publishing (Galaxy / cachix) deferred until stable.
 
+## Dependency completeness (verified)
+
+- **hypr** — every binary the Lua config / `*.conf` / `scripts/` invoke maps to
+  a listed package. `grim`, `slurp`, `wl-clipboard`, `jq`, `libnotify` arrive
+  transitively as `hyprshot` dependencies, so they need no explicit entry. Only
+  `ankama-launcher` (proprietary) is intentionally excluded.
+- **quickshell** (sibling repo — deps owned there, not duplicated in this role).
+  Its package pulls the hard deps (qt6-base/declarative/svg/wayland, libpipewire,
+  polkit). Two QML needs are *not* hard deps and must be provided by the
+  quickshell packaging: `Qt5Compat.GraphicalEffects` → `qt6-5compat`, and
+  `Services.UPower` → the `upower` service. Integration binaries it shells out to
+  (`hyprctl`, `notify-send`, `pkill`, `bash`) are all covered by the hypr set.
+
 ## Release channel & ecosystem compatibility
 
 The `hypr*` ecosystem is **soname-coupled**. `hyprland` and every daemon link
