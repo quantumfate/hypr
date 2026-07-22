@@ -1,5 +1,5 @@
 {
-  description = "Development environment";
+  description = "quantumfate Hyprland environment — dual delivery (nix modules + devShell)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -7,70 +7,98 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+    let
+      # === Ecosystem package set, shared by the nixos module and the devShell ===
+      # Mirrors ansible/roles/hypr defaults. Package names track the binaries
+      # scanned from hypr/**.lua, *.conf and scripts/*.sh.
+      runtimeDeps = pkgs: with pkgs; [
+        # compositor + hypr* ecosystem (own .conf files in this repo)
+        hyprland hypridle hyprlock hyprpaper hyprsunset hyprpicker hyprshot
+        hyprpolkitagent hyprcursor
+        xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
+        # shell / launcher / session
+        quickshell uwsm rofi kitty foot
+        # tools invoked from binds / lua / scripts
+        xdotool brightnessctl gamemode satty grim jq libnotify procps
+        xorg.setxkbmap inetutils
+        # Not declared (host/proprietary): ankama-launcher, nvidia driver,
+        # hyprqt6engine — install per-host.
+      ];
+    in
+    # System-agnostic outputs: modules other flakes/NixOS/home-manager import.
+    {
+      # NixOS module — system scope: enable Hyprland, portals, ecosystem pkgs.
+      nixosModules.hypr = { config, lib, pkgs, ... }:
+        let cfg = config.programs.hyprEnvironment;
+        in {
+          options.programs.hyprEnvironment.enable =
+            lib.mkEnableOption "the quantumfate Hyprland environment (system scope)";
+
+          config = lib.mkIf cfg.enable {
+            programs.hyprland.enable = true;               # compositor + session
+            xdg.portal = {
+              enable = true;
+              extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+            };
+            environment.systemPackages = runtimeDeps pkgs;
+          };
+        };
+
+      # home-manager module — user scope: deploy the config dir + session glue.
+      homeManagerModules.hypr = { config, lib, pkgs, ... }:
+        let cfg = config.programs.hyprEnvironment;
+        in {
+          options.programs.hyprEnvironment = {
+            enable = lib.mkEnableOption "deploy the quantumfate Hyprland config";
+            gpu = lib.mkOption {
+              type = lib.types.enum [ "nvidia" "other" ];
+              default = "other";
+              description = "Keep the NVIDIA env block in uwsm/env-hyprland.";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            # The repo root IS ~/.config/hypr (same as the ansible symlink).
+            xdg.configFile."hypr".source = self;
+
+            # uwsm env: strip the NVIDIA block on non-nvidia hosts.
+            xdg.configFile."uwsm/env-hyprland".text =
+              let
+                raw = builtins.readFile (self + "/session/uwsm/env-hyprland");
+                nvidiaGated = builtins.replaceStrings
+                  [ "export GBM_BACKEND" "export __GLX_VENDOR_LIBRARY_NAME"
+                    "export LIBVA_DRIVER_NAME" "export NVD_BACKEND" ]
+                  [ "# export GBM_BACKEND" "# export __GLX_VENDOR_LIBRARY_NAME"
+                    "# export LIBVA_DRIVER_NAME" "# export NVD_BACKEND" ]
+                  raw;
+              in
+              if cfg.gpu == "nvidia" then raw else nvidiaGated;
+
+            # Custom hypr* user units, deployed as raw files (bound to the
+            # hyprland session target). Packaged hyprsunset/hyprpolkitagent units
+            # are enabled at system scope, not managed here.
+            xdg.configFile."systemd/user/hypridle.service".source =
+              self + "/session/systemd/hypridle.service";
+            xdg.configFile."systemd/user/hyprpaper.service".source =
+              self + "/session/systemd/hyprpaper.service";
+          };
+        };
+    }
+    # Per-system outputs: the dev / CI shell.
+    // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-
-        # Repo tooling (formatters, hooks, linters) for editing the Lua config.
+        # Repo tooling for editing + CI (formatters, linters, ansible checks).
         devTools = with pkgs; [
-          git
-          just
-          pre-commit
-          stylua
-          luajit
-          lua-language-server
-          luarocks
-          luaPackages.luacheck
-          shfmt
-          shellcheck
-          yamllint
-          prettier
-          nixpkgs-fmt
-        ];
-
-        # Runtime dependencies the config binds/scripts shell out to, so a
-        # `nix develop` shell can drive it. Mirrors the ansible role
-        # (ansible/roles/hypr). Package names track the binaries scanned from
-        # hypr/**.lua, *.conf and scripts/*.sh.
-        runtimeDeps = with pkgs; [
-          # --- compositor + hypr* ecosystem (own .conf files in this repo) ---
-          hyprland # the compositor
-          hypridle # hypridle.conf
-          hyprlock # hyprlock.conf / hyprlock-laptop.conf
-          hyprpaper # hyprpaper.conf
-          hyprsunset # hyprsunset.conf
-          hyprpicker # color pick binds
-          hyprshot # screenshot binds (,hyprshot.sh)
-          xdg-desktop-portal-hyprland # portal backend
-          xdg-desktop-portal-gtk # portal (file pickers)
-          # --- shell / launcher / session ---
-          quickshell # the bar (autostarted: `uwsm app -- qs -c quantumfate`)
-          uwsm # session-scoped app launches
-          rofi # menus (rofi-wayland was merged into rofi in nixpkgs)
-          kitty # terminal
-          foot # terminal (alttab preview)
-          # --- tools invoked from binds / lua / scripts ---
-          xdotool # window poke / click-repeat helpers
-          brightnessctl # brightness binds
-          gamemode # gamemoderun (Dofus launch)
-          satty # screenshot annotate
-          grim # screenshot capture
-          jq # JSON parsing in lua/scripts
-          libnotify # notify-send (fallback path)
-          procps # pgrep / pkill
-          xorg.setxkbmap # keyboard layout (setxkbmap dvorak-custom)
-          inetutils # hostname (per-host config selection)
-          # Not declared (host/proprietary, install per-host):
-          #   ankama-launcher (AUR) — `gamemoderun ankama-launcher`
-          #   nvidia driver, hyprqt6engine (hyprqt6engine.conf) — host Qt theming
-          #   dofus_swap.py — provided by the quickshell repo's scripts/bin on PATH
-          #   ~/.config/waybar/scripts/*, ,brightness.sh, ,hyprshot.sh — user scripts
+          git just pre-commit
+          stylua luajit lua-language-server luarocks luaPackages.luacheck
+          shfmt shellcheck yamllint prettier nixpkgs-fmt
+          ansible ansible-lint
         ];
       in
       {
         devShells.default = pkgs.mkShell {
-          packages = devTools ++ runtimeDeps;
-          # Wire the repo into git on shell entry.
+          packages = devTools ++ runtimeDeps pkgs;
           shellHook = ''
             command -v pre-commit >/dev/null && \
               pre-commit install --hook-type pre-commit --hook-type commit-msg 2>/dev/null || true
