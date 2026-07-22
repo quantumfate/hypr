@@ -48,8 +48,16 @@
   };
 
   outputs =
-    { self, nixpkgs, flake-utils
-    , hyprland, hypridle, hyprlock, hyprpaper, hyprsunset, hyprpicker, xdph
+    { self
+    , nixpkgs
+    , flake-utils
+    , hyprland
+    , hypridle
+    , hyprlock
+    , hyprpaper
+    , hyprsunset
+    , hyprpicker
+    , xdph
     }:
     let
       # Ecosystem package set (stable channel), shared by module + devShell.
@@ -58,13 +66,31 @@
       # flake INPUT names in this scope; `with pkgs` does not shadow them, so
       # they must be qualified with pkgs. to reach the derivations (not inputs).
       runtimeDeps = pkgs: with pkgs; [
-        pkgs.hyprland pkgs.hypridle pkgs.hyprlock pkgs.hyprpaper
-        pkgs.hyprsunset pkgs.hyprpicker
-        hyprpolkitagent hyprcursor
-        xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
-        quickshell uwsm rofi kitty foot
-        xdotool brightnessctl gamemode satty grim jq libnotify procps
-        xorg.setxkbmap inetutils
+        pkgs.hyprland
+        pkgs.hypridle
+        pkgs.hyprlock
+        pkgs.hyprpaper
+        pkgs.hyprsunset
+        pkgs.hyprpicker
+        hyprpolkitagent
+        hyprcursor
+        xdg-desktop-portal-hyprland
+        xdg-desktop-portal-gtk
+        quickshell
+        uwsm
+        rofi
+        kitty
+        foot
+        xdotool
+        brightnessctl
+        gamemode
+        satty
+        grim
+        jq
+        libnotify
+        procps
+        xorg.setxkbmap
+        inetutils
       ];
 
       # git channel: swap the coupled hypr* packages for the flake builds (all
@@ -102,7 +128,7 @@
             nixpkgs.overlays = lib.mkIf (cfg.channel == "git") [ hyprGitOverlay ];
             programs.hyprland = {
               enable = true;
-              package = pkgs.hyprland;   # follows the overlay on the git channel
+              package = pkgs.hyprland; # follows the overlay on the git channel
             };
             xdg.portal = {
               enable = true;
@@ -134,10 +160,18 @@
               let
                 raw = builtins.readFile (self + "/session/uwsm/env-hyprland");
                 nvidiaGated = builtins.replaceStrings
-                  [ "export GBM_BACKEND" "export __GLX_VENDOR_LIBRARY_NAME"
-                    "export LIBVA_DRIVER_NAME" "export NVD_BACKEND" ]
-                  [ "# export GBM_BACKEND" "# export __GLX_VENDOR_LIBRARY_NAME"
-                    "# export LIBVA_DRIVER_NAME" "# export NVD_BACKEND" ]
+                  [
+                    "export GBM_BACKEND"
+                    "export __GLX_VENDOR_LIBRARY_NAME"
+                    "export LIBVA_DRIVER_NAME"
+                    "export NVD_BACKEND"
+                  ]
+                  [
+                    "# export GBM_BACKEND"
+                    "# export __GLX_VENDOR_LIBRARY_NAME"
+                    "# export LIBVA_DRIVER_NAME"
+                    "# export NVD_BACKEND"
+                  ]
                   raw;
               in
               if cfg.gpu == "nvidia" then raw else nvidiaGated;
@@ -154,23 +188,34 @@
     }
     # Per-system outputs: the dev / CI shell.
     // flake-utils.lib.eachDefaultSystem (system:
-      let
-        pkgs = import nixpkgs { inherit system; };
-        # Repo tooling for editing + CI (formatters, linters, ansible checks).
-        devTools = with pkgs; [
-          git just pre-commit
-          stylua luajit lua-language-server luarocks luaPackages.luacheck
-          shfmt shellcheck yamllint prettier nixpkgs-fmt
-          ansible ansible-lint
-        ];
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          packages = devTools ++ runtimeDeps pkgs;
-          shellHook = ''
-            command -v pre-commit >/dev/null && \
-              pre-commit install --hook-type pre-commit --hook-type commit-msg 2>/dev/null || true
-          '';
-        };
-      });
+    let
+      pkgs = import nixpkgs { inherit system; };
+      # Repo tooling for editing + CI (formatters, linters, ansible checks).
+      devTools = with pkgs; [
+        git
+        just
+        pre-commit
+        stylua
+        luajit
+        lua-language-server
+        luarocks
+        luaPackages.luacheck
+        shfmt
+        shellcheck
+        yamllint
+        prettier
+        nixpkgs-fmt
+        ansible
+        ansible-lint
+      ];
+    in
+    {
+      devShells.default = pkgs.mkShell {
+        packages = devTools ++ runtimeDeps pkgs;
+        shellHook = ''
+          command -v pre-commit >/dev/null && \
+            pre-commit install --hook-type pre-commit --hook-type commit-msg 2>/dev/null || true
+        '';
+      };
+    });
 }
