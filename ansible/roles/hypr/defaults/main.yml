@@ -21,6 +21,11 @@ hypr_install_packages: true
 # the whole lib chain; we only add the daemons. See ARCHITECTURE.md.
 hypr_channel: stable                 # stable | git
 
+# pacman --ask bitmask for the git-channel swap. 4 = CONFLICT_PKG: auto-confirm
+# replacing the stable hypr* packages with their -git counterparts (the expected
+# conflict). Set 0 to disable (then run the paru command by hand, with a TTY).
+hypr_aur_ask: 4
+
 # Coupled ecosystem, STABLE channel (official repos). Installed when
 # hypr_channel == stable. hyprpolkitagent is Qt-only (soname-decoupled) but
 # grouped here for a coherent stable set.

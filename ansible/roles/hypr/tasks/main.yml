@@ -20,9 +20,17 @@
 # Coupled ecosystem — GIT channel: the -git group in one paru transaction so
 # they build against each other's HEAD. hyprland-git pulls the -git libs as
 # deps; --needed skips already-current builds. Not run as root (paru refuses).
+#
+# The -git packages conflict/provide their stable counterparts, so switching
+# channels REPLACES the stable stack. --noconfirm refuses conflict removal on
+# its own, so --ask=4 (pacman CONFLICT_PKG bit) auto-answers exactly that
+# expected stable→git replacement. Override hypr_aur_ask to 0 to force a manual
+# confirm (needs a TTY — run the command by hand, not via ansible).
 - name: Install hypr* ecosystem (git channel, AUR)
   ansible.builtin.command:
-    cmd: "{{ hypr_aur_helper }} -S --needed --noconfirm {{ hypr_git_packages | join(' ') }}"
+    cmd: >-
+      {{ hypr_aur_helper }} -S --needed --noconfirm --ask={{ hypr_aur_ask }}
+      {{ hypr_git_packages | join(' ') }}
   register: hypr_git_result
   changed_when: "'there is nothing to do' not in hypr_git_result.stdout | lower"
   when:
