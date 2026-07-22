@@ -54,8 +54,12 @@
     let
       # Ecosystem package set (stable channel), shared by module + devShell.
       # Mirrors ansible hypr_core_packages + hypr_tool_packages.
+      # NOTE: hyprland/hypridle/hyprlock/hyprpaper/hyprsunset/hyprpicker are also
+      # flake INPUT names in this scope; `with pkgs` does not shadow them, so
+      # they must be qualified with pkgs. to reach the derivations (not inputs).
       runtimeDeps = pkgs: with pkgs; [
-        hyprland hypridle hyprlock hyprpaper hyprsunset hyprpicker
+        pkgs.hyprland pkgs.hypridle pkgs.hyprlock pkgs.hyprpaper
+        pkgs.hyprsunset pkgs.hyprpicker
         hyprpolkitagent hyprcursor
         xdg-desktop-portal-hyprland xdg-desktop-portal-gtk
         quickshell uwsm rofi kitty foot
