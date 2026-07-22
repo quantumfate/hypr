@@ -42,11 +42,10 @@
 # keyring is what makepkg checks); re-import of a held key is a no-op.
 - name: Pre-import AUR source-signature keys (HTTPS)
   ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail;
+    cmd: |
+      set -o pipefail
       for k in {{ hypr_git_gpg_keys | join(' ') }}; do
-        curl -fsSL "https://{{ hypr_git_keyserver }}/pks/lookup?op=get&options=mr&search=0x$k"
-        | gpg --import || exit 1;
+        curl -fsSL "https://{{ hypr_git_keyserver }}/pks/lookup?op=get&options=mr&search=0x$k" | gpg --import || exit 1
       done
     executable: /bin/bash
   register: hypr_git_keys
