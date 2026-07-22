@@ -18,7 +18,7 @@ dual-delivered (nix + ansible), validate-in-CI environment. See ARCHITECTURE.md.
 ## Phase 2 — ansible delivery (non-nix path)
 
 - [x] Split package vars: `hypr_packages` (repo) vs `hypr_aur_packages`.
-- [x] Correct AUR set: grim-hyprland-git, catppuccin-sddm-theme-*, qt6ct-kde,
+- [x] Correct AUR set: grim-hyprland-git, catppuccin-sddm-theme-\*, qt6ct-kde,
       greetd-dms-greeter-git (dropped stale greetd-tuigreet-fork-bin).
 - [x] AUR helper task (paru/yay) for `hypr_aur_packages`.
 - [x] Deploy `session/**` files (uwsm env, user units, greeter fragment).

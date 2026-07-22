@@ -35,7 +35,7 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 ## Source layout
 
 - `hypr/` — Lua config (the running compositor logic).
-- `*.conf` — hypr* daemon configs (hypridle, hyprlock, hyprpaper, …).
+- `*.conf` — hypr\* daemon configs (hypridle, hyprlock, hyprpaper, …).
 - `assets/`, `icons/`, `wallpapers/` — generated + static assets.
 - `session/` — session glue absorbed from chezmoi (uwsm env, systemd user
   units, greeter fragment). Deployed identically by both paths.
