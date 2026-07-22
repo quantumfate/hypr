@@ -18,6 +18,7 @@ hypr_packages:
   - hyprsunset                  # hyprsunset.conf (night light)
   - hyprpicker                  # color-pick bind
   - hyprshot                    # screenshot binds
+  - hyprpolkitagent             # polkit agent (session user unit)
   - xdg-desktop-portal-hyprland # portal backend
   - xdg-desktop-portal-gtk      # portal (file pickers / settings)
   # --- shell / launcher / session ---
@@ -30,7 +31,6 @@ hypr_packages:
   - brightnessctl               # brightness binds
   - gamemode                    # gamemoderun (Dofus launch)
   - satty                       # screenshot annotate
-  - grim                        # screenshot capture
   - jq                          # JSON parsing in lua/scripts
   - libnotify                   # notify-send (fallback path)
   - procps-ng                   # pgrep / pkill
@@ -39,10 +39,38 @@ hypr_packages:
   # The bar itself (`qs -c quantumfate`) is deployed by the sibling quickshell
   # repo's role; its package is pulled in there. Listed as a reminder, not here.
 
-# AUR / proprietary bits the config touches but can't be installed from the
-# official repos — install these yourself (paru/yay). Enable to have the role
-# attempt them via community.general.pacman with an AUR helper you configure.
-hypr_install_extra_packages: false
-hypr_extra_packages:
-  - hyprqt6engine    # hyprqt6engine.conf (Qt theming) — AUR
+# AUR packages the ecosystem actually uses on this host. Installed via an AUR
+# helper (see hypr_aur_helper) when hypr_install_aur_packages is true. Classified
+# by querying the live system (pacman -Qm) — not guesswork.
+hypr_install_aur_packages: false
+hypr_aur_helper: paru               # paru | yay
+hypr_aur_packages:
+  - grim-hyprland-git               # screenshot capture (hypr fork; replaces grim)
+  - qt6ct-kde                       # Qt6 theming control
+  - greetd-dms-greeter-git          # DMS greeter (deploys session/greeter/dms-hypr.conf)
+  - catppuccin-sddm-theme-macchiato # login theme
+  - catppuccin-sddm-theme-latte     # login theme (light)
+  # hyprqt6engine — hyprqt6engine.conf (Qt theming); add if present on host.
   # ankama-launcher (Dofus) is proprietary; install manually.
+  # NOTE: dropped stale `greetd-tuigreet-fork-bin` (not installed; DMS is used).
+
+# --- session glue (session/**) -------------------------------------------------
+# Deploy the uwsm env, hypr* systemd user units, and greeter fragment, then
+# enable the units. Mirrors the nix home-module.
+hypr_deploy_session: true
+
+# GPU profile: "nvidia" keeps the NVIDIA env block in uwsm/env-hyprland; any
+# other value comments it out (portable to Intel/AMD hosts).
+hypr_gpu: nvidia
+
+# DMS greeter config subdir under ~/.config (matches the path chezmoi used).
+hypr_greeter_config_subdir: dms-greeter-chezmoi
+
+# Packaged user units to enable (own their unit files; we only enable them).
+hypr_enable_units:
+  - hyprsunset.service
+  - hyprpolkitagent.service
+# Custom units shipped in session/systemd (deployed then enabled).
+hypr_custom_units:
+  - hypridle.service
+  - hyprpaper.service

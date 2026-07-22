@@ -6,12 +6,16 @@
     state: present
   when: hypr_install_packages | bool
 
-- name: Install extra (AUR) packages
-  become: true
-  community.general.pacman:
-    name: "{{ hypr_extra_packages }}"
-    state: present
-  when: hypr_install_extra_packages | bool
+# AUR packages via the configured helper (paru/yay). community.general.pacman
+# can't build AUR, so shell out to the helper as the login user (not root).
+- name: Install AUR packages via helper
+  ansible.builtin.command:
+    cmd: "{{ hypr_aur_helper }} -S --needed --noconfirm {{ hypr_aur_packages | join(' ') }}"
+  register: hypr_aur_result
+  changed_when: "'there is nothing to do' not in hypr_aur_result.stdout | lower"
+  when:
+    - hypr_install_aur_packages | bool
+    - hypr_aur_packages | length > 0
 
 - name: Ensure the ~/.config directory exists
   ansible.builtin.file:
@@ -38,3 +42,57 @@
          + '/dofus' }}
     state: directory
     mode: "0755"
+
+# === Session glue (session/**) ===
+# Deploy uwsm env + hypr* user units, then enable the units. Gated on
+# hypr_deploy_session so a config-only deploy can skip it.
+- name: Deploy session glue
+  when: hypr_deploy_session | bool
+  block:
+    - name: Ensure uwsm config dir exists
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/.config/uwsm"
+        state: directory
+        mode: "0755"
+
+    # NVIDIA env block only survives on nvidia hosts; elsewhere comment it out so
+    # the file is portable (see session/uwsm/env-hyprland).
+    - name: Deploy uwsm env-hyprland (GPU block gated by hypr_gpu)
+      ansible.builtin.copy:
+        dest: "{{ ansible_user_dir }}/.config/uwsm/env-hyprland"
+        mode: "0644"
+        content: |
+          {% for line in lookup('file', hypr_repo_path ~ '/session/uwsm/env-hyprland').splitlines() %}
+          {{ (hypr_gpu != 'nvidia' and (line is match('^export (GBM_BACKEND|__GLX_VENDOR_LIBRARY_NAME|LIBVA_DRIVER_NAME|NVD_BACKEND)='))) | ternary('# ' ~ line, line) }}
+          {% endfor %}
+
+    - name: Ensure systemd user dir exists
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/.config/systemd/user"
+        state: directory
+        mode: "0755"
+
+    - name: Deploy custom hypr* user units
+      ansible.builtin.copy:
+        src: "{{ hypr_repo_path }}/session/systemd/{{ item }}"
+        dest: "{{ ansible_user_dir }}/.config/systemd/user/{{ item }}"
+        mode: "0644"
+      loop: "{{ hypr_custom_units }}"
+
+    - name: Enable hypr* user units (custom + packaged)
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+        scope: user
+      loop: "{{ hypr_custom_units + hypr_enable_units }}"
+
+# Greeter fragment: deployed to the DMS greeter's user config dir (same path
+# chezmoi used), only when the greeter is in the AUR set.
+- name: Deploy DMS greeter Hyprland fragment
+  ansible.builtin.copy:
+    src: "{{ hypr_repo_path }}/session/greeter/dms-hypr.conf"
+    dest: "{{ ansible_user_dir }}/.config/{{ hypr_greeter_config_subdir }}/dms-hypr.conf"
+    mode: "0644"
+  when:
+    - hypr_deploy_session | bool
+    - "'greetd-dms-greeter-git' in hypr_aur_packages"
