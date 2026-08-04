@@ -58,10 +58,10 @@ end
 -- Turn-order cycling: arrows + spare F23 (a mouse-side button on some setups).
 -- `right`/`F23` = next, `left`/SUPER+F23 = previous. Middle mouse is separate
 -- below (press-all, not cycle).
-dofus_bind("right", function()
+dofus_bind("SHIFT + right", function()
   team.iterate(common.team(), false)
 end, { desc = "Dofus: next team member" })
-dofus_bind("left", function()
+dofus_bind("SHIFT + left", function()
   team.iterate(common.team(), true)
 end, { desc = "Dofus: previous team member" })
 dofus_bind("F23", function()
