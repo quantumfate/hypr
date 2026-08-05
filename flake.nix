@@ -5,13 +5,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
-    # === git channel: the coupled hypr* ecosystem, locked as one set ===
-    # The Hyprland flake locks its libs (aquamarine, hyprutils, hyprlang,
-    # hyprgraphics, hyprcursor, hyprwayland-scanner) via its own flake.lock.
-    # Each daemon flake below unifies those shared libs onto THIS hyprland via
-    # `follows`, so the whole ecosystem shares one hyprutils/hyprlang/… → one
-    # soname → compatible. flake.lock pins the commit set (reproducible rolling;
-    # `nix flake update` bumps them together). See ARCHITECTURE.md.
     hyprland.url = "github:hyprwm/Hyprland";
 
     hypridle.url = "github:hyprwm/hypridle";
@@ -60,11 +53,6 @@
     , xdph
     }:
     let
-      # Ecosystem package set (stable channel), shared by module + devShell.
-      # Mirrors ansible hypr_core_packages + hypr_tool_packages.
-      # NOTE: hyprland/hypridle/hyprlock/hyprpaper/hyprsunset/hyprpicker are also
-      # flake INPUT names in this scope; `with pkgs` does not shadow them, so
-      # they must be qualified with pkgs. to reach the derivations (not inputs).
       runtimeDeps = pkgs: with pkgs; [
         pkgs.hyprland
         pkgs.hypridle
@@ -93,9 +81,6 @@
         inetutils
       ];
 
-      # git channel: swap the coupled hypr* packages for the flake builds (all
-      # sharing one hyprutils/hyprlang via follows). Same package NAMES, git
-      # implementations — mirrors ansible hypr_channel=git.
       hyprGitOverlay = final: prev: {
         hyprland = hyprland.packages.${prev.system}.hyprland;
         hypridle = hypridle.packages.${prev.system}.hypridle;
@@ -176,9 +161,6 @@
               in
               if cfg.gpu == "nvidia" then raw else nvidiaGated;
 
-            # Custom hypr* user units, deployed as raw files (bound to the
-            # hyprland session target). Packaged hyprsunset/hyprpolkitagent units
-            # are enabled at system scope, not managed here.
             xdg.configFile."systemd/user/hypridle.service".source =
               self + "/session/systemd/hypridle.service";
             xdg.configFile."systemd/user/hyprpaper.service".source =
@@ -186,11 +168,9 @@
           };
         };
     }
-    # Per-system outputs: the dev / CI shell.
     // flake-utils.lib.eachDefaultSystem (system:
     let
       pkgs = import nixpkgs { inherit system; };
-      # Repo tooling for editing + CI (formatters, linters, ansible checks).
       devTools = with pkgs; [
         git
         just
