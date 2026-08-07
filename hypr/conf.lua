@@ -84,6 +84,7 @@ hl.config({
     font_family = "Hack Nerd Font Mono",
     size_limits_tiled = true,
     mouse_move_enables_dpms = true,
+    middle_click_paste = true,
   },
 })
 hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
