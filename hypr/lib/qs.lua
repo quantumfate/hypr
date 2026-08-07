@@ -6,9 +6,11 @@ local M = {}
 
 M.config = "quantumfate"
 
----@return string base `qs -c <config> ipc call ` command prefix
+---@return string base `qs -c <config> ipc call -- ` command prefix. The `--`
+--- is required: `ipc` subcommand names (`show`, `prop`, `wait`, ...) would
+--- otherwise shadow a function with the same name, making the call a no-op.
 local function base()
-  return "qs -c " .. M.config .. " ipc call "
+  return "qs -c " .. M.config .. " ipc call -- "
 end
 
 ---Call an IPC function (fire-and-forget). Extra args are appended, each shell-
