@@ -1,7 +1,7 @@
 # hypr — Ansible deployment
 
 Installs the runtime packages this Hyprland config shells out to and links the
-config into place. Mirrors the sibling [`quickshell`](https://github.com/quantumfate/quickshell)
+config into place. Mirrors the sibling [`quickshell`](https://codeberg.org/quantumfate/quickshell)
 role — deploy both for the full desktop.
 
 ## Deploy locally
