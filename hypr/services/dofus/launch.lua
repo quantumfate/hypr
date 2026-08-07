@@ -13,7 +13,7 @@ M.launch_cmd = 'xdotool set_window --name "Dofus %s" "$(xdotool search --pid %s)
 
 function M:reset_counter()
   self.counter = 1
-  notify:notify("Dofus Launch Counter Reset", 2000, notify.level.INFO)
+  notify:notify("Dofus Launch Counter Reset", 1000, notify.level.INFO)
 end
 
 function M:increment_counter()
@@ -21,12 +21,13 @@ function M:increment_counter()
 end
 
 function M:toggle_enable()
+  M:reset_counter()
   if self.enabled then
     self.enabled = false
-    notify:notify("Dofus Launch Disabled", 2000, notify.level.INFO)
+    notify:notify("Dofus Launch Disabled", 1000, notify.level.INFO)
   else
     self.enabled = true
-    notify:notify("Dofus Launch Enabled", 2000, notify.level.INFO)
+    notify:notify("Dofus Launch Enabled", 1000, notify.level.INFO)
   end
 end
 
