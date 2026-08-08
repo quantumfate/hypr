@@ -1,12 +1,12 @@
 # Hypr
 
 This configuration encompasses the common options between my machines.
-The gaps are filled by my [dotfiles](https://github.com/quantumfate/dotfiles) and some private sources.
+The gaps are filled by my [dotfiles](https://codeberg.org/quantumfate/dotfiles) and some private sources.
 
 Part of the quantumfate desktop: [quickshell](https://codeberg.org/quantumfate/quickshell)
 is the desktop shell / UI (see its [ARCHITECTURE.md](https://codeberg.org/quantumfate/quickshell/src/branch/main/ARCHITECTURE.md)
 for how this config and the UI bridge via shared JSON state + IPC), and
-[scripts](https://github.com/quantumfate/scripts) holds the CLI helpers invoked
+[scripts](https://codeberg.org/quantumfate/scripts) holds the CLI helpers invoked
 from keybinds.
 
 - Colorscheme: [Catppuccin](https://catppuccin.com/)
