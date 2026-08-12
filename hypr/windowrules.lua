@@ -19,7 +19,7 @@ windowrule.tag_set_effects("code", {
 })
 
 windowrule.tag_props({
-  { initial_class = "(obsidian)" },
+  { initial_class = "(md.Obsidian)" },
 }, "+study")
 
 windowrule.tag_set_effects("study", {
