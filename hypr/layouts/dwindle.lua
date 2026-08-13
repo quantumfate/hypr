@@ -1,7 +1,7 @@
 hl.config({
   dwindle = {
     force_split = 1,
-    preserve_split = true,
+    preserve_split = false, -- side by side on extra width monitor
     smart_split = true,
     smart_resizing = true,
     permanent_direction_override = false,
