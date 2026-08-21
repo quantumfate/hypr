@@ -1,23 +1,5 @@
 -- Passive peek cheatsheet.
---
--- Separate from the main cheatsheet (SUPER+/ or the shell submap), which is a
--- focus-grabbing, dimmed, centered modal. This one is hands-off: when you enter
--- a submap and *dwell* there past a delay, a non-interactive contextual panel
--- fades in so you can read the binds while still seeing (and using) the window
--- underneath.
---
--- All the "what submap am I in" logic comes from the Hyprland event system via
--- hypr/lib/hypr.lua rather than any state we track ourselves — the trigger is
--- clear by design. Rendering (non-focusable layer surface) is quickshell-side:
--- CheatSheetPeek.qml, IPC target `cheatsheetPeek`.
---
--- Lifecycle: the panel opens once, after you first dwell in a submap past
--- `config.peek_delay_ms`, then *stays* open while you traverse nested submaps
--- (re-reading the new context live). It tears down when either
---   * you land back at root (a leaf action exits the tree, or you escape out), or
---   * you stop navigating and the auto-fade elapses (cheatsheet_peek_ms from the
---     theme store, so it is tunable live). Each navigation restarts that timer,
---     so moving between submaps never fades mid-read.
+
 local hypr = require("hypr.lib.hypr")
 local qs = require("hypr.lib.qs")
 local Store = require("hypr.lib.store")
