@@ -122,7 +122,7 @@ _G.config = {
             default_name = "code",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = { ["dwindle:default_split_ratio"] = 1.25 },
+            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
           },
           {
             workspace = "2",
@@ -130,7 +130,7 @@ _G.config = {
             default_name = "study",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = { ["dwindle:default_split_ratio"] = 1.25 },
+            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
           },
           {
             workspace = "3",
@@ -138,7 +138,7 @@ _G.config = {
             default_name = "proton",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = { ["dwindle:default_split_ratio"] = 1.25 },
+            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
           },
           {
             workspace = "4",
@@ -157,7 +157,7 @@ _G.config = {
             default_name = "media",
             monitor = "secondary",
             layout = "dwindle",
-            layout_opts = { ["dwindle:default_split_ratio"] = 1.0 },
+            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
           },
           {
             workspace = "6",
@@ -165,7 +165,7 @@ _G.config = {
             default_name = "misc",
             monitor = "secondary",
             layout = "dwindle",
-            layout_opts = { ["dwindle:default_split_ratio"] = 1.0 },
+            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
           },
           {
             workspace = "special:comms",
