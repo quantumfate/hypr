@@ -1,3 +1,6 @@
+-- TODO: implement option 1 if implemented
+-- https://github.com/hyprwm/Hyprland/discussions/15901
+
 local windowrule = require("hypr.lib.windowrule")
 
 windowrule.tag_props({
