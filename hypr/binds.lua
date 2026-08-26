@@ -61,9 +61,18 @@ submap.tree({
     bind.app_entry("d", config.app_cmds.dev_browser, "Open the dev Browser", { config.primary_mod }),
     bind.app_entry("c", config.app_cmds.calculator, "Open Calculator"),
     bind.app_entry("m", config.app_cmds.password_manager, "Open Proton Pass"),
-    bind.app_entry("v", config.app_cmds.volume_control, "Open Wiremix"),
     bind.app_entry("f", config.app_cmds.file_manager, "Open Yazi"),
     bind.app_entry("s", config.app_cmds.package_manager_ui, "Open Shelly"),
+  },
+})
+
+submap.tree({
+  mods = { config.main_mod, "c" },
+  name = "configuration",
+  desc = "Configuration",
+  entries = {
+    bind.app_entry("b", config.app_cmds.bluetooth_manager, "Open Bluetui"),
+    bind.app_entry("v", config.app_cmds.volume_control, "Open Wiremix"),
   },
 })
 

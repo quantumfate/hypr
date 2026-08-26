@@ -30,6 +30,7 @@ config = nil
 ---@field calculator string
 ---@field volume_control string
 ---@field app_launcher string
+---@field bluetooth_manager string
 ---@field package_manager_ui string
 
 ---@class Hosts

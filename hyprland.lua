@@ -23,6 +23,7 @@ _G.config = {
     mail = "proton-mail",
     calculator = "qalculate-qt",
     app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
+    bluetooth_manager = "kitty --class Kitty-Bluetui bluetui",
     package_manager_ui = "shelly-ui",
   },
   host_configs = {
