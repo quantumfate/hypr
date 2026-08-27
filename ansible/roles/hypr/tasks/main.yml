@@ -108,7 +108,6 @@
     state: directory
     mode: "0755"
 
-# === Session glue (session/**) ===
 # Deploy uwsm env + hypr* user units, then enable the units. Gated on
 # hypr_deploy_session so a config-only deploy can skip it.
 - name: Deploy session glue
@@ -150,14 +149,3 @@
         enabled: true
         scope: user
       loop: "{{ hypr_custom_units + hypr_enable_units }}"
-
-# Greeter fragment: deployed to the DMS greeter's user config dir (same path
-# chezmoi used), only when the greeter is in the AUR set.
-- name: Deploy DMS greeter Hyprland fragment
-  ansible.builtin.copy:
-    src: "{{ hypr_repo_path }}/session/greeter/dms-hypr.conf"
-    dest: "{{ ansible_facts.user_dir }}/.config/{{ hypr_greeter_config_subdir }}/dms-hypr.conf"
-    mode: "0644"
-  when:
-    - hypr_deploy_session | bool
-    - "'greetd-dms-greeter-git' in hypr_aur_packages"
