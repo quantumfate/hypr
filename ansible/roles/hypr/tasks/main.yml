@@ -100,6 +100,13 @@
         dest: "{{ hypr_config_dir }}"
         state: link
         force: true
+      register: hypr_config_link
+
+    - name: Reload the live hyprland config
+      ansible.builtin.command: hyprctl reload
+      changed_when: false
+      failed_when: false
+      when: hypr_config_link.changed
   when: (hypr_repo_path | realpath) != (hypr_config_dir | realpath)
 
 # Shared Dofus state (team.json) lives in XDG_STATE_HOME and is written by both
