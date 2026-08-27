@@ -56,10 +56,10 @@ hypr_git_packages:
   - xdg-desktop-portal-hyprland-git
 
 hypr_tool_packages:
-  - hyprshot                    # screenshot binds
+  - hyprshot-git                # screenshot binds
   - xdg-desktop-portal-gtk      # portal (file pickers / settings)
   - uwsm                        # session-scoped app launches (autostart qs)
-  - rofi-wayland               # menus
+  - rofi-wayland                # menus
   - kitty                       # terminal
   - foot                        # terminal (alttab preview)
   - xdotool                     # window poke / click-repeat helpers
