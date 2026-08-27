@@ -40,7 +40,8 @@
 - name: Install hypr* ecosystem (git channel, AUR)
   ansible.builtin.command:
     cmd: >-
-      {{ hypr_aur_helper }} -S --needed --noconfirm --skipreview --removemake
+      {{ hypr_aur_helper }} -S --needed --noconfirm --removemake \
+      --answerclean y --answerdiff n --answeredit n --answerupgrade y
       {{ hypr_git_packages | join(' ') }}
   register: hypr_git_result
   changed_when: "'there is nothing to do' not in hypr_git_result.stdout | lower"
@@ -65,14 +66,40 @@
     state: directory
     mode: "0755"
 
-# Deploy the config by symlinking it to the checkout — unless the checkout IS
-# the config dir already (editing in place), in which case there's nothing to do.
-- name: Symlink the config into place
-  ansible.builtin.file:
-    src: "{{ hypr_repo_path | realpath }}"
-    dest: "{{ hypr_config_dir }}"
-    state: link
-    force: true
+- name: Manage the config directory
+  block:
+    - name: Check whether the config target exists
+      ansible.builtin.stat:
+        path: "{{ hypr_config_dir }}"
+      register: config_dir_stat
+
+    - name: Probe the config target for uncommitted changes
+      ansible.builtin.command: git -C {{ hypr_config_dir }} status --porcelain
+      register: config_dir_dirty
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: config_dir_stat.stat.exists and not config_dir_stat.stat.islnk
+
+    - name: Abort — config target is a git checkout with uncommitted changes
+      ansible.builtin.fail:
+        msg: >-
+          {{ hypr_config_dir }} has uncommitted changes; commit or move them
+          before re-linking the config.
+      when: config_dir_dirty is defined and config_dir_dirty.stdout | length > 0
+
+    - name: Remove the old config target
+      ansible.builtin.file:
+        path: "{{ hypr_config_dir }}"
+        state: absent
+      when: config_dir_stat.stat.exists and not config_dir_stat.stat.islnk
+
+    - name: Symlink the config into place
+      ansible.builtin.file:
+        src: "{{ hypr_repo_path | realpath }}"
+        dest: "{{ hypr_config_dir }}"
+        state: link
+        force: true
   when: (hypr_repo_path | realpath) != (hypr_config_dir | realpath)
 
 # Shared Dofus state (team.json) lives in XDG_STATE_HOME and is written by both
