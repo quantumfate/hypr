@@ -55,11 +55,6 @@
     - hypr_channel == 'git'
     - hypr_git_gpg_keys | length > 0
 
-# Coupled ecosystem — GIT channel: the -git group in one paru transaction so
-# they build against each other's HEAD. hyprland-git pulls the -git libs as
-# deps; --needed skips already-built devel packages, so re-runs are no-ops.
-# Fully non-interactive: conflict-free (stable removed / fresh host), review
-# skipped, keys pre-imported. Not run as root (paru refuses).
 - name: Install hypr* ecosystem (git channel, AUR)
   ansible.builtin.command:
     cmd: >-
