@@ -26,7 +26,10 @@
   ansible.builtin.shell:
     cmd: >-
       set -o pipefail;
-      installed=$(pacman -Qq {{ hypr_stable_conflicts | join(' ') }} 2>/dev/null | tr '\n' ' ');
+      installed=;
+      for p in {{ hypr_stable_conflicts | join(' ') }}; do
+        pacman -Qq "$p" 2>/dev/null | grep -Fxq "$p" && installed="$installed $p";
+      done;
       if [ -n "$installed" ]; then pacman -Rdd --noconfirm $installed; else echo "nothing to remove"; fi
     executable: /bin/bash
   register: hypr_stable_removed

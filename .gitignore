@@ -7,3 +7,10 @@
 # Lua
 luac.out
 *.luac
+
+# Nix
+result
+result-*
+
+# Ansible
+.ansible
