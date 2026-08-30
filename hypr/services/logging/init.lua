@@ -8,10 +8,18 @@ local WORKSPACE = "name:logs"
 -- Command surface. `logview <spec>` opens the source in the isolated server and
 -- raises the kitty window; the spec vocabulary is logstream's (see its header).
 local viewer = "logview"
+-- Focus FIRST, then open. Without the focus the viewer window is updated on a
+-- workspace you are not looking at, which is indistinguishable from a dead
+-- keybind. With it, every entry lands you in front of the result: the
+-- workspace comes forward and the source opens in its own tmux window.
 local function open(spec)
   local cmd = ("uwsm app -- %s %s"):format(viewer, spec or "")
   -- extra parens: gsub returns (string, count) and exec_cmd takes one argument
-  return hl.dsp.exec_cmd((cmd:gsub("%s+$", "")))
+  local exec = hl.dsp.exec_cmd((cmd:gsub("%s+$", "")))
+  return function()
+    hl.dispatch(hl.dsp.focus({ workspace = WORKSPACE }))
+    hl.dispatch(exec)
+  end
 end
 
 windowrule.tag_props({
@@ -29,8 +37,13 @@ windowrule.tag_set_effects("logs", {
   },
 })
 
+-- SUPER+e, NOT SUPER+l: `l` is already the hjkl "focus right" bind. A duplicate
+-- root keybind fails silently — Hyprland keeps both, so the press moves focus
+-- AND enters the submap, after which every other bind looks dead because the
+-- compositor is sitting inside a submap. Check new root binds with:
+--   hyprctl binds -j | jq -r '.[]|select(.submap=="" and .modmask==64).key' | sort | uniq -d
 submap.tree({
-  mods = { config.main_mod, "l" },
+  mods = { config.main_mod, "e" },
   name = "logs",
   desc = "Logs",
   entries = {

@@ -171,17 +171,18 @@ _G.config = {
           {
             workspace = "6",
             persistent = true,
+            default_name = "logs",
+            monitor = "secondary",
+            layout = "monocle",
+          },
+
+          {
+            workspace = "7",
+            persistent = true,
             default_name = "misc",
             monitor = "secondary",
             layout = "dwindle",
             layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
-          },
-          {
-            workspace = "7",
-            persistent = true,
-            default_name = "logs",
-            monitor = "primary",
-            layout = "monocle",
           },
           {
             workspace = "special:comms",
