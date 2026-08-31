@@ -51,6 +51,7 @@ hypr_git_packages:
   - hyprsunset-git
   - hyprpicker-git
   - xdg-desktop-portal-hyprland-git
+  - hyprtoolkit-git
 
 hypr_tool_packages:
   - hyprshot-git                # screenshot binds
