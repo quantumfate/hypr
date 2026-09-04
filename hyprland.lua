@@ -25,6 +25,7 @@ _G.config = {
     app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
     bluetooth_manager = "kitty --class Kitty-Bluetui bluetui",
     package_manager_ui = "shelly-ui",
+    package_manager_tui = "kitty --class Kitty-Parui parui",
   },
   host_configs = {
     ["quantum-laptop"] = {
@@ -47,7 +48,7 @@ _G.config = {
           {
             workspace = "2",
             persistent = true,
-            default_name = "study",
+            default_name = "creative",
             layout = "scrolling",
             monitor = "primary",
           },
@@ -136,7 +137,7 @@ _G.config = {
           {
             workspace = "2",
             persistent = true,
-            default_name = "study",
+            default_name = "creative",
             monitor = "primary",
             layout = "dwindle",
             layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },

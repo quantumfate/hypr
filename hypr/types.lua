@@ -32,6 +32,7 @@ config = nil
 ---@field app_launcher string
 ---@field bluetooth_manager string
 ---@field package_manager_ui string
+---@field package_manager_tui string
 
 ---@class Hosts
 ---@field primary_monitor string

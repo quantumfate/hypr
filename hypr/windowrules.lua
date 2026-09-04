@@ -23,10 +23,11 @@ windowrule.tag_set_effects("code", {
 
 windowrule.tag_props({
   { initial_class = "(md.obsidian.Obsidian)" },
-}, "+study")
+  { initial_class = "(linear)" },
+}, "+creative")
 
-windowrule.tag_set_effects("study", {
-  static = { workspace = "name:study" },
+windowrule.tag_set_effects("creative", {
+  static = { workspace = "name:creative" },
 })
 
 windowrule.tag_props({
@@ -252,6 +253,7 @@ windowrule.tag_props({
   { class = [[^(org\.gnome\.Nautilus)$]] },
   { class = "(ffplay|clipse|Kitty-Float)" },
   { class = "(Kitty-Yazi)" },
+  { class = "(Kitty-Parui)" },
   { tag = "launcher" },
 }, "+float-override")
 

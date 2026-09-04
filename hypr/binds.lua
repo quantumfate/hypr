@@ -63,6 +63,7 @@ submap.tree({
     bind.app_entry("m", config.app_cmds.password_manager, "Open Proton Pass"),
     bind.app_entry("f", config.app_cmds.file_manager, "Open Yazi"),
     bind.app_entry("s", config.app_cmds.package_manager_ui, "Open Shelly"),
+    bind.app_entry("p", config.app_cmds.package_manager_tui, "Open Shelly"),
   },
 })
 

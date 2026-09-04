@@ -27,17 +27,21 @@ end
 ---the key is forwarded to the focused window so nothing else notices the bind.
 ---@param key string full bind string (e.g. "F1", "SUPER + F10", "mouse:274")
 ---@param action function
+---@param send_shortcut boolean sends a shortcut specified by `opts.send_mods` and
+---`opts.send_key` to the active window instead of passing the buttons
 ---@param opts DofusBindOpts
-local function dofus_bind(key, action, opts)
+local function dofus_bind(key, action, send_shortcut, opts)
   hl.bind(key, function()
     if on_dofus() then
       action()
-    else
+    elseif send_shortcut then
       hl.dispatch(hl.dsp.send_shortcut({
         mods = opts.send_mods or "",
         key = opts.send_key or key,
         window = "activewindow",
       }))
+    else
+      hl.dsp.pass({ window = "activewindow" })
     end
   end, {
     description = opts.desc,
@@ -45,6 +49,7 @@ local function dofus_bind(key, action, opts)
     repeating = opts.repeating,
     release = opts.release,
     transparent = opts.transparent,
+    non_consuming = opts.non_consuming,
   })
 end
 
@@ -52,7 +57,7 @@ end
 for i = 1, 8 do
   dofus_bind("F" .. i, function()
     team.activate(common.team(), i)
-  end, { desc = "Dofus: activate team member " .. i })
+  end, true, { desc = "Dofus: activate team member " .. i })
 end
 
 -- Turn-order cycling: arrows + spare F23 (a mouse-side button on some setups).
@@ -60,16 +65,16 @@ end
 -- below (press-all, not cycle).
 dofus_bind("SHIFT + right", function()
   team.iterate(common.team(), false)
-end, { desc = "Dofus: next team member" })
+end, false, { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "right", non_consuming = true })
 dofus_bind("SHIFT + left", function()
   team.iterate(common.team(), true)
-end, { desc = "Dofus: previous team member" })
+end, false, { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "left", non_consuming = true })
 dofus_bind("F23", function()
   team.iterate(common.team(), false)
-end, { desc = "Dofus: next team member" })
+end, true, { desc = "Dofus: next team member" })
 dofus_bind(config.main_mod .. " + F23", function()
   team.iterate(common.team(), true)
-end, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod })
+end, true, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod })
 
 -- Middle click, i.e. pressing the mouse wheel in (mouse:274 — the button, not
 -- the mouse_down scroll axis) on a Dofus window: press-all (iterate windows +
@@ -84,21 +89,26 @@ end, { description = "Dofus: press current member (middle click)", non_consuming
 -- Press the current member (single click at the cursor across the team).
 dofus_bind("up", function()
   team.press(common.team())
-end, { desc = "Dofus: press current member" })
+end, true, { desc = "Dofus: press current member" })
 
 -- Detached double-click auto-clicker (already modified, so unambiguous).
 dofus_bind(config.main_mod .. " + F10", function()
   team.double_click_start()
-end, { desc = "Dofus: start double-click", send_key = "F10", send_mods = config.main_mod })
-dofus_bind(config.main_mod .. " + F11", function()
-  team.double_click_stop()
-end, {
-  desc = "Dofus: stop double-click",
-  send_key = "F11",
-  send_mods = config.main_mod,
-  release = true,
-  transparent = true,
-})
+end, true, { desc = "Dofus: start double-click", send_key = "F10", send_mods = config.main_mod })
+dofus_bind(
+  config.main_mod .. " + F11",
+  function()
+    team.double_click_stop()
+  end,
+  true,
+  {
+    desc = "Dofus: stop double-click",
+    send_key = "F11",
+    send_mods = config.main_mod,
+    release = true,
+    transparent = true,
+  }
+)
 
 -- The Dofus submap now only hosts management actions (launching, renaming, swap
 -- toggle, opening the team UI) — nothing you need mid-fight, so no more team
