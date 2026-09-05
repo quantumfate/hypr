@@ -302,3 +302,12 @@ hl.window_rule({
 
 windowrule.tag_props({ { initial_class = "([Ss]potify)" } }, "+music")
 windowrule.tag_set_effects("music", { static = { workspace = "special:music" } })
+
+-- fix the regression of maximized windows overshadowing other windows in a WS
+-- TODO: this wild cald potentially needs further narrowing
+hl.window_rule({
+  match = {
+    class = ".*",
+  },
+  suppress_event = "maximize",
+})
