@@ -6,12 +6,21 @@ local ipc = require("hypr.services.dofus.ipc")
 local submap = require("hypr.lib.submap")
 
 local DOFUS_CLASS = "Dofus.x64"
+local OVERLAY_CLASS = "Ankama Launcher"
+local OVERLAY_TITLE = "overlay"
 
 ---Active window is a Dofus client?
 ---@return boolean
 local function on_dofus()
   local active = hl.get_active_window()
   return active ~= nil and active.class == DOFUS_CLASS
+end
+
+---Active window is a launcher overlay?
+---@return boolean
+local function on_dofus_overlay()
+  local active = hl.get_active_window()
+  return active ~= nil and active.class == OVERLAY_CLASS and active.title == OVERLAY_TITLE
 end
 
 ---@class DofusBindOpts
@@ -30,9 +39,10 @@ end
 ---@param send_shortcut boolean sends a shortcut specified by `opts.send_mods` and
 ---`opts.send_key` to the active window instead of passing the buttons
 ---@param opts DofusBindOpts
-local function dofus_bind(key, action, send_shortcut, opts)
+---@param cond function
+local function dofus_bind(key, action, send_shortcut, opts, cond)
   hl.bind(key, function()
-    if on_dofus() then
+    if cond() then
       action()
     elseif send_shortcut then
       hl.dispatch(hl.dsp.send_shortcut({
@@ -57,29 +67,49 @@ end
 for i = 1, 8 do
   dofus_bind("F" .. i, function()
     team.activate(common.team(), i)
-  end, true, { desc = "Dofus: activate team member " .. i })
+  end, true, { desc = "Dofus: activate team member " .. i }, on_dofus)
 end
 
 -- Turn-order cycling: arrows + spare F23 (a mouse-side button on some setups).
 -- `right`/`F23` = next, `left`/SUPER+F23 = previous. Middle mouse is separate
 -- below (press-all, not cycle).
-dofus_bind("SHIFT + right", function()
-  team.iterate(common.team(), false)
-end, false, { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "right", non_consuming = true })
-dofus_bind("SHIFT + left", function()
-  team.iterate(common.team(), true)
-end, false, { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "left", non_consuming = true })
+dofus_bind(
+  "SHIFT + right",
+  function()
+    team.iterate(common.team(), false)
+  end,
+  false,
+  { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "right", non_consuming = true },
+  on_dofus
+)
+dofus_bind(
+  "SHIFT + left",
+  function()
+    team.iterate(common.team(), true)
+  end,
+  false,
+  { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "left", non_consuming = true },
+  on_dofus
+)
 dofus_bind("F23", function()
   team.iterate(common.team(), false)
-end, true, { desc = "Dofus: next team member" })
+end, true, { desc = "Dofus: next team member" }, on_dofus)
 dofus_bind(config.main_mod .. " + F23", function()
   team.iterate(common.team(), true)
-end, true, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod })
+end, true, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod }, on_dofus)
 
--- Middle click, i.e. pressing the mouse wheel in (mouse:274 — the button, not
--- the mouse_down scroll axis) on a Dofus window: press-all (iterate windows +
--- click), same as the `up` bind. non_consuming so the click still reaches the
--- window as normal everywhere; the guard limits the extra action to Dofus.
+hl.bind("mouse:274", function()
+  if on_dofus() then
+    team.press(common.team())
+  elseif on_dofus_overlay() then
+    hl.dispatch(hl.dsp.send_shortcut({
+      mods = "CTRL",
+      key = "v",
+      window = "activewindow",
+    }))
+  end
+end, { description = "Dofus: press current member (middle click)", non_consuming = true })
+
 hl.bind("mouse:274", function()
   if on_dofus() then
     team.press(common.team())
@@ -89,12 +119,13 @@ end, { description = "Dofus: press current member (middle click)", non_consuming
 -- Press the current member (single click at the cursor across the team).
 dofus_bind("up", function()
   team.press(common.team())
-end, true, { desc = "Dofus: press current member" })
+end, true, { desc = "Dofus: press current member" }, on_dofus)
 
 -- Detached double-click auto-clicker (already modified, so unambiguous).
 dofus_bind(config.main_mod .. " + F10", function()
   team.double_click_start()
-end, true, { desc = "Dofus: start double-click", send_key = "F10", send_mods = config.main_mod })
+end, true, { desc = "Dofus: start double-click", send_key = "F10", send_mods = config.main_mod }, on_dofus)
+
 dofus_bind(
   config.main_mod .. " + F11",
   function()
@@ -107,7 +138,8 @@ dofus_bind(
     send_mods = config.main_mod,
     release = true,
     transparent = true,
-  }
+  },
+  on_dofus
 )
 
 -- The Dofus submap now only hosts management actions (launching, renaming, swap
@@ -169,4 +201,26 @@ submap.tree({
       end,
     },
   },
+})
+
+-- MOD+H/L move window focus, but on a Dofus window they walk the team instead
+-- (spilling into stray Dofus windows at the ends — see dofus.team.nav).
+local dofus_team = require("hypr.services.dofus.team")
+local function focus_or_dofus(action, reversed)
+  return function()
+    if dofus_team.nav(reversed) then
+      return
+    end
+    require("hypr.lib.layout").dispatch(action)
+  end
+end
+
+local bind = require("hypr.lib.bind")
+hl.bind(bind.parse_mods({ config.main_mod, "h" }), focus_or_dofus("focus_left", true), {
+  description = "Move focus left (Dofus: prev character)",
+  submap_universal = true,
+})
+hl.bind(bind.parse_mods({ config.main_mod, "l" }), focus_or_dofus("focus_right", false), {
+  description = "Move focus right (Dofus: next character)",
+  submap_universal = true,
 })
