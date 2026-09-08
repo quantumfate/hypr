@@ -3,18 +3,23 @@
 
 local windowrule = require("hypr.lib.windowrule")
 
+-- Class strings come from config.apps so a launch command and its window rules
+-- can never drift apart. Only apps whose class is a plain literal are sourced
+-- here; regex alternations covering variants we do not launch stay hardcoded.
+local apps = config.apps
+
 windowrule.tag_props({
   { initial_class = "([fF]irefox|zen|zen-twilight|zen-beta)" },
 }, "+default-browser")
 
 windowrule.tag_props({
-  { initial_class = "(zen-twilight-media)" },
+  { initial_class = "(" .. apps.media_browser.class .. ")" },
 }, "+media-browser")
 
 windowrule.tag_props({
   { tag = "default-browser" },
-  { initial_class = "(Kitty-Main|Tmux-Main)" },
-  { initial_class = "(firefox-developer-edition)" },
+  { initial_class = "(" .. apps.terminal.class .. "|" .. apps.tmux.class .. ")" },
+  { initial_class = "(" .. apps.dev_browser.class .. ")" },
 }, "+code")
 
 windowrule.tag_set_effects("code", {
@@ -31,8 +36,8 @@ windowrule.tag_set_effects("creative", {
 })
 
 windowrule.tag_props({
-  { initial_class = "(Proton Mail)" },
-  { initial_class = "(Proton Pass)" },
+  { initial_class = "(" .. apps.mail.class .. ")" },
+  { initial_class = "(" .. apps.password_manager.class .. ")" },
 }, "+proton")
 
 windowrule.tag_set_effects("proton", {
@@ -41,7 +46,7 @@ windowrule.tag_set_effects("proton", {
 windowrule.tag_props({
   { initial_class = "(Archon App)" },
   { initial_class = "(ckb-next)" },
-  { initial_class = "com.shellyorg.shelly" },
+  { initial_class = apps.package_manager_ui.class },
 }, "misc")
 
 windowrule.tag_set_effects("misc", {
@@ -76,7 +81,7 @@ windowrule.tag_props({
   { initial_class = "(zen|zen-twilight|zen-beta)", title = "(Library)" },
   { initial_class = "(zen|zen-twilight|zen-beta)", title = "Add bookmark folder" },
   { initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
-  { initial_class = "com.shellyorg.shelly" },
+  { initial_class = apps.package_manager_ui.class },
   { initial_class = "(wdisplays)" },
 }, "+large-floating-window")
 
@@ -102,7 +107,7 @@ windowrule.tag_props({
   { initial_class = "(zen|zen-twilight|zen-beta)", title = "Add bookmark folder" },
   { initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
   { initial_class = "com.github.hluk.copyq" },
-  { initial_class = "com.shellyorg.shelly" },
+  { initial_class = apps.package_manager_ui.class },
   { initial_class = "ckb-next" },
 }, "+medium-floating-window")
 
@@ -116,7 +121,7 @@ windowrule.tag_set_effects("medium-floating-window", {
 })
 
 windowrule.tag_props({
-  { initial_class = "(Proton Pass|Proton Mail)" },
+  { initial_class = "(" .. apps.password_manager.class .. "|" .. apps.mail.class .. ")" },
   { initial_class = "com.github.hluk.copyq" },
   { initial_class = "signal" },
 }, "+exclude-from-screenshare")
@@ -251,9 +256,9 @@ windowrule.tag_props({
   { class = [[^(org\.gnome\.Calculator)$]] },
   { class = "^(gnome-calculator|galculator|blueman-manager|zoom|xdg-desktop-portal)$" },
   { class = [[^(org\.gnome\.Nautilus)$]] },
-  { class = "(ffplay|clipse|Kitty-Float)" },
-  { class = "(Kitty-Yazi)" },
-  { class = "(Kitty-Parui)" },
+  { class = "(ffplay|clipse|" .. apps.terminal_float.class .. ")" },
+  { class = "(" .. apps.file_manager.class .. ")" },
+  { class = "(" .. apps.package_manager_tui.class .. ")" },
   { tag = "launcher" },
 }, "+float-override")
 
@@ -265,10 +270,10 @@ hl.window_rule({ match = { class = "(clipse)" }, size = { 800, 600 } })
 -- hl.window_rule({ match = { class = "(Kitty-Float)" }, size = { 1000, 800 }, center = true })
 --
 windowrule.tag_props({
-  { initial_class = "Kitty-Bluetui" },
-  { initial_class = "Kitty-Yazi" },
-  { initial_class = "Kitty-Float" },
-  { initial_class = "Kitty-Wiremix" },
+  { initial_class = apps.bluetooth_manager.class },
+  { initial_class = apps.file_manager.class },
+  { initial_class = apps.terminal_float.class },
+  { initial_class = apps.volume_control.class },
 }, "+floating-terminal-app")
 
 windowrule.tag_set_effects("floating-terminal-app", {

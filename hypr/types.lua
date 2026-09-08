@@ -1,38 +1,12 @@
 ---@meta
 
----Global config table populated by hyprland.lua entry point.
----@type Config
-config = nil
-
----@class Config
----@field main_mod string
----@field peek_delay_ms integer Dwell time in a submap before the passive peek cheatsheet fades in.
----@field primary_mod string
----@field secondary_mod string
----@field tertiary_mod string
----@field app_cmds Commands
----@field host_configs table<string, Hosts> Per-host definitions, keyed by hostname.
----@field host Hosts The current host's config, resolved at load. Use this everywhere.
-
 ---@class Workspaces
 ---@field workspace_specs HL.WorkspaceRuleSpec[]
 ---@field workspace_keys string[]
 
----@class Commands
----@field media_browser string
----@field main_browser string
----@field dev_browser string
----@field terminal string
----@field terminal_float string
----@field tmux string
----@field password_manager string
----@field mail string
----@field calculator string
----@field volume_control string
----@field app_launcher string
----@field bluetooth_manager string
----@field package_manager_ui string
----@field package_manager_tui string
+---@class AppScope
+---@field cmd string
+---@field class string
 
 ---@class Hosts
 ---@field primary_monitor string

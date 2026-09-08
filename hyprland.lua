@@ -1,8 +1,13 @@
 local hypr_dir = (os.getenv("XDG_CONFIG_HOME") or (os.getenv("HOME") .. "/.config")) .. "/hypr"
 package.path = package.path .. ";" .. hypr_dir .. "/?.lua"
 
----@type Config
----@diagnostic disable-next-line: missing-fields
+---@class Config
+---@field main_mod string
+---@field peek_delay_ms integer
+---@field primary_mod string
+---@field secondary_mod string
+---@field tertiary_mod string
+---@field host_configs table<string, Hosts>
 _G.config = {
   main_mod = "SUPER",
   -- Passive peek cheatsheet: how long to dwell in a submap before it fades in.
@@ -10,22 +15,22 @@ _G.config = {
   primary_mod = "CTRL",
   secondary_mod = "SHIFT",
   tertiary_mod = "ALT",
-  app_cmds = {
-    media_browser = "zen-twilight -P Media --name zen-twilight-media",
-    main_browser = "zen-twilight",
-    dev_browser = "firefox-developer-edition",
-    terminal = "kitty --class Kitty-Main",
-    terminal_float = "kitty --class Kitty-float",
-    tmux = "kitty --class Tmux-Main tms",
-    volume_control = "kitty --class Kitty-Wiremix wiremix",
-    file_manager = "kitty --class Kitty-Yazi yazi",
-    password_manager = "proton-pass",
-    mail = "proton-mail",
-    calculator = "qalculate-qt",
-    app_launcher = 'rofi -show drun -run-command "uwsm app -- {cmd}"',
-    bluetooth_manager = "kitty --class Kitty-Bluetui bluetui",
-    package_manager_ui = "shelly-ui",
-    package_manager_tui = "kitty --class Kitty-Parui parui",
+  apps = {
+    media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },
+    main_browser = { cmd = "zen-twilight", class = "zen-twilight" },
+    dev_browser = { cmd = "firefox-developer-edition", class = "firefox-developer-edition" },
+    terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },
+    terminal_float = { cmd = "kitty --class Kitty-Float", class = "Kitty-Float" },
+    tmux = { cmd = "kitty --class Tmux-Main tms", class = "Tmux-Main" },
+    volume_control = { cmd = "kitty --class Kitty-Wiremix wiremix", class = "Kitty-Wiremix" },
+    file_manager = { cmd = "kitty --class Kitty-Yazi yazi", class = "Kitty-Yazi" },
+    password_manager = { cmd = "proton-pass", class = "Proton Pass" },
+    mail = { cmd = "proton-mail", class = "Proton Mail" },
+    calculator = { cmd = "qalculate-qt", class = "io.github.Qalculate.qalculate-qt" },
+    app_launcher = { cmd = 'rofi -show drun -run-command "uwsm app -- {cmd}"', class = "" },
+    bluetooth_manager = { cmd = "kitty --class Kitty-Bluetui bluetui", class = "Kitty-Bluetui" },
+    package_manager_ui = { cmd = "shelly-ui", class = "com.shellyorg.shelly" },
+    package_manager_tui = { cmd = "kitty --class Kitty-Parui parui", class = "Kitty-Parui" },
   },
   host_configs = {
     ["quantum-laptop"] = {
@@ -132,7 +137,7 @@ _G.config = {
             default_name = "code",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
+            layout_opts = { default_split_ratio = 1.25 },
           },
           {
             workspace = "2",
@@ -140,7 +145,7 @@ _G.config = {
             default_name = "creative",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
+            layout_opts = { default_split_ratio = 1.0 },
           },
           {
             workspace = "3",
@@ -148,7 +153,7 @@ _G.config = {
             default_name = "proton",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
+            layout_opts = { default_split_ratio = 1.0 },
           },
           {
             workspace = "4",
@@ -167,7 +172,7 @@ _G.config = {
             default_name = "media",
             monitor = "secondary",
             layout = "dwindle",
-            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
+            layout_opts = { default_split_ratio = 1.0 },
           },
           {
             workspace = "6",
@@ -183,7 +188,7 @@ _G.config = {
             default_name = "misc",
             monitor = "secondary",
             layout = "dwindle",
-            layout_opts = { default_split_rati = 1.25, special_scale_factor = 1 },
+            layout_opts = { default_split_ratio = 1.25, special_scale_factor = 1 },
           },
           {
             workspace = "special:comms",

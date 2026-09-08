@@ -41,13 +41,13 @@ submap.tree({
   name = "terminal",
   desc = "Terminal",
   entries = {
-    bind.app_entry("return", config.app_cmds.terminal, "Open the Terminal"),
-    bind.app_entry("f", config.app_cmds.terminal_float, "Open the floating Terminal", { config.main_mod }),
-    bind.app_entry("s", config.app_cmds.tmux, "Open Kitty with Tmux Session"),
+    bind.app_entry("return", config.apps.terminal, "Open the Terminal"),
+    bind.app_entry("f", config.apps.terminal_float, "Open the floating Terminal", { config.main_mod }),
+    bind.app_entry("s", config.apps.tmux, "Open Kitty with Tmux Session"),
   },
 })
 
-bind.exec("r", config.app_cmds.app_launcher, {
+bind.exec("r", config.apps.app_launcher.cmd, {
   description = "Open Application Launcher",
 })
 
@@ -56,14 +56,14 @@ submap.tree({
   name = "applications",
   desc = "Applications",
   entries = {
-    bind.app_entry("d", config.app_cmds.media_browser, "Open Zen Browser media profile"),
-    bind.app_entry("b", config.app_cmds.main_browser, "Open the Browser"),
-    bind.app_entry("d", config.app_cmds.dev_browser, "Open the dev Browser", { config.primary_mod }),
-    bind.app_entry("c", config.app_cmds.calculator, "Open Calculator"),
-    bind.app_entry("m", config.app_cmds.password_manager, "Open Proton Pass"),
-    bind.app_entry("f", config.app_cmds.file_manager, "Open Yazi"),
-    bind.app_entry("s", config.app_cmds.package_manager_ui, "Open Shelly"),
-    bind.app_entry("p", config.app_cmds.package_manager_tui, "Open Shelly"),
+    bind.app_entry("d", config.apps.media_browser, "Open Zen Browser media profile"),
+    bind.app_entry("b", config.apps.main_browser, "Open the Browser"),
+    bind.app_entry("d", config.apps.dev_browser, "Open the dev Browser", { config.primary_mod }),
+    bind.app_entry("c", config.apps.calculator, "Open Calculator"),
+    bind.app_entry("m", config.apps.password_manager, "Open Proton Pass"),
+    bind.app_entry("f", config.apps.file_manager, "Open Yazi"),
+    bind.app_entry("s", config.apps.package_manager_ui, "Open Shelly"),
+    bind.app_entry("p", config.apps.package_manager_tui, "Open Shelly"),
   },
 })
 
@@ -72,8 +72,8 @@ submap.tree({
   name = "configuration",
   desc = "Configuration",
   entries = {
-    bind.app_entry("b", config.app_cmds.bluetooth_manager, "Open Bluetui"),
-    bind.app_entry("v", config.app_cmds.volume_control, "Open Wiremix"),
+    bind.app_entry("b", config.apps.bluetooth_manager, "Open Bluetui"),
+    bind.app_entry("v", config.apps.volume_control, "Open Wiremix"),
   },
 })
 

@@ -16,10 +16,6 @@ function M.bind_workspaces()
   end
 end
 
---- TODO: indicisive about workspace names/digits
---- TODO: the variable order of the call is wrong and doesn't work as intended
---- TODO: it kind of works by accident because it always returns a number
----
 ---@param workspace string
 ---@return string, string?
 local function get_workspace_direction(workspace)
@@ -148,12 +144,12 @@ end
 
 ---Launch an app via uwsm. Closes the submap on use (which-key style).
 ---@param key string
----@param app string app command
+---@param app AppScope entry from config.apps
 ---@param description string
 ---@param mods string[]?
 ---@return SubmapEntry
 function M.app_entry(key, app, description, mods)
-  return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd("uwsm app -- " .. app) }
+  return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd("uwsm app -- " .. app.cmd) }
 end
 
 ---Take a screenshot via hyprshot.
