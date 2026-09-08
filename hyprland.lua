@@ -127,9 +127,13 @@ _G.config = {
       hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock.conf",
       workspaces = {
         workspace_specs = {
-          -- layout_opts overrides the global dwindle default_split_ratio
-          -- (see hypr/layouts/dwindle.lua) per workspace: 1.25 on the
-          -- widescreen primary, 1.0 on normal-aspect monitors.
+          -- Hyprland drops layoutopt on workspace rules (only
+          -- layoutopt:orientation is implemented), so layout_opts is consumed
+          -- by hypr/events/layout_opts.lua, which rewrites the matching
+          -- globals on workspace focus. Options may also be keyed by layout
+          -- name to differ per layout on a workspace; see that file's header.
+          -- Here: split ratio 1.25 on the widescreen primary, 1.0 on
+          -- normal-aspect monitors.
           {
             workspace = "1",
             persistent = true,
