@@ -104,7 +104,7 @@ _G.config = {
           },
           {
             workspace = "special:ankama",
-            on_created_empty = "gamemoderun ankama-launcher",
+            on_created_empty = "uwsm-app -- ,ankama-launcher.sh",
           },
         },
         workspace_keys = {
