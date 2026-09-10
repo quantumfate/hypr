@@ -16,9 +16,12 @@ windowrule.tag_props({
   { initial_class = "(" .. apps.media_browser.class .. ")" },
 }, "+media-browser")
 
+-- Terminals are deliberately absent here: a terminal opens on the workspace you
+-- launched it from. Pinning them to `code` made a second project window
+-- impossible to keep anywhere else. `,proj.sh` targets a workspace explicitly
+-- when it wants one.
 windowrule.tag_props({
   { tag = "default-browser" },
-  { initial_class = "(" .. apps.terminal.class .. "|" .. apps.tmux.class .. ")" },
   { initial_class = "(" .. apps.dev_browser.class .. ")" },
 }, "+code")
 

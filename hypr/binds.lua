@@ -47,6 +47,42 @@ submap.tree({
   },
 })
 
+-- Projects. One picker (`,proj.sh`, whose list is scraped from the tms config,
+-- so it and `C-b C-o` inside tmux always agree), and the key you press picks
+-- which window of the project session the new client lands on.
+submap.tree({
+  mods = { config.main_mod, "p" },
+  name = "project",
+  desc = "Projects",
+  entries = {
+    bind.project_entry("p", "nvim", "Open a project (editor)"),
+    bind.project_entry("n", "nvim", "Open a project on its nvim window"),
+    bind.project_entry("s", "zsh", "Open a project on its shell window"),
+    bind.project_entry("r", "run", "Open a project on its run window"),
+    -- Teardown, in widening blast radius. `close` is the everyday one: it
+    -- detaches this window's tmux client, so the window goes and the project
+    -- keeps running. The two kills are behind SHIFT and ask through rofi
+    -- first, since a keybind has no tty to prompt on.
+    {
+      key = "c",
+      desc = "Close this window's project client (project keeps running)",
+      action = hl.dsp.exec_cmd(",proj.sh close"),
+    },
+    {
+      key = "k",
+      mods = { config.secondary_mod },
+      desc = "Kill the focused project's server",
+      action = hl.dsp.exec_cmd(",proj.sh kill"),
+    },
+    {
+      key = "k",
+      mods = { config.secondary_mod, config.primary_mod },
+      desc = "Kill every project server",
+      action = hl.dsp.exec_cmd(",proj.sh kill-all"),
+    },
+  },
+})
+
 bind.exec("r", config.apps.app_launcher.cmd, {
   description = "Open Application Launcher",
 })

@@ -177,6 +177,18 @@ function M.screenrecord_entry(key, mode, audio, description)
   return { key = key, desc = description, action = hl.dsp.exec_cmd(cmd) }
 end
 
+---Open a project through `,proj.sh`: rofi picker, then a kitty attached to that
+---project's tmux session on `window`. The script spawns its own uwsm scope, so
+---this must not go through bind.app_entry (which would nest uwsm scopes).
+---@param key string
+---@param window string template window name ("nvim" | "zsh" | "run")
+---@param description string
+---@param mods string[]?
+---@return SubmapEntry
+function M.project_entry(key, window, description, mods)
+  return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd(",proj.sh pick " .. window) }
+end
+
 ---Toggle a special workspace.
 ---@param key string
 ---@param name string special workspace name

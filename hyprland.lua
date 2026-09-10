@@ -22,6 +22,9 @@ _G.config = {
     terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },
     terminal_float = { cmd = "kitty --class Kitty-Float", class = "Kitty-Float" },
     tmux = { cmd = "kitty --class Tmux-Main tms", class = "Tmux-Main" },
+    -- Project sessions. `,proj.sh` spawns the kitty itself (and its own uwsm
+    -- scope), so binds must call it directly, never via bind.app_entry.
+    project = { cmd = ",proj.sh pick", class = "Tmux-Main" },
     volume_control = { cmd = "kitty --class Kitty-Wiremix wiremix", class = "Kitty-Wiremix" },
     file_manager = { cmd = "kitty --class Kitty-Yazi yazi", class = "Kitty-Yazi" },
     password_manager = { cmd = "proton-pass", class = "Proton Pass" },
@@ -208,7 +211,7 @@ _G.config = {
           },
           {
             workspace = "special:ankama",
-            on_created_empty = "gamemoderun ankama-launcher",
+            on_created_empty = "uwsm-app -- lutris lutris:rungameid/2",
           },
         },
         workspace_keys = {
