@@ -54,7 +54,6 @@ hypr_git_packages:
   - hyprtoolkit-git
 
 hypr_tool_packages:
-  - hyprshot-git                # screenshot binds
   - xdg-desktop-portal-gtk      # portal (file pickers / settings)
   - uwsm                        # session-scoped app launches (autostart qs)
   - rofi-wayland                # menus
@@ -76,6 +75,7 @@ hypr_tool_packages:
 hypr_install_aur_packages: false
 hypr_aur_helper: yay               # paru | yay
 hypr_aur_packages:
+  - hyprshot-git                    # screenshot binds
   - grim-hyprland-git               # screenshot capture (hypr fork; replaces grim)
   - qt6ct-kde                       # Qt6 theming control
   - greetd-dms-greeter-git          # DMS greeter (deploys session/greeter/dms-hypr.conf)
