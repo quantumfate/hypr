@@ -91,9 +91,12 @@ hypr_deploy_session: true
 hypr_gpu: nvidia
 
 # Packaged user units to enable (own their unit files; we only enable them).
-hypr_enable_units:
-  - hyprsunset.service
-  - hyprpolkitagent.service
+# hyprpolkitagent is a Qt-only companion shipped by the stable channel; the -git
+# set does not include it, so it is only enabled when hypr_channel == 'stable'.
+hypr_enable_units: >-
+  {{ ['hyprsunset.service', 'hyprpolkitagent.service']
+     if hypr_channel == 'stable'
+     else ['hyprsunset.service'] }}
 # Custom units shipped in session/systemd (deployed then enabled).
 hypr_custom_units:
   - hypridle.service

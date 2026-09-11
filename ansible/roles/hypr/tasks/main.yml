@@ -89,7 +89,7 @@
         msg: >-
           {{ hypr_config_dir }} has uncommitted changes; commit or move them
           before re-linking the config.
-      when: config_dir_dirty is defined and config_dir_dirty.stdout | length > 0
+      when: config_dir_dirty.stdout | default('') | length > 0
 
     - name: Remove the old config target
       ansible.builtin.file:
