@@ -9,7 +9,7 @@ hl.config({
   },
 
   decoration = {
-    rounding = 4,
+    rounding = 6,
     active_opacity = 1,
     inactive_opacity = 1,
     dim_around = 0.6,
@@ -42,8 +42,11 @@ hl.config({
 
   general = {
     border_size = 2,
-    gaps_in = 2,
-    gaps_out = 5,
+    -- Separation, not decoration: on the 5120x1440 panel these are roughly 1cm
+    -- inner and 3.5cm outer at ~110 DPI. Per-monitor overrides live with the
+    -- workspace rules; this is the value everything else deviates from.
+    gaps_in = 12,
+    gaps_out = 40,
     float_gaps = -1,
     layout = "master",
     allow_tearing = false,
