@@ -177,16 +177,24 @@ function M.screenrecord_entry(key, mode, audio, description)
   return { key = key, desc = description, action = hl.dsp.exec_cmd(cmd) }
 end
 
----Open a project through `,proj.sh`: rofi picker, then a kitty attached to that
----project's tmux session on `window`. The script spawns its own uwsm scope, so
----this must not go through bind.app_entry (which would nest uwsm scopes).
+---Open a project through `,proj.sh`: rofi picker, then that project's tmux
+---session on `window` — focusing the window the project already has, or
+---spawning one. The script spawns its own uwsm scope, so this must not go
+---through bind.app_entry (which would nest uwsm scopes).
 ---@param key string
----@param window string template window name ("nvim" | "zsh" | "run")
+---@param window string? template window name ("nvim" | "zsh" | "run"); nil uses
+---the project's own first template window
 ---@param description string
 ---@param mods string[]?
+---@param new boolean? always spawn a second window instead of focusing the
+---project's existing one
+---@param here boolean? re-point the focused window at the project instead of
+---opening another one — its tmux client is swapped for the other server's
 ---@return SubmapEntry
-function M.project_entry(key, window, description, mods)
-  return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd(",proj.sh pick " .. window) }
+function M.project_entry(key, window, description, mods, new, here)
+  local flags = (new and "-n " or "") .. (here and "--here " or "")
+  local cmd = ",proj.sh " .. flags .. "pick" .. (window and (" " .. window) or "")
+  return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd(cmd) }
 end
 
 ---Toggle a special workspace.

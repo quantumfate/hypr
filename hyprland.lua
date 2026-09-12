@@ -21,10 +21,12 @@ _G.config = {
     dev_browser = { cmd = "firefox-developer-edition", class = "firefox-developer-edition" },
     terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },
     terminal_float = { cmd = "kitty --class Kitty-Float", class = "Kitty-Float" },
-    tmux = { cmd = "kitty --class Tmux-Main tms", class = "Tmux-Main" },
-    -- Project sessions. `,proj.sh` spawns the kitty itself (and its own uwsm
-    -- scope), so binds must call it directly, never via bind.app_entry.
-    project = { cmd = ",proj.sh pick", class = "Tmux-Main" },
+    -- Project sessions — the only tmux entry point. `,proj.sh` spawns the kitty
+    -- itself (and its own uwsm scope), so binds must call it directly, never
+    -- via bind.app_entry. Each window is classed `Proj-<project>`, so the class
+    -- here is a pattern: it matches any project window, and a single project is
+    -- addressable on its own when a rule needs that.
+    project = { cmd = ",proj.sh pick", class = "Proj-[A-Za-z0-9_-]+" },
     volume_control = { cmd = "kitty --class Kitty-Wiremix wiremix", class = "Kitty-Wiremix" },
     file_manager = { cmd = "kitty --class Kitty-Yazi yazi", class = "Kitty-Yazi" },
     password_manager = { cmd = "proton-pass", class = "Proton Pass" },

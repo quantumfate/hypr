@@ -30,10 +30,14 @@ hl.bind(
 )
 hl.bind(bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T", hl.dsp.window.float())
 
+-- Closing a project terminal leaves its server running with nothing on screen
+-- pointing at it, so `,proj.sh close-window` offers to take the project down
+-- with the window (rofi prompt; declining just closes the window). Any other
+-- window closes straight away, exactly as `closewindow` did.
 hl.bind(
   config.main_mod .. " + semicolon",
-  hl.dsp.window.close("activewindow"),
-  { description = "Close focused window", submap_universal = true }
+  hl.dsp.exec_cmd(",proj.sh close-window"),
+  { description = "Close focused window (offers to kill its project)", submap_universal = true }
 )
 
 submap.tree({
@@ -43,7 +47,10 @@ submap.tree({
   entries = {
     bind.app_entry("return", config.apps.terminal, "Open the Terminal"),
     bind.app_entry("f", config.apps.terminal_float, "Open the floating Terminal", { config.main_mod }),
-    bind.app_entry("s", config.apps.tmux, "Open Kitty with Tmux Session"),
+    -- No bare-tms entry: a terminal on the default tmux socket could host any
+    -- project's session, which is exactly the cross-talk `,proj.sh` exists to
+    -- prevent. Every tmux window comes from the project picker.
+    bind.project_entry("s", "zsh", "Open a project on its shell window"),
   },
 })
 
@@ -55,10 +62,18 @@ submap.tree({
   name = "project",
   desc = "Projects",
   entries = {
-    bind.project_entry("p", "nvim", "Open a project (editor)"),
+    -- No window name: the project's own template decides which tab it lands on
+    -- (`.proj.toml` in the repo, or `[projects.<name>]` in the tms config).
+    bind.project_entry("p", nil, "Open a project (its default window)"),
     bind.project_entry("n", "nvim", "Open a project on its nvim window"),
     bind.project_entry("s", "zsh", "Open a project on its shell window"),
     bind.project_entry("r", "run", "Open a project on its run window"),
+    -- Plain open focuses the window the project already has; SHIFT says "a
+    -- second terminal on it, please".
+    bind.project_entry("p", nil, "Open a project in a new window", { config.secondary_mod }, true),
+    -- Re-point the window you are in at another project instead of opening one:
+    -- its client is dropped and the terminal attaches to the other server.
+    bind.project_entry("h", nil, "Attach another project to THIS window", nil, false, true),
     -- Teardown, in widening blast radius. `close` is the everyday one: it
     -- detaches this window's tmux client, so the window goes and the project
     -- keeps running. The two kills are behind SHIFT and ask through rofi
