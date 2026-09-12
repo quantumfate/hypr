@@ -115,6 +115,8 @@ function M.press(team, main)
     return
   end
 
+  local prev_dofus_title = hl.get_active_window().title
+
   main = main or team[#team]
 
   local existing = dofus_windows()
@@ -134,6 +136,8 @@ function M.press(team, main)
     lines[#lines + 1] = "xdotool click 1"
   end
   lines[#lines + 1] = focus_eval(common.title_prefix .. main)
+
+  lines[#lines + 1] = focus_eval(prev_dofus_title)
   lines[#lines + 1] = "hyprctl -q eval 'hl.config({ animations = { enabled = true } })'"
 
   hl.exec_cmd(table.concat(lines, "\n"))
