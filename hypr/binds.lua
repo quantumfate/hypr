@@ -32,7 +32,7 @@ hl.bind(bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T", hl.
 
 -- Closing a project terminal leaves its server running with nothing on screen
 -- pointing at it, so `,proj.sh close-window` offers to take the project down
--- with the window (rofi prompt; declining just closes the window). Any other
+-- with the window (picker prompt; declining just closes the window). Any other
 -- window closes straight away, exactly as `closewindow` did.
 hl.bind(
   config.main_mod .. " + semicolon",
@@ -71,12 +71,13 @@ submap.tree({
     -- Plain open focuses the window the project already has; SHIFT says "a
     -- second terminal on it, please".
     bind.project_entry("p", nil, "Open a project in a new window", { config.secondary_mod }, true),
-    -- Re-point the window you are in at another project instead of opening one:
-    -- its client is dropped and the terminal attaches to the other server.
+    -- Add another project to the window you are in instead of opening one: it
+    -- joins this window's server (or, if it is already running elsewhere, the
+    -- window moves to it), and `C-b C-s` switches between them.
     bind.project_entry("h", nil, "Attach another project to THIS window", nil, false, true),
     -- Teardown, in widening blast radius. `close` is the everyday one: it
     -- detaches this window's tmux client, so the window goes and the project
-    -- keeps running. The two kills are behind SHIFT and ask through rofi
+    -- keeps running. The two kills are behind SHIFT and ask in a picker
     -- first, since a keybind has no tty to prompt on.
     {
       key = "c",
@@ -86,7 +87,7 @@ submap.tree({
     {
       key = "k",
       mods = { config.secondary_mod },
-      desc = "Kill the focused project's server",
+      desc = "Kill the focused project (others on its server survive)",
       action = hl.dsp.exec_cmd(",proj.sh kill"),
     },
     {
