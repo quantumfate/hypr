@@ -158,7 +158,12 @@ submap.tree({
         dofus_launch:toggle_enable()
       end,
     },
-    { key = "a", desc = "Launch Ankama launcher", action = hl.dsp.exec_cmd("gamemoderun ankama-launcher") },
+    {
+      key = "a",
+      desc = "Launch Ankama launcher",
+      -- Focus mode blocks starting a game; a running one is never touched.
+      action = hl.dsp.exec_cmd("sh -c ',focus-guard.sh game && gamemoderun ankama-launcher'"),
+    },
     {
       key = "t",
       desc = "Open team selector",

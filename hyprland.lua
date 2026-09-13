@@ -237,7 +237,9 @@ _G.config = {
           },
           {
             workspace = "special:ankama",
-            on_created_empty = "uwsm-app -- lutris lutris:rungameid/2",
+            -- Through the gate: focus mode refuses to START a game. An already
+            -- running one is never touched (see ,focus-guard.sh).
+            on_created_empty = "sh -c ',focus-guard.sh game && uwsm-app -- lutris lutris:rungameid/2'",
           },
         },
         workspace_keys = {

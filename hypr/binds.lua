@@ -4,6 +4,26 @@ local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
 
+-- Focus mode is data + an oracle (Focus.qml); nothing enforces it until a
+-- launcher checks in. Checked here at DISPATCH time (inside the bind action,
+-- not while binds.lua builds the tree) so toggling focus needs no Hyprland
+-- reload — the next press just sees the new mode. Fails open (nil) if the
+-- shell isn't reachable: a broken IPC socket should not lock the desk down.
+---@param kind "media"|"game"
+---@return string? reason non-nil when focus mode blocks this kind
+local function focus_block_reason(kind)
+  local h = io.popen("qs -c quantumfate ipc call -- focus canLaunch " .. kind .. " 2>/dev/null")
+  if not h then
+    return nil
+  end
+  local out = (h:read("*a") or ""):gsub("%s+$", "")
+  h:close()
+  if out == "" or out == "yes" then
+    return nil
+  end
+  return (out:gsub("^no: ", ""))
+end
+
 -- === Audio controls ===
 bind.audio("RaiseVolume", ",volume.sh --inc", "Volume up", nil, true)
 bind.audio("LowerVolume", ",volume.sh --dec", "Volume down", nil, true)
@@ -142,7 +162,21 @@ submap.tree({
   name = "applications",
   desc = "Applications",
   entries = {
-    bind.app_entry("d", config.apps.media_browser, "Open Zen Browser media profile"),
+    -- Guarded, not bind.app_entry: focus mode blocks this launch (never a
+    -- session already running — there isn't one, a browser profile is just a
+    -- window), so the check has to run here instead of at build time.
+    {
+      key = "d",
+      desc = "Open Zen Browser media profile",
+      action = function()
+        local reason = focus_block_reason("media")
+        if reason then
+          notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
+          return
+        end
+        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. config.apps.media_browser.cmd))
+      end,
+    },
     bind.app_entry("b", config.apps.main_browser, "Open the Browser"),
     bind.app_entry("d", config.apps.dev_browser, "Open the dev Browser", { config.primary_mod }),
     bind.app_entry("c", config.apps.calculator, "Open Calculator"),
@@ -177,6 +211,38 @@ submap.tree({
 
 bind.focus_workspace("TAB", "e-1")
 bind.focus_workspace("TAB", "e+1", { config.secondary_mod })
+
+-- Focus mode also blocks reaching the media workspace, not just launching
+-- apps on it. bind_workspaces() below registers every workspace key
+-- generically; Hyprland keeps the FIRST registration for a given chord, so
+-- the guarded bind for "media" is registered here, ahead of it, to win.
+do
+  local specs = config.host.workspaces.workspace_specs
+  local keys = config.host.workspaces.workspace_keys
+  local media_idx
+  for i, spec in ipairs(specs) do
+    if spec.default_name == "media" then
+      media_idx = i
+      break
+    end
+  end
+  if media_idx and keys[media_idx] then
+    local ws = specs[media_idx].workspace
+    hl.bind(config.main_mod .. "+" .. keys[media_idx], function()
+      local reason = focus_block_reason("media")
+      if reason then
+        notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
+        return
+      end
+      hl.dispatch(function()
+        if hl.get_active_workspace() and hl.get_active_workspace().special then
+          hl.dsp.workspace.toggle_special()
+        end
+        return hl.dsp.focus({ workspace = ws })
+      end)
+    end, { description = "Workspace: Focus media (blocked during focus mode)" })
+  end
+end
 
 bind.bind_workspaces()
 
@@ -399,6 +465,36 @@ submap.tree({
       action = function()
         qs.call("notify", "dnd")
       end,
+    },
+    {
+      key = "f",
+      name = "focus",
+      desc = "Focus mode",
+      entries = {
+        -- Open-ended (Focus.qml: minutes <= 0). The explicit "stop" bind below
+        -- is the deliberate way out — firm semantics, no silent timeout.
+        {
+          key = "f",
+          desc = "Start focus mode",
+          action = function()
+            qs.call("focus", "start", "0")
+          end,
+        },
+        {
+          key = "s",
+          desc = "Stop focus mode",
+          action = function()
+            qs.call("focus", "stop")
+          end,
+        },
+        {
+          key = "i",
+          desc = "Focus mode status",
+          action = function()
+            qs.notify("Focus mode", "focus", "status")
+          end,
+        },
+      },
     },
   },
 })
