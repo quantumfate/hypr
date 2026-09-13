@@ -219,9 +219,19 @@ windowrule.tag_set_effects("steam-toast", {
 })
 
 -- Dofus / Ankama
+--
+-- `group = "set always"`: every Dofus client joins one group, the same
+-- precedent as the project-terminal stack above. The group's tile is what the
+-- roster addresses (hypr/services/dofus/team.lua reads it off any member's
+-- `.group`, not a standalone window list), and its groupbar is now the
+-- taskbar — LEO-221 dropped the bar's own Dofus strip because a group already
+-- names its members and marks the focused one. It also gives a future OBS
+-- scene (LEO-232) one stable tile to crop to instead of eight floating
+-- windows.
 hl.window_rule({
   match = { initial_class = "Dofus.x64" },
   workspace = "name:gaming",
+  group = "set always",
   center = true,
   content = "game",
   opacity = "1.0 override",

@@ -86,7 +86,13 @@ _G.config = {
             gaps_out = 0,
             border_size = 0,
             decorate = false,
-            layout = "monocle",
+            -- The Dofus clients are one Hyprland group (windowrules.lua), so
+            -- the workspace holds a single tile whatever the layout — dwindle
+            -- rather than monocle so it can host other gaming windows (or, per
+            -- LEO-232, integrate with streaming) without every one of them
+            -- fighting monocle's window-swap-on-focus behavior. See
+            -- windowrules.lua's Dofus/Ankama section for the group rule.
+            layout = "dwindle",
             default_name = "gaming",
             monitor = "primary",
           },
@@ -188,8 +194,12 @@ _G.config = {
             gaps_out = 0,
             border_size = 0,
             decorate = false,
+            -- Dwindle, not monocle: the Dofus clients are one Hyprland group
+            -- (windowrules.lua), so this holds a single tile either way — but
+            -- dwindle leaves room to add other gaming windows and integrates
+            -- with the planned streaming setup (LEO-232), unlike monocle.
             default_name = "gaming",
-            layout = "monocle",
+            layout = "dwindle",
             monitor = "primary",
           },
           {

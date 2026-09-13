@@ -208,8 +208,8 @@ submap.tree({
   },
 })
 
--- MOD+H/L move window focus, but on a Dofus window they walk the team instead
--- (spilling into stray Dofus windows at the ends — see dofus.team.nav).
+-- MOD+H/L move window focus, but on a Dofus window they cycle the group
+-- instead (a native group-tab step — see dofus.team.nav).
 local dofus_team = require("hypr.services.dofus.team")
 local function focus_or_dofus(action, reversed)
   return function()
