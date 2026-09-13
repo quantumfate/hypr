@@ -129,3 +129,123 @@ t.describe("dofus.team", function()
     t.eq(0, #hl.exec_cmds)
   end)
 end)
+
+---Grouped-fullscreen carry-along (LEO-243): the window.active guard hands a
+---rendered sibling's fullscreen/maximize onto the newly focused member.
+---`fullscreen_client` mirrors the gaming tag's style (client fullscreen+max
+---whenever an internal mode is active).
+---@param members { title: string, fullscreen: integer }[] in group order
+---@return HL.Group
+local function set_fullscreen_group(members)
+  local list = {}
+  for _, m in ipairs(members) do
+    list[#list + 1] = {
+      class = "Dofus.x64",
+      title = m.title,
+      address = "addr_" .. m.title,
+      fullscreen = m.fullscreen,
+      fullscreen_client = m.fullscreen ~= 0 and 3 or 0,
+    }
+  end
+  local group = { members = (#list == 1) and list[1] or list }
+  for _, w in ipairs(list) do
+    w.group = group
+  end
+  return group
+end
+
+---Invoke every window.active handler the stub recorded (team registers one).
+---@param w any
+local function active_event(w)
+  local handlers = hl.event_handlers["window.active"]
+  assert(handlers and #handlers > 0, "expected a window.active handler to be registered")
+  for _, cb in ipairs(handlers) do
+    cb(w)
+  end
+end
+
+t.describe("dofus.team fullscreen follow-along (LEO-243)", function()
+  t.it("registers a window.active handler at require time", function()
+    t.ok(hl.event_handlers["window.active"], "expected a window.active handler")
+  end)
+
+  t.it("carries a sibling's maximized state onto the focused member (unset old, set new)", function()
+    reset()
+    local group = set_fullscreen_group({
+      { title = "Dofus a", fullscreen = 2 },
+      { title = "Dofus b", fullscreen = 0 },
+    })
+    active_event(group.members[2])
+
+    t.eq(2, #hl.dispatched)
+    t.eq("dsp.window.fullscreen_state", hl.dispatched[1].name)
+    t.eq("unset", hl.dispatched[1].args[1].action)
+    t.eq(0, hl.dispatched[1].args[1].internal)
+    t.eq(0, hl.dispatched[1].args[1].client)
+    t.eq("address:addr_Dofus a", hl.dispatched[1].args[1].window)
+
+    t.eq("set", hl.dispatched[2].args[1].action)
+    t.eq(2, hl.dispatched[2].args[1].internal)
+    t.eq(3, hl.dispatched[2].args[1].client)
+    t.eq("address:addr_Dofus b", hl.dispatched[2].args[1].window)
+  end)
+
+  t.it("carries a plain fullscreen (mode 1) and fullscreen+maximized (mode 3) as-is", function()
+    reset()
+    local group = set_fullscreen_group({
+      { title = "Dofus a", fullscreen = 1 },
+      { title = "Dofus b", fullscreen = 0 },
+    })
+    active_event(group.members[2])
+
+    t.eq(2, #hl.dispatched)
+    t.eq("address:addr_Dofus a", hl.dispatched[1].args[1].window)
+    t.eq(1, hl.dispatched[2].args[1].internal)
+    t.eq(3, hl.dispatched[2].args[1].client)
+    t.eq("address:addr_Dofus b", hl.dispatched[2].args[1].window)
+
+    -- Same carry for a both (mode 3) rendered sibling.
+    reset()
+    group = set_fullscreen_group({
+      { title = "Dofus a", fullscreen = 3 },
+      { title = "Dofus b", fullscreen = 0 },
+    })
+    active_event(group.members[2])
+    t.eq("address:addr_Dofus a", hl.dispatched[1].args[1].window)
+    t.eq(3, hl.dispatched[2].args[1].internal)
+    t.eq(3, hl.dispatched[2].args[1].client)
+  end)
+
+  t.it("is a no-op when no sibling carries a rendered state", function()
+    reset()
+    local group = set_fullscreen_group({
+      { title = "Dofus a", fullscreen = 0 },
+      { title = "Dofus b", fullscreen = 0 },
+    })
+    active_event(group.members[2])
+    t.eq(0, #hl.dispatched)
+  end)
+
+  t.it("is a no-op when the focused member is itself the rendered one", function()
+    reset()
+    local group = set_fullscreen_group({
+      { title = "Dofus a", fullscreen = 2 },
+      { title = "Dofus b", fullscreen = 0 },
+    })
+    active_event(group.members[1])
+    t.eq(0, #hl.dispatched)
+  end)
+
+  t.it("is a no-op in a single-member group (bare HL.Group.members)", function()
+    reset()
+    local group = set_fullscreen_group({ { title = "Dofus solo", fullscreen = 2 } })
+    active_event(group.members)
+    t.eq(0, #hl.dispatched)
+  end)
+
+  t.it("ignores focus on non-Dofus windows", function()
+    reset()
+    active_event({ class = "some-other-app", title = "x", group = { members = {} } })
+    t.eq(0, #hl.dispatched)
+  end)
+end)

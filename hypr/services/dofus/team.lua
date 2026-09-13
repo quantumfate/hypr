@@ -65,6 +65,51 @@ local function dofus_windows()
   return existing
 end
 
+---The group member that currently carries a rendered state (fullscreen or
+---maximized), if any. `fullscreen` is the internal mode bitmask (0 none, 1
+---fullscreen, 2 maximized, 3 both). Grouped-fullscreen is where Hyprland has
+---historically been sloppy, so the scan reads every member rather than trusting
+---the "one fullscreen per workspace" invariant. `exclude_address` skips the
+---member that just took focus — that one is the target, not the source.
+---@param group HL.Group
+---@param exclude_address string?
+---@return HL.Window?
+local function rendered_member(group, exclude_address)
+  for _, w in ipairs(group_members(group)) do
+    local fs = w.fullscreen
+    if fs ~= nil and fs ~= 0 and w.address ~= exclude_address then
+      return w
+    end
+  end
+  return nil
+end
+
+---Carry a rendered sibling's fullscreen/maximize state onto `w`: unset the old
+---holder (it falls back to its tab), then set the exact internal+client pair on
+---`w`. Called before the compositor renders the focus change, so the visible
+---window always matches the focused member instead of leaving the member hidden
+---behind a sibling's fullscreen (LEO-243, hyprwm#11844).
+---@param w HL.Window the newly active Dofus member
+---@param group HL.Group
+local function sync_fullscreen(w, group)
+  local src = rendered_member(group, w.address)
+  if not src then
+    return
+  end
+  hl.dispatch(hl.dsp.window.fullscreen_state({
+    action = "unset",
+    internal = 0,
+    client = 0,
+    window = "address:" .. src.address,
+  }))
+  hl.dispatch(hl.dsp.window.fullscreen_state({
+    action = "set",
+    internal = src.fullscreen,
+    client = src.fullscreen_client or src.fullscreen,
+    window = "address:" .. w.address,
+  }))
+end
+
 ---Team character names -> existing window titles, kept in turn order.
 ---@param team string[]
 ---@param existing table<string, boolean>
@@ -184,5 +229,17 @@ end
 function M.double_click_stop()
   hl.exec_cmd("pkill -f " .. DOUBLE_CLICK_TAG)
 end
+
+-- A Dofus member just got focus (tab cycle, the F-key walk, the press macro, a
+-- click on the groupbar): if a sibling holds fullscreen/maximize, hand that
+-- state to the newly focused member so the visible window always matches the
+-- focused tab. Without this, Hyprland can focus a member that stays hidden
+-- behind a sibling's fullscreen (hyprwm#11844).
+hl.on("window.active", function(w)
+  if not w or w.class ~= DOFUS_CLASS or not w.group then
+    return
+  end
+  sync_fullscreen(w, w.group)
+end)
 
 return M
