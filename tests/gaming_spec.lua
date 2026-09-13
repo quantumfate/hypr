@@ -23,9 +23,18 @@ local function fresh()
   stub.get_windows = function()
     return {}
   end
+  package.loaded["hypr.lib.hypr"] = nil
   package.loaded["hypr.events.gaming"] = nil
   require("hypr.events.gaming")
   return stub
+end
+
+---Run every pending oneshot timer (the merge is deferred for a settle delay,
+---so the spec has to fire it explicitly to exercise the scheduling).
+local function settle(stub)
+  for _, handle in ipairs(stub.timers) do
+    handle.cb()
+  end
 end
 
 local function emit(stub, event, w)
@@ -125,5 +134,92 @@ t.describe("gaming scene media browser", function()
 
     emit(stub, "window.close", { address = "0xb1" })
     t.eq(0, count_dispatches(stub, "dsp.window.close"), "user closed the browser -- respected")
+  end)
+end)
+
+---A live window as `hl.get_windows()` returns it after the settle delay.
+local function dofus_live(addr, at, size)
+  return { address = addr, class = "Dofus.x64", at = at, size = size }
+end
+
+t.describe("gaming scene group merge", function()
+  t.it("folds a second Dofus window into the existing group", function()
+    local stub = fresh()
+    emit(stub, "window.open", dofus_on("0xa1"))
+    emit(stub, "window.open", dofus_on("0xa2"))
+
+    local a1 = dofus_live("0xa1", { x = 0, y = 0 }, { x = 800, y = 600 })
+    local a2 = dofus_live("0xa2", { x = 800, y = 0 }, { x = 800, y = 600 })
+    stub.get_windows = function()
+      return { a1, a2 }
+    end
+
+    settle(stub)
+
+    local merge = last_dispatch_named(stub, "dsp.window.move")
+    t.ok(merge, "expected a window.move dispatch")
+    t.eq("l", merge.args[1].into_group, "the existing group sits to the left of the new window")
+    t.eq("address:0xa2", merge.args[1].window, "aims the merge at the new window by address")
+  end)
+
+  t.it("skips the merge when the new window is already a group member", function()
+    local stub = fresh()
+    emit(stub, "window.open", dofus_on("0xa1"))
+    emit(stub, "window.open", dofus_on("0xa2"))
+
+    local a1 = dofus_live("0xa1", { x = 0, y = 0 }, { x = 800, y = 600 })
+    local a2 = dofus_live("0xa2", { x = 800, y = 0 }, { x = 800, y = 600 })
+    a2.group = { members = { a1, a2 } }
+    stub.get_windows = function()
+      return { a1, a2 }
+    end
+
+    settle(stub)
+    t.eq(0, count_dispatches(stub, "dsp.window.move"), "already grouped -- nothing to merge")
+  end)
+
+  t.it("does not schedule a merge for the first Dofus window", function()
+    local stub = fresh()
+    emit(stub, "window.open", dofus_on("0xa1"))
+    t.eq(0, #stub.timers, "no existing member to aim at")
+  end)
+
+  t.it("skips the merge if the existing member closed before settling", function()
+    local stub = fresh()
+    emit(stub, "window.open", dofus_on("0xa1"))
+    emit(stub, "window.open", dofus_on("0xa2"))
+
+    -- The group's only member closed within the settle window; only the new
+    -- window is still alive when the merge runs.
+    stub.get_windows = function()
+      return { dofus_live("0xa2", { x = 800, y = 0 }, { x = 800, y = 600 }) }
+    end
+
+    settle(stub)
+    t.eq(0, count_dispatches(stub, "dsp.window.move"), "no live member to merge into")
+  end)
+
+  t.it("aims at the nearest existing member for the direction", function()
+    local stub = fresh()
+    emit(stub, "window.open", dofus_on("0xa1"))
+    emit(stub, "window.open", dofus_on("0xa2"))
+    emit(stub, "window.open", dofus_on("0xa3"))
+
+    local a1 = dofus_live("0xa1", { x = 0, y = 0 }, { x = 800, y = 600 }) -- center (400,  300)
+    local a2 = dofus_live("0xa2", { x = 800, y = 0 }, { x = 800, y = 600 }) -- center (1200, 300)
+    local a3 = dofus_live("0xa3", { x = 1200, y = 600 }, { x = 800, y = 600 }) -- center (1600, 900)
+    stub.get_windows = function()
+      return { a1, a2, a3 }
+    end
+
+    settle(stub)
+
+    -- The last merge (a3's) folds into whichever member is nearest. a2 is
+    -- closest (721 < 1341); picking the far member a1 instead would resolve
+    -- to "l", so this pins the nearest-member choice.
+    local merge = last_dispatch_named(stub, "dsp.window.move")
+    t.ok(merge, "expected a window.move dispatch")
+    t.eq("u", merge.args[1].into_group, "the nearest member sits above the new window")
+    t.eq("address:0xa3", merge.args[1].window)
   end)
 end)
