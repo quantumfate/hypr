@@ -14,6 +14,15 @@ hl.layer_rule({
   ignore_alpha = 0.1,
 })
 
+-- 0.55, not 0.6, on every modal below.
+--
+-- A threshold has to sit between two moving numbers: below the lowest alpha any
+-- card can paint, and above the backdrop's. Focus modes made the lower bound
+-- real — `media` paints 0.62, and against 0.6 that is a 0.02 margin, close
+-- enough that a renderer rounding difference would silently drop the frost.
+-- The scrim is 0.5, so 0.55 keeps the dim passing through unblurred while
+-- giving the thinnest mood 0.07 of room.
+--
 -- Cheatsheet: fullscreen overlay (dim backdrop + solid-ish card). Pop in with a
 -- subtle zoom (reads better than a flat fade for a centered modal), and frost
 -- only the card: ignore_alpha above the backdrop's alpha (~0.5) so the thin dim
@@ -22,7 +31,7 @@ hl.layer_rule({
   match = { namespace = "quickshell-cheatsheet" },
   animation = "popin 92%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 -- Passive peek cheatsheet: non-interactive contextual panel (no dim backdrop,
@@ -41,7 +50,7 @@ hl.layer_rule({
   match = { namespace = "quickshell-window-rename" },
   animation = "popin 92%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 -- Team selector: small top-right panel, no dim backdrop. Frost the card,
@@ -82,21 +91,21 @@ hl.layer_rule({
   match = { namespace = "quickshell-notifications" },
   animation = "slidefade 20%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 hl.layer_rule({
   match = { namespace = "quickshell-obsidian-create" },
   animation = "popin 92%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 hl.layer_rule({
   match = { namespace = "quickshell-class-assigner" },
   animation = "popin 92%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 -- Hover panel off the bar: same material as the tooltips it sits beside.
@@ -112,7 +121,7 @@ hl.layer_rule({
   match = { namespace = "quickshell-toasts" },
   animation = "slidefade 20%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 -- The workspace switcher, the projects dashboard and the calendar. Thresholds
@@ -121,7 +130,7 @@ hl.layer_rule({
   match = { namespace = "quickshell-workspace-switcher" },
   animation = "popin 92%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 hl.layer_rule({
@@ -144,7 +153,7 @@ hl.layer_rule({
   match = { namespace = "quickshell-control" },
   animation = "popin 92%",
   blur = true,
-  ignore_alpha = 0.6,
+  ignore_alpha = 0.55,
 })
 
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
