@@ -18,20 +18,30 @@ t.describe("geometry.resolve", function()
     t.eq(8, specs[1].gaps_out)
   end)
 
-  t.it("leaves a workspace's explicit gaps_out = 0 alone -- the gaming workspace's edge-to-edge rule wins", function()
+  t.it("the gaming workspace inherits profile gaps once it stops hardcoding 0 -- LEO-190", function()
     local gaming = {
       workspace = "gaming",
       monitor = "primary",
-      gaps_in = 0,
-      gaps_out = 0,
       border_size = 0,
       decorate = false,
     }
     geometry.resolve({ gaming }, aliases, { primary = { gaps_in = 4, gaps_out = 8 } })
-    t.eq(0, gaming.gaps_in)
-    t.eq(0, gaming.gaps_out)
+    t.eq(4, gaming.gaps_in)
+    t.eq(8, gaming.gaps_out)
     t.eq(0, gaming.border_size)
     t.eq(false, gaming.decorate)
+  end)
+
+  t.it("a spec that does hardcode gaps_out is still never overridden", function()
+    local edge_to_edge = {
+      workspace = "gaming",
+      monitor = "primary",
+      gaps_in = 0,
+      gaps_out = 0,
+    }
+    geometry.resolve({ edge_to_edge }, aliases, { primary = { gaps_in = 4, gaps_out = 8 } })
+    t.eq(0, edge_to_edge.gaps_in)
+    t.eq(0, edge_to_edge.gaps_out)
   end)
 
   t.it("preserves a CssGap table's shape instead of flattening it to one number", function()

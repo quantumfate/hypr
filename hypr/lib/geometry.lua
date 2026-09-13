@@ -15,8 +15,11 @@ local M = {}
 ---`gaps_by_role` (keyed the same "primary"/"secondary" way). Mutates and
 ---returns `workspace_specs`.
 ---
----A spec that already set a gap field (the gaming workspace's explicit
----gaps_out = 0) is never touched — "asked for no gaps" wins over any profile.
+---A spec that already set a gap field keeps it — what it asked for wins over
+---any profile. The gaming workspace used to hardcode gaps_out = 0 to sit
+---edge-to-edge (LEO-190); it now leaves the fields unset and inherits the
+---profile like every other named workspace, keeping only its border/decorate
+---preferences explicit.
 ---@param workspace_specs HL.WorkspaceRuleSpec[]
 ---@param monitor_aliases table<string, string> {primary=..., secondary=...}
 ---@param gaps_by_role table<string, table>? {primary={gaps_in=,gaps_out=}, secondary={...}}
