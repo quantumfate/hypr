@@ -16,7 +16,6 @@ hypr_stable_conflicts:
   - hyprland-guiutils
   - hyprlock
   - hypridle
-  - hyprpaper
   - hyprsunset
   - hyprpicker
   - xdg-desktop-portal-hyprland
@@ -36,7 +35,6 @@ hypr_core_packages:
   - hyprland                    # the compositor
   - hypridle                    # hypridle.conf (idle → lock/dpms)
   - hyprlock                    # hyprlock.conf / hyprlock-laptop.conf
-  - hyprpaper                   # hyprpaper.conf (wallpaper)
   - hyprsunset                  # hyprsunset.conf (night light)
   - hyprpicker                  # color-pick bind
   - hyprpolkitagent             # polkit agent (session user unit)
@@ -47,7 +45,6 @@ hypr_git_packages:
   - hyprland-qt-support-git
   - hyprlock-git
   - hypridle-git
-  - hyprpaper-git
   - hyprsunset-git
   - hyprpicker-git
   - xdg-desktop-portal-hyprland-git
@@ -100,4 +97,3 @@ hypr_enable_units: >-
 # Custom units shipped in session/systemd (deployed then enabled).
 hypr_custom_units:
   - hypridle.service
-  - hyprpaper.service
