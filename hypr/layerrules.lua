@@ -53,6 +53,23 @@ hl.layer_rule({
   ignore_alpha = 0.1,
 })
 
+-- The bar. Its own ground is fully transparent and only the islands are painted
+-- (see modules/bar/Island.qml), so ignore_alpha sits just under the island
+-- alpha: the glass gets frosted, the empty space between islands stays true
+-- wallpaper rather than a blurred smear across the whole top edge.
+hl.layer_rule({
+  match = { namespace = "quickshell-bar" },
+  blur = true,
+  ignore_alpha = 0.55,
+})
+
+-- Tooltips hang off the bar and should read as the same material.
+hl.layer_rule({
+  match = { namespace = "quickshell-tip" },
+  blur = true,
+  ignore_alpha = 0.4,
+})
+
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })
