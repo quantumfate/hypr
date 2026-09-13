@@ -70,6 +70,51 @@ hl.layer_rule({
   ignore_alpha = 0.4,
 })
 
+-- Surfaces that had no rule and so fell through to the fade-only fallback,
+-- never frosted, while every other card in the shell was. Alphas come from
+-- Theme.surfaceAlpha in the quickshell repo — the threshold must stay under the
+-- card's alpha or it silently stops being glass.
+--
+--   notification centre / obsidian / class assigner : modal, 0.97
+--   syspanel                                        : peek,  0.85
+--   toasts                                          : modal, 0.97
+hl.layer_rule({
+  match = { namespace = "quickshell-notifications" },
+  animation = "slidefade 20%",
+  blur = true,
+  ignore_alpha = 0.6,
+})
+
+hl.layer_rule({
+  match = { namespace = "quickshell-obsidian-create" },
+  animation = "popin 92%",
+  blur = true,
+  ignore_alpha = 0.6,
+})
+
+hl.layer_rule({
+  match = { namespace = "quickshell-class-assigner" },
+  animation = "popin 92%",
+  blur = true,
+  ignore_alpha = 0.6,
+})
+
+-- Hover panel off the bar: same material as the tooltips it sits beside.
+hl.layer_rule({
+  match = { namespace = "quickshell-syspanel" },
+  animation = "slidefade 10%",
+  blur = true,
+  ignore_alpha = 0.4,
+})
+
+-- Toasts arrive unbidden, so they slide rather than pop.
+hl.layer_rule({
+  match = { namespace = "quickshell-toasts" },
+  animation = "slidefade 20%",
+  blur = true,
+  ignore_alpha = 0.6,
+})
+
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })

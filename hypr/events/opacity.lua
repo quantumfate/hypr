@@ -1,20 +1,19 @@
 local Store = require("hypr.lib.store")
 local theme = Store.define("theme")
 
--- The desk-wide dial: 1.0 is presentation mode (everything opaque, no matter
--- the role below). Below 1.0, each transparent role blends toward its own
--- floor instead of being multiplied by it, so the dial always reaches full
--- opacity at 1.0 and only ever pulls roles *down* from there.
+-- The desk-wide dial: 0 is presentation mode (everything opaque, whatever the
+-- roles below say), 1 gives each role the transparency it was designed with.
+-- Named for what you turn up, because a dial called `opacity` that you turn
+-- DOWN to get transparency reads backwards every time.
 ---@return number
 local function dial()
-  return theme:get("opacity") or 1.0
+  return theme:get("transparency") or 1.0
 end
 
----@param floor number opacity for this role with the dial fully open (0)
+---@param floor number this role's opacity with the dial fully up
 ---@return number
 local function role_opacity(floor)
-  local d = dial()
-  return floor + (1 - floor) * d
+  return 1 - (1 - floor) * dial()
 end
 
 -- Class -> role, opacity floor. Only roles that get transparency need an
