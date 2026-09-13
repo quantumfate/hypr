@@ -379,6 +379,16 @@ bind.exec("p", "hyprpicker -a -n", {
   description = "Execute hyprpicker to extract hex code",
 })
 
+bind.exec("comma", "qs -c quantumfate ipc call control toggle", {
+  description = "Control centre (theme, wallpaper, sound, focus)",
+  submap_universal = true,
+})
+
+bind.exec("w", "qs -c quantumfate ipc call workspaceSwitcher toggle", {
+  description = "Pick a workspace",
+  mods = { config.main_mod, config.secondary_mod },
+})
+
 bind.exec("slash", "qs -c quantumfate ipc call cheatsheet toggle", {
   description = "Show keybind cheatsheet",
   submap_universal = true,

@@ -1,8 +1,15 @@
+-- Splits are deterministic on purpose.
+--
+-- smart_split picked the direction from which quadrant of the tile the cursor
+-- was in, so the same action split sideways or downwards depending on where the
+-- mouse happened to rest — which is how a 5120x1440 panel ends up holding two
+-- very wide, very short windows. force_split 2 puts every new window to the
+-- right instead, and preserve_split keeps a split where it was put.
 hl.config({
   dwindle = {
-    force_split = 1,
-    preserve_split = false, -- side by side on extra width monitor
-    smart_split = true,
+    force_split = 2,
+    preserve_split = true,
+    smart_split = false,
     smart_resizing = true,
     permanent_direction_override = false,
     split_width_multiplier = 0.5,

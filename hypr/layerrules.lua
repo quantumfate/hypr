@@ -138,6 +138,15 @@ hl.layer_rule({
   ignore_alpha = 0.4,
 })
 
+-- Control centre: the one panel over theme, appearance, wallpaper, sound and
+-- focus. Modal alpha (0.97) in Theme.surfaceAlpha.
+hl.layer_rule({
+  match = { namespace = "quickshell-control" },
+  animation = "popin 92%",
+  blur = true,
+  ignore_alpha = 0.6,
+})
+
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })

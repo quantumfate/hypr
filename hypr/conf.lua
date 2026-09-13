@@ -43,16 +43,6 @@ hl.config({
     },
   },
 
-  -- Splits are deterministic on purpose. Left alone, dwindle picks an
-  -- orientation from the tile's aspect, so on a 5120x1440 panel the second
-  -- window sometimes landed beside and sometimes below — two very wide, very
-  -- short windows, which is unusable. force_split pins new windows to the right
-  -- and preserve_split keeps a split where it was put.
-  dwindle = {
-    force_split = 2,
-    preserve_split = true,
-  },
-
   general = {
     border_size = 2,
     -- Separation, not decoration: on the 5120x1440 panel these are roughly 1cm
