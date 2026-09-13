@@ -147,6 +147,16 @@ hl.layer_rule({
   ignore_alpha = 0.4,
 })
 
+-- Mood centre (LEO-237): the policy/configuration panel behind the bar's mood
+-- pill. Same material as the calendar; its alpha is the active mood's
+-- surface_alpha (0.62–0.96), so 0.4 stays clear of the thinnest (media).
+hl.layer_rule({
+  match = { namespace = "quickshell-mood" },
+  animation = "slidefade 20%",
+  blur = true,
+  ignore_alpha = 0.4,
+})
+
 -- Control centre: the one panel over theme, appearance, wallpaper, sound and
 -- focus. Modal alpha (0.97) in Theme.surfaceAlpha.
 hl.layer_rule({
