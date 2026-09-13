@@ -24,6 +24,25 @@ local function focus_block_reason(kind)
   return (out:gsub("^no: ", ""))
 end
 
+-- Scene reachability: the mood can name a workspace scene "blocked", which
+-- prevents ENTERING it (a session already running is never torn down — same
+-- firm semantics the launcher gate uses). Checked the same way: dispatch time,
+-- fails open.
+---@param scene string
+---@return string? reason non-nil when the scene is blocked
+local function scene_block_reason(scene)
+  local h = io.popen("qs -c quantumfate ipc call -- focus scene " .. scene .. " 2>/dev/null")
+  if not h then
+    return nil
+  end
+  local out = (h:read("*a") or ""):gsub("%s+$", "")
+  h:close()
+  if out == "blocked" then
+    return "the " .. scene .. " scene is blocked while this mood runs"
+  end
+  return nil
+end
+
 -- === Audio controls ===
 bind.audio("RaiseVolume", ",volume.sh --inc", "Volume up", nil, true)
 bind.audio("LowerVolume", ",volume.sh --dec", "Volume down", nil, true)
@@ -169,7 +188,7 @@ submap.tree({
       key = "d",
       desc = "Open Zen Browser media profile",
       action = function()
-        local reason = focus_block_reason("media")
+        local reason = focus_block_reason("media") or scene_block_reason("media")
         if reason then
           notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
           return
@@ -229,7 +248,7 @@ do
   if media_idx and keys[media_idx] then
     local ws = specs[media_idx].workspace
     hl.bind(config.main_mod .. "+" .. keys[media_idx], function()
-      local reason = focus_block_reason("media")
+      local reason = focus_block_reason("media") or scene_block_reason("media")
       if reason then
         notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
         return
@@ -485,13 +504,15 @@ submap.tree({
       name = "focus",
       desc = "Focus mode",
       entries = {
-        -- Open-ended (Focus.qml: minutes <= 0). The explicit "stop" bind below
-        -- is the deliberate way out — firm semantics, no silent timeout.
+        -- Open-ended deep work (Focus.qml `set deep 0`). The explicit "stop"
+        -- bind below is the deliberate way out — firm semantics, no silent
+        -- timeout. The mood centre is the primary picker; this is the
+        -- keyboard's quick entry into the deep-work mood.
         {
           key = "f",
-          desc = "Start focus mode",
+          desc = "Start deep work",
           action = function()
-            qs.call("focus", "start", "0")
+            qs.call("focus", "set", "deep", "0")
           end,
         },
         {
