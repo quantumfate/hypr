@@ -1,3 +1,48 @@
+local Store = require("hypr.lib.store")
+local theme = Store.define("theme")
+
+-- The desk-wide dial: 1.0 is presentation mode (everything opaque, no matter
+-- the role below). Below 1.0, each transparent role blends toward its own
+-- floor instead of being multiplied by it, so the dial always reaches full
+-- opacity at 1.0 and only ever pulls roles *down* from there.
+---@return number
+local function dial()
+  return theme:get("opacity") or 1.0
+end
+
+---@param floor number opacity for this role with the dial fully open (0)
+---@return number
+local function role_opacity(floor)
+  local d = dial()
+  return floor + (1 - floor) * d
+end
+
+-- Class -> role, opacity floor. Only roles that get transparency need an
+-- entry; anything absent here is left at conf.lua's opaque default, which is
+-- exactly right for browsers, media players, games and image viewers — none
+-- of them may show the desktop through a frame of decoded pixels.
+--
+-- Terminals/editor sit closest to the desktop (mostly text, lots of empty
+-- cell background) so they read fine thinned out a little; file/process
+-- managers are text-and-chrome too and get the same treatment.
+local roles = {
+  terminal = { class = config.apps.terminal.class, floor = 0.94 },
+  terminal_float = { class = config.apps.terminal_float.class, floor = 0.94 },
+  project = { class = config.apps.project.class, floor = 0.94 },
+  file_manager = { class = config.apps.file_manager.class, floor = 0.93 },
+  volume_control = { class = config.apps.volume_control.class, floor = 0.93 },
+  bluetooth_manager = { class = config.apps.bluetooth_manager.class, floor = 0.93 },
+  package_manager_tui = { class = config.apps.package_manager_tui.class, floor = 0.93 },
+}
+
+for name, role in pairs(roles) do
+  hl.window_rule({
+    name = "role-opacity-" .. name,
+    match = { class = "(" .. role.class .. ")" },
+    opacity = tostring(role_opacity(role.floor)) .. " override",
+  })
+end
+
 local opaque_media_browser = hl.window_rule({
   name = "opaque-media-browser",
   enabled = false,

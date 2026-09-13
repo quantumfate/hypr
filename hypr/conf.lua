@@ -10,6 +10,9 @@ hl.config({
 
   decoration = {
     rounding = 6,
+    -- Opaque by default: only the roles that opacity.lua's role table lists
+    -- (terminals, file/process managers) get thinned, via per-class "override"
+    -- rules — anything that renders images or video stays at this 1.
     active_opacity = 1,
     inactive_opacity = 1,
     dim_around = 0.6,
