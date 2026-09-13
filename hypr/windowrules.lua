@@ -156,6 +156,22 @@ windowrule.tag_set_effects("media-browser", {
   static = { workspace = "name:media" },
 })
 
+-- The gaming scene's own zen instance (apps.media_scene, LEO-230): pinned to
+-- name:gaming so it lands beside the Dofus group wherever it is spawned, and
+-- `group = "deny"` so it can never be toggled into a group. The Dofus group is
+-- locked already (its rule rejects non-Dofus classes), but deny makes the
+-- reservation explicit for this window too. The browser opens automatically
+-- with the first Dofus window and closes with the last — see
+-- hypr/events/gaming.lua, which is why there is no bar-side browser for this
+-- scene.
+windowrule.tag_props({
+  { initial_class = "(" .. apps.media_scene.class .. ")" },
+}, "+gaming-media")
+
+windowrule.tag_set_effects("gaming-media", {
+  static = { workspace = "name:gaming", group = "deny" },
+})
+
 local not_eso_launcher = { class = "steam_app_default", title = "[^(Zenimax Online Studios Launcher)]" }
 local eso_launcher = { class = "steam_app_default", title = "Zenimax Online Studios Launcher" }
 local arbitrary_steam_app = { class = [[steam_app_\d+]] }
@@ -220,18 +236,21 @@ windowrule.tag_set_effects("steam-toast", {
 
 -- Dofus / Ankama
 --
--- `group = "set always"`: every Dofus client joins one group, the same
--- precedent as the project-terminal stack above. The group's tile is what the
--- roster addresses (hypr/services/dofus/team.lua reads it off any member's
--- `.group`, not a standalone window list), and its groupbar is now the
--- taskbar — LEO-221 dropped the bar's own Dofus strip because a group already
--- names its members and marks the focused one. It also gives a future OBS
--- scene (LEO-232) one stable tile to crop to instead of eight floating
--- windows.
+-- `group = "set always lock always invade"`: every Dofus client joins one
+-- group (set), the group is locked so no foreign window can ever be merged in
+-- (lock), and later Dofus clients still force themselves in despite the lock
+-- (invade). A locked group rejects members from outside, but a future OBS
+-- scene (LEO-232) still gets one stable tile to crop to instead of eight
+-- floating windows — LEO-234's guard: non-Dofus windows open beside the group,
+-- never inside it. The group's tile is what the roster addresses
+-- (hypr/services/dofus/team.lua reads it off any member's `.group`, not a
+-- standalone window list), and its groupbar is now the taskbar — LEO-221
+-- dropped the bar's own Dofus strip because a group already names its members
+-- and marks the focused one.
 hl.window_rule({
   match = { initial_class = "Dofus.x64" },
   workspace = "name:gaming",
-  group = "set always",
+  group = "set always lock always invade",
   center = true,
   content = "game",
   opacity = "1.0 override",
