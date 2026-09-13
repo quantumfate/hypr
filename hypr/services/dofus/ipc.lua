@@ -1,5 +1,5 @@
 -- Dofus-specific view of the Quickshell IPC surface (DofusState -> target
--- "dofus", DofusTeam -> target "dofusPanel"). Commands go over IPC; state goes
+-- "dofus", the team panel -> target "teamSelector"). Commands go over IPC; state goes
 -- through the shared team.json store. Built on the generic hypr/lib/qs helper.
 local qs = require("hypr.lib.qs")
 
@@ -16,7 +16,7 @@ end
 ---Control the team panel window. cmd = "show" | "hide" | "toggle".
 ---@param cmd string
 function M.panel(cmd)
-  qs.call("dofusPanel", cmd)
+  qs.call("teamSelector", cmd)
 end
 
 ---Ask the UI to re-read team.json from disk now.

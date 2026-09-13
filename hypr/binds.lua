@@ -408,7 +408,11 @@ submap.tree({
       key = "p",
       desc = "Toggle team panel",
       action = function()
-        qs.call("dofusPanel", "toggle")
+        -- teamSelector, not dofusPanel: the latter toggled the Dofus taskbar
+        -- strip in the bar, and the bar no longer carries one — groups show
+        -- what a workspace holds, so a taskbar duplicated it. The team panel
+        -- itself is a separate surface and is what this key always meant.
+        qs.call("teamSelector", "toggle")
       end,
     },
     {
