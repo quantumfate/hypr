@@ -187,7 +187,15 @@ windowrule.tag_props({
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
-  static = { workspace = "name:gaming", suppress_event = "activate activatefocus", fullscreen_state = "2 3" },
+  -- `group = "barred"` is the other half of the Dofus group guard: auto_group
+  -- is on globally, so without it a game opening while the group is focused
+  -- would be swallowed into the Dofus tab strip.
+  static = {
+    workspace = "name:gaming",
+    suppress_event = "activate activatefocus",
+    fullscreen_state = "2 3",
+    group = "barred",
+  },
 })
 
 windowrule.tag_props({
@@ -236,10 +244,15 @@ windowrule.tag_set_effects("steam-toast", {
 
 -- Dofus / Ankama
 --
--- `group = "set always lock always invade"`: every Dofus client joins one
--- group (set), the group is locked so no foreign window can ever be merged in
--- (lock), and later Dofus clients still force themselves in despite the lock
--- (invade). A locked group rejects members from outside, but a future OBS
+-- `group = "set always"`: every Dofus client joins one group, every time.
+-- The guard against foreign windows is NOT `lock` here — `lock always invade`
+-- was tried (LEO-234) and live-regressed the group: the lock also rejects
+-- later Dofus clients, and `invade` did not reliably override it, so a third
+-- client landed in a group of its own. The guard is instead enforced from the
+-- other side: every window that could land on name:gaming is denied or barred
+-- by its own rule (the scene browser is `deny`, the gaming tag and the Ankama
+-- overlay are `barred`), which keeps the group pure without touching the
+-- Dofus clients themselves. A future OBS
 -- scene (LEO-232) still gets one stable tile to crop to instead of eight
 -- floating windows — LEO-234's guard: non-Dofus windows open beside the group,
 -- never inside it. The group's tile is what the roster addresses
@@ -250,7 +263,7 @@ windowrule.tag_set_effects("steam-toast", {
 hl.window_rule({
   match = { initial_class = "Dofus.x64" },
   workspace = "name:gaming",
-  group = "set always lock always invade",
+  group = "set always",
   center = true,
   content = "game",
   opacity = "1.0 override",
@@ -264,6 +277,8 @@ hl.window_rule({
 hl.window_rule({
   match = { class = "Ankama Launcher", title = "overlay" },
   workspace = "name:gaming",
+  -- Never let the launcher overlay be auto-grouped into the Dofus group.
+  group = "barred",
   float = true,
   center = true,
   tag = "+floating-window",
