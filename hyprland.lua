@@ -43,11 +43,8 @@ _G.config = {
       primary_monitor = "eDP-1",
       secondary_monitor = "HDMI-A-1",
       hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock-laptop.conf",
-      -- A lid has no room to give away.
-      gaps_by_monitor = {
-        primary = { gaps_in = 4, gaps_out = 8 },
-        secondary = { gaps_in = 4, gaps_out = 8 },
-      },
+      -- Gaps are geometry, resolved by output fingerprint below
+      -- (geometry_profiles), not by which host this is.
       kb_options = "caps:swapescape",
       -- workspace_specs use monitor = "primary" as a sentinel, resolved to
       -- primary_monitor by the post-build pass at the bottom of this file.
@@ -136,12 +133,8 @@ _G.config = {
       primary_monitor = "DP-1",
       secondary_monitor = "DP-2",
       hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock.conf",
-      -- Separation is a property of the panel, not of the config: 40px of outer
-      -- gap is air on a 5120x1440 ultrawide and a wasted third of a laptop lid.
-      -- The global in conf.lua is the ultrawide's; everything else says so here.
-      gaps_by_monitor = {
-        secondary = { gaps_in = 6, gaps_out = 14 },
-      },
+      -- Gaps are geometry, resolved by output fingerprint below
+      -- (geometry_profiles), not by which host this is.
       workspaces = {
         workspace_specs = {
           -- Hyprland drops layoutopt on workspace rules (only
@@ -257,37 +250,59 @@ _G.config = {
       },
     },
   },
+  -- Keyed by hypr.lib.profile's fingerprint of hl.get_monitors(), not by
+  -- hostname: this is the geometry half of what used to live in host_configs
+  -- (see LEO-220). desk-dual's numbers are the former quantum-desktop ones,
+  -- laptop-solo's the former quantum-laptop ones — unchanged, just relocated.
+  geometry_profiles = {
+    [require("hypr.lib.profile").DESK_DUAL] = {
+      -- Separation is a property of the panel, not of the config: 40px of
+      -- outer gap is air on a 5120x1440 ultrawide and a wasted third of a
+      -- laptop lid. The global in conf.lua is the ultrawide's; the secondary
+      -- (a normal-aspect monitor) says so here. top stays 8: the bar reserves
+      -- its own height, so a full 40px on top would stack two margins into a
+      -- canyon (see hypr/events/solo_gaps.lua for the same rule).
+      gaps_by_monitor = {
+        secondary = { gaps_in = 6, gaps_out = 14 },
+      },
+    },
+    [require("hypr.lib.profile").LAPTOP_SOLO] = {
+      -- A lid has no room to give away.
+      gaps_by_monitor = {
+        primary = { gaps_in = 4, gaps_out = 8 },
+        secondary = { gaps_in = 4, gaps_out = 8 },
+      },
+    },
+  },
 }
 
 _G.config.__index = _G.config
 
 -- Resolve the current host once, so every consumer reads `config.host.*`
--- without ever computing the hostname itself.
+-- without ever computing the hostname itself. This decides which workspaces
+-- exist (host_configs is keyed by hostname on purpose: it encodes machines we
+-- built by hand).
 _G.config.host = assert(_G.config.host_configs[require("hypr.lib.util").hostname()], "no host_config for this hostname")
 
--- Resolve the "primary"/"secondary" monitor sentinels in workspace_specs to the
--- host's monitors. Done as a post-build pass since a Lua table constructor
--- cannot reference its own fields while being built.
+-- Geometry is decided separately, by output fingerprint rather than hostname
+-- — see hypr/lib/profile.lua's header for why. `resolve()` honors a manual
+-- SUPER Space w m override over the live fingerprint.
+_G.config.profile = require("hypr.lib.profile").resolve()
+require("hypr.lib.profile").publish(_G.config.profile)
+
+-- Resolve the "primary"/"secondary" monitor sentinels in workspace_specs to
+-- the host's monitors, and fill in the resolved profile's gaps. Done as a
+-- post-build pass since a Lua table constructor cannot reference its own
+-- fields while being built.
 local monitor_aliases = {
   primary = _G.config.host.primary_monitor,
   secondary = _G.config.host.secondary_monitor,
 }
-local gaps_by_monitor = _G.config.host.gaps_by_monitor or {}
-for _, spec in ipairs(_G.config.host.workspaces.workspace_specs) do
-  local role = spec.monitor
-  if role == "primary" or role == "secondary" then
-    spec.monitor = assert(
-      monitor_aliases[role],
-      "workspace " .. tostring(spec.workspace) .. " uses '" .. role .. "' but host has no such monitor"
-    )
-    -- Gaps the host declared for this monitor, unless the spec argued otherwise.
-    -- The gaming workspace sets its own zeroes and keeps them.
-    for key, value in pairs(gaps_by_monitor[role] or {}) do
-      if spec[key] == nil then
-        spec[key] = value
-      end
-    end
-  end
-end
+local geometry = _G.config.geometry_profiles[_G.config.profile] or {}
+require("hypr.lib.geometry").resolve(
+  _G.config.host.workspaces.workspace_specs,
+  monitor_aliases,
+  geometry.gaps_by_monitor
+)
 
 require("hypr")

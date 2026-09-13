@@ -107,6 +107,13 @@ function M.new()
     return nil
   end
 
+  -- Specs assign hl.monitors directly to fingerprint against, the same way
+  -- they stub other hl.get_* calls by overwriting the field.
+  hl.monitors = {}
+  function hl.get_monitors()
+    return hl.monitors
+  end
+
   function hl.window_rule(spec)
     hl.window_rules[#hl.window_rules + 1] = spec
   end
