@@ -157,15 +157,15 @@ _G.config = {
             default = true,
             default_name = "code",
             monitor = "primary",
-            -- Scrolling, not dwindle: a lone window takes one column rather than
-            -- the whole 5120px panel, and the rest stays wallpaper. How wide a
-            -- column is comes from the window's own scrolling_width rule (see
-            -- windowrules.lua), not from here — a terminal and a browser should
-            -- not get the same share. Options stay keyed by layout so cycling
-            -- back to dwindle still gets the widescreen split ratio.
-            layout = "scrolling",
+            -- Dwindle, with the terminals stacked into one group rather than
+            -- spread across the panel (see windowrules.lua). That leaves two
+            -- tiles however many project windows are open: the group on the
+            -- left at roughly two thirds, the browser on the right at one, and
+            -- the groupbar saying which terminal you are looking at.
+            layout = "dwindle",
             layout_opts = {
-              dwindle = { default_split_ratio = 1.25 },
+              dwindle = { default_split_ratio = 2.0 },
+              scrolling = { column_width = 0.67 },
             },
           },
           {
@@ -173,7 +173,7 @@ _G.config = {
             persistent = true,
             default_name = "creative",
             monitor = "primary",
-            layout = "scrolling",
+            layout = "dwindle",
             layout_opts = {
               dwindle = { default_split_ratio = 1.0 },
             },
@@ -183,7 +183,7 @@ _G.config = {
             persistent = true,
             default_name = "proton",
             monitor = "primary",
-            layout = "scrolling",
+            layout = "dwindle",
             layout_opts = {
               dwindle = { default_split_ratio = 1.0 },
             },

@@ -21,6 +21,12 @@ hl.config({
         locked_active = theme.red,
         locked_inactive = theme.base,
       },
+      -- The title has to read against both of those grounds, so it is not one
+      -- colour: crust on the accent, text on the base.
+      text_color = theme.crust,
+      text_color_inactive = theme.text,
+      text_color_locked_active = theme.crust,
+      text_color_locked_inactive = theme.text,
     },
   },
 })

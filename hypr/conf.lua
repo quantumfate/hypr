@@ -43,6 +43,16 @@ hl.config({
     },
   },
 
+  -- Splits are deterministic on purpose. Left alone, dwindle picks an
+  -- orientation from the tile's aspect, so on a 5120x1440 panel the second
+  -- window sometimes landed beside and sometimes below — two very wide, very
+  -- short windows, which is unusable. force_split pins new windows to the right
+  -- and preserve_split keeps a split where it was put.
+  dwindle = {
+    force_split = 2,
+    preserve_split = true,
+  },
+
   general = {
     border_size = 2,
     -- Separation, not decoration: on the 5120x1440 panel these are roughly 1cm
@@ -67,10 +77,31 @@ hl.config({
     },
   },
 
+  -- Grouping is how many terminals share one tile. Project windows are grouped
+  -- on open (see windowrules.lua), so a workspace holds one browser beside one
+  -- stack of terminals however many are running — and the groupbar is the
+  -- indicator that says which of them you are looking at.
   group = {
     auto_group = true,
     groupbar = {
       enabled = true,
+      -- The defaults are 14px tall with 8px text, which is a decoration rather
+      -- than something you can read across a 5120px panel.
+      height = 26,
+      font_family = "JetBrainsMono Nerd Font",
+      font_size = 13,
+      font_weight_active = 600,
+      font_weight_inactive = 400,
+      render_titles = true,
+      -- Only worth the vertical space once there is something to choose between.
+      disable_when_only = true,
+      indicator_height = 3,
+      gaps_in = 4,
+      gaps_out = 6,
+      rounding = 6,
+      gradients = false,
+      -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
+      scrolling = true,
     },
   },
 

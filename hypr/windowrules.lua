@@ -331,7 +331,38 @@ hl.window_rule({
 windowrule.tag_props({ { initial_class = "([Ss]potify)" } }, "+music")
 windowrule.tag_set_effects("music", { static = { workspace = "special:music" } })
 
--- Column widths on the scrolling layout.
+-- Terminals stack, the browser does not.
+--
+-- A coding workspace grows one browser and however many project windows the day
+-- needs. Left as plain tiles, the fifth terminal makes every window useless.
+-- Grouped, they are one tile with a tab strip: the split stays two-way whatever
+-- the count, and the groupbar (styled in conf.lua) says which one is in front.
+--
+-- `set always` rather than plain `set`, because the default only groups a window
+-- the first time — the point here is that it holds for every project window,
+-- every time. `barred` keeps the browser out of the focused group: without it
+-- auto_group would swallow it into the tab strip on open.
+hl.window_rule({
+  name = "group-project-terminals",
+  match = { class = config.apps.project.class },
+  group = "set always",
+})
+
+hl.window_rule({
+  name = "group-terminals",
+  match = { class = config.apps.terminal.class },
+  group = "set always",
+})
+
+for _, cls in ipairs({
+  "([fF]irefox|zen|zen-twilight|zen-beta)",
+  config.apps.dev_browser.class,
+  config.apps.media_browser.class,
+}) do
+  hl.window_rule({ name = "no-group-" .. cls, match = { class = cls }, group = "barred" })
+end
+
+-- Column widths on the scrolling layout (still reachable on the layout cycle).
 --
 -- The point of scrolling here is that window sizes are DECLARED, not dragged: a
 -- window opens at the width its job deserves and stays there. A project
