@@ -1,4 +1,18 @@
-local theme = require("hypr.themes.macchiato")
+-- Which palette the desk is on lives in the theme store, not here. hyprctl
+-- cannot set these: `hyprctl keyword general:col.active_border` answers
+-- "unknown request" on a Lua-configured Hyprland and still exits 0, so the
+-- fan-out script could not push a colour and could not tell that it had failed.
+-- A reload re-runs this file instead, which is why ,theme.sh reloads.
+local Store = require("hypr.lib.store")
+
+local PALETTES = { latte = true, frappe = true, macchiato = true, mocha = true }
+
+local name = Store.define("theme"):get("palette")
+if not PALETTES[name] then
+  name = "macchiato"
+end
+
+local theme = require("hypr.themes." .. name)
 
 hl.config({
   general = {
