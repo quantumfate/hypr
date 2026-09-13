@@ -3,6 +3,7 @@ local bind = require("hypr.lib.bind")
 local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
+local diag = require("hypr.services.diag")
 
 -- Focus mode is data + an oracle (Focus.qml); nothing enforces it until a
 -- launcher checks in. Checked here at DISPATCH time (inside the bind action,
@@ -482,6 +483,13 @@ submap.tree({
       desc = "Toggle system monitor",
       action = function()
         qs.call("sysmon", "toggle")
+      end,
+    },
+    {
+      key = "x",
+      desc = "Diagnose window placement",
+      action = function()
+        diag.run()
       end,
     },
     {
