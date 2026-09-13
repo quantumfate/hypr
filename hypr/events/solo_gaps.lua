@@ -19,7 +19,7 @@ local SOLO_EXTRA = 180
 
 -- workspace id -> the gaps_out it had before we widened it, so the original
 -- value is restored rather than recomputed. nil means "not currently widened".
----@type table<integer, integer>
+---@type table<integer, integer|table>
 local original = {}
 
 ---The spec a workspace was configured with, or nil for one the host never named
@@ -49,8 +49,23 @@ local function tiled_count(id)
   return n
 end
 
+---Adds `extra` to every edge of a gap value, keeping its shape.
+---@param gaps integer|table
+---@param extra integer
+---@return integer|table
+local function widen(gaps, extra)
+  if type(gaps) ~= "table" then
+    return (tonumber(gaps) or 0) + extra
+  end
+  local out = {}
+  for edge, value in pairs(gaps) do
+    out[edge] = value + extra
+  end
+  return out
+end
+
 ---@param id integer
----@param gaps_out integer
+---@param gaps_out integer|table
 local function set_gaps(id, gaps_out)
   hl.workspace_rule({ workspace = tostring(id), gaps_out = gaps_out })
 end
@@ -72,17 +87,18 @@ local function apply(ws)
     return
   end
 
+  -- gaps_out is a CssGap: an integer, or a table of named edges. Widening has to
+  -- preserve the shape, because the top edge is deliberately tighter than the
+  -- others (the bar reserves its own height, see conf.lua) and flattening it to
+  -- one number would put the canyon back.
   local base = (spec and spec.gaps_out) or hl.get_config("general.gaps_out") or 0
-  if type(base) ~= "number" then
-    base = 0
-  end
 
   if tiled_count(ws.id) == 1 then
-    if not original[ws.id] then
+    if original[ws.id] == nil then
       original[ws.id] = base
-      set_gaps(ws.id, base + SOLO_EXTRA)
+      set_gaps(ws.id, widen(base, SOLO_EXTRA))
     end
-  elseif original[ws.id] then
+  elseif original[ws.id] ~= nil then
     set_gaps(ws.id, original[ws.id])
     original[ws.id] = nil
   end

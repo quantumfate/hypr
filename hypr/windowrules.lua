@@ -342,12 +342,14 @@ windowrule.tag_set_effects("music", { static = { workspace = "special:music" } }
 -- the panel exactly. Alone, each leaves the rest of the tape empty, which is
 -- what `fullscreen_on_one_column = false` is for.
 local scrolling_widths = {
+  -- Two thirds for the work, one third for the reference. A third of 5120px is
+  -- ~1700px, which is still a desktop site with no wasted margin, and it leaves
+  -- the terminal the width it actually needs.
   -- Project terminals (`Proj-<name>`, one class per project) and the plain one.
-  { match = { class = config.apps.project.class }, width = 0.55 },
-  { match = { class = config.apps.terminal.class }, width = 0.55 },
-  -- Browsers: wide enough that no site is cramped, narrower than the work.
-  { match = { class = "([fF]irefox|zen|zen-twilight|zen-beta)" }, width = 0.45 },
-  { match = { class = config.apps.dev_browser.class }, width = 0.45 },
+  { match = { class = config.apps.project.class }, width = 0.67 },
+  { match = { class = config.apps.terminal.class }, width = 0.67 },
+  { match = { class = "([fF]irefox|zen|zen-twilight|zen-beta)" }, width = 0.33 },
+  { match = { class = config.apps.dev_browser.class }, width = 0.33 },
   -- Reading and reference sit narrower still; two fit beside a terminal.
   { match = { class = config.apps.file_manager.class }, width = 0.33 },
 }

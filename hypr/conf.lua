@@ -48,8 +48,12 @@ hl.config({
     -- Separation, not decoration: on the 5120x1440 panel these are roughly 1cm
     -- inner and 3.5cm outer at ~110 DPI. Per-monitor overrides live with the
     -- workspace rules; this is the value everything else deviates from.
+    --
+    -- The top is the exception. The bar already floats clear of the screen edge
+    -- and reserves its own height, so a full outer gap on top of that stacks two
+    -- margins and leaves a canyon between the bar and the first window.
     gaps_in = 12,
-    gaps_out = 40,
+    gaps_out = { top = 8, right = 40, bottom = 40, left = 40 },
     float_gaps = -1,
     layout = "master",
     allow_tearing = false,
