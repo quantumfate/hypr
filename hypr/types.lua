@@ -28,8 +28,10 @@
 ---@field focus	boolean?	Currently focused window.
 ---@field group	boolean?	Grouped windows.
 ---@field modal	boolean?	Modal windows (e.g. “Are you sure” popups)
----@field fullscreen_state_client	integer?	Windows with matching fullscreenstate. 0 - none, 1 - maximize, 2 - fullscreen, 3 - maximize and fullscreen.
----@field fullscreen_state_internal	integer?	Windows with matching fullscreenstate. 0 - none, 1 - maximize, 2 - fullscreen, 3 - maximize and fullscreen.
+---@field fullscreen_state_client	integer?	Windows with matching fullscreenstate. 0 - none, 1 - maximize,
+---2 - fullscreen, 3 - maximize and fullscreen.
+---@field fullscreen_state_internal	integer?	Windows with matching fullscreenstate. 0 - none, 1 - maximize, 2 -
+---fullscreen, 3 - maximize and fullscreen.
 ---@field workspace	string?	Windows on matching workspace. Can be id, "name:string" or a workspace selector.
 ---@field content	string?	Windows with specified content type (none, photo, video, game).
 ---@field xdg_tag	string?	Match a window by its xdgTag (see hyprctl clients to check if it has one).
@@ -57,7 +59,8 @@
 ---@field tile	boolean?	Tiles a window.
 ---@field fullscreen	boolean?	Fullscreens a window.
 ---@field maximize	boolean?	Maximizes a window.
----@field fullscreen_state	string?	Sets fullscreen mode, e.g. "1 2" (internal client). 0 none, 1 maximize, 2 fullscreen, 3 both.
+---@field fullscreen_state	string?	Sets fullscreen mode, e.g. "1 2" (internal client). 0 none, 1 maximize, 2
+---fullscreen, 3 both.
 ---@field move	(string|number)[]?	Moves floating window, monitor-local. E.g. {100, 200} or expression strings.
 ---@field size	(string|number)[]?	Resizes floating window. E.g. {800, 600} or expression strings.
 ---@field center	boolean?	Centers floating window on monitor.
@@ -67,7 +70,8 @@
 ---@field no_initial_focus	boolean?	Disables initial focus.
 ---@field pin	boolean?	Pin to all workspaces. Floating only.
 ---@field group	HL.WindowGroup?	Sets group properties. Bare key = "set".
----@field suppress_event	string?	Ignore events. Space-separated: "fullscreen", "maximize", "activate", "activatefocus", "fullscreenoutput".
+---@field suppress_event	string?	Ignore events. Space-separated: "fullscreen", "maximize", "activate",
+---"activatefocus", "fullscreenoutput".
 ---@field content	HL.ContentType?	Sets content type.
 ---@field no_close_for	integer?	Block killactive for N ms after open.
 ---@field scrolling_width	number?	Column width for scrolling layout workspaces.
@@ -80,7 +84,8 @@
 ---@field animation	string?	Force animation, optional style. E.g. "popin" or "popin 80%".
 ---@field border_color	string|table?	Force border color. Color, gradient, or {colors={...}, angle=N}.
 ---@field idle_inhibit	HL.IdleInhibit?	Idle inhibit rule.
----@field opacity	string?	Opacity multiplier. "0.8", "0.9 0.7" (active/inactive), "1 0.8 0.9" (active/inactive/fullscreen). Append " override" for absolute.
+---@field opacity	string?	Opacity multiplier. "0.8", "0.9 0.7" (active/inactive), "1 0.8 0.9"
+---(active/inactive/fullscreen). Append " override" for absolute.
 ---@field tag	string?	Apply tag. "+t" set, "-t" unset, "t" toggle.
 ---@field max_size	(string|number)[]?	Max size for floating. E.g. {800, 600}.
 ---@field min_size	(string|number)[]?	Min size for floating. E.g. {200, 150}.

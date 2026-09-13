@@ -121,7 +121,8 @@ windowrule.tag_props({
     title = "(Open.*Files?|Save.*Files?|Save.*As|All Files|Save)",
   },
   {
-    initial_class = [[(protonvpn-app|Impala|About|Wiremix|com.gabm.satty|Calos|TUI.float|io\.github\.Qalculate\.qalculate-qt)]],
+    initial_class = [[(protonvpn-app|Impala|About|Wiremix|com.gabm.satty|Calos|TUI.float|]]
+      .. [[io\.github\.Qalculate\.qalculate-qt)]],
   },
   { initial_class = "(Ranger-tui|Wiremix-tui|Btop-tui|Parui-tui|Blue-tui)" },
   { initial_class = "(zen|zen-twilight|zen-beta)", title = "(Library)" },
@@ -251,7 +252,8 @@ windowrule.tag_set_effects("comms", {
 -- Media apps (opacity fix)
 windowrule.tag_props({
   {
-    class = "^(zoom|vlc|mpv|mp4|org.kde.kdenlive|com.obsproject.Studio|com.github.PintaProject.Pinta|imv|org.gnome.NautilusPreviewer)$",
+    class = "^(zoom|vlc|mpv|mp4|org.kde.kdenlive|com.obsproject.Studio|com.github.PintaProject.Pinta|imv|"
+      .. "org.gnome.NautilusPreviewer)$",
   },
 }, "+media-app")
 
@@ -328,6 +330,35 @@ hl.window_rule({
 
 windowrule.tag_props({ { initial_class = "([Ss]potify)" } }, "+music")
 windowrule.tag_set_effects("music", { static = { workspace = "special:music" } })
+
+-- Column widths on the scrolling layout.
+--
+-- The point of scrolling here is that window sizes are DECLARED, not dragged: a
+-- window opens at the width its job deserves and stays there. A project
+-- terminal and a browser sharing the panel should not get the same half each —
+-- the terminal is where the work happens and the browser is a reference.
+--
+-- The two together come to 1.0, so a terminal and a browser side by side fill
+-- the panel exactly. Alone, each leaves the rest of the tape empty, which is
+-- what `fullscreen_on_one_column = false` is for.
+local scrolling_widths = {
+  -- Project terminals (`Proj-<name>`, one class per project) and the plain one.
+  { match = { class = config.apps.project.class }, width = 0.55 },
+  { match = { class = config.apps.terminal.class }, width = 0.55 },
+  -- Browsers: wide enough that no site is cramped, narrower than the work.
+  { match = { class = "([fF]irefox|zen|zen-twilight|zen-beta)" }, width = 0.45 },
+  { match = { class = config.apps.dev_browser.class }, width = 0.45 },
+  -- Reading and reference sit narrower still; two fit beside a terminal.
+  { match = { class = config.apps.file_manager.class }, width = 0.33 },
+}
+
+for _, rule in ipairs(scrolling_widths) do
+  hl.window_rule({
+    name = "scrolling-width-" .. rule.match.class,
+    match = rule.match,
+    scrolling_width = rule.width,
+  })
+end
 
 -- fix the regression of maximized windows overshadowing other windows in a WS
 -- TODO: this wild cald potentially needs further narrowing

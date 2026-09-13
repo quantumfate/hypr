@@ -34,7 +34,7 @@ local function escape_char(c)
   return "\\" .. (escape_char_map[c] or string.format("u%04x", c:byte()))
 end
 
-local function encode_nil(val)
+local function encode_nil(_val)
   return "null"
 end
 

@@ -20,15 +20,27 @@ bind.brightness("Up", ",brightness.sh --inc")
 bind.brightness("Down", ',brightness.sh --dec ""')
 
 -- === Window management ===
+--
+-- Maximize was on SUPER+ALT+M, the same chord as minimize below. Hyprland keeps
+-- the first registration, so minimize never fired and neither showed in the
+-- cheatsheet, because none of the three carried a description. Maximize moves to
+-- SUPER+ALT+X; the tests assert no root chord is claimed twice and that every
+-- bind says what it does.
 hl.bind(
-  bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + M",
-  hl.dsp.window.fullscreen({ mode = "maximized" })
+  bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + X",
+  hl.dsp.window.fullscreen({ mode = "maximized" }),
+  { description = "Maximize window", submap_universal = true }
 )
 hl.bind(
   bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + F",
-  hl.dsp.window.fullscreen({ mode = "fullscreen" })
+  hl.dsp.window.fullscreen({ mode = "fullscreen" }),
+  { description = "Fullscreen window", submap_universal = true }
 )
-hl.bind(bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T", hl.dsp.window.float())
+hl.bind(
+  bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T",
+  hl.dsp.window.float(),
+  { description = "Toggle floating", submap_universal = true }
+)
 
 -- Closing a project terminal leaves its server running with nothing on screen
 -- pointing at it, so `,proj.sh close-window` offers to take the project down

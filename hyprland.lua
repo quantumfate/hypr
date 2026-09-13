@@ -43,6 +43,11 @@ _G.config = {
       primary_monitor = "eDP-1",
       secondary_monitor = "HDMI-A-1",
       hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock-laptop.conf",
+      -- A lid has no room to give away.
+      gaps_by_monitor = {
+        primary = { gaps_in = 4, gaps_out = 8 },
+        secondary = { gaps_in = 4, gaps_out = 8 },
+      },
       kb_options = "caps:swapescape",
       -- workspace_specs use monitor = "primary" as a sentinel, resolved to
       -- primary_monitor by the post-build pass at the bottom of this file.
@@ -131,6 +136,12 @@ _G.config = {
       primary_monitor = "DP-1",
       secondary_monitor = "DP-2",
       hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock.conf",
+      -- Separation is a property of the panel, not of the config: 40px of outer
+      -- gap is air on a 5120x1440 ultrawide and a wasted third of a laptop lid.
+      -- The global in conf.lua is the ultrawide's; everything else says so here.
+      gaps_by_monitor = {
+        secondary = { gaps_in = 6, gaps_out = 14 },
+      },
       workspaces = {
         workspace_specs = {
           -- Hyprland drops layoutopt on workspace rules (only
@@ -146,24 +157,36 @@ _G.config = {
             default = true,
             default_name = "code",
             monitor = "primary",
-            layout = "dwindle",
-            layout_opts = { default_split_ratio = 1.25 },
+            -- Scrolling, not dwindle: a lone window takes one column rather than
+            -- the whole 5120px panel, and the rest stays wallpaper. How wide a
+            -- column is comes from the window's own scrolling_width rule (see
+            -- windowrules.lua), not from here — a terminal and a browser should
+            -- not get the same share. Options stay keyed by layout so cycling
+            -- back to dwindle still gets the widescreen split ratio.
+            layout = "scrolling",
+            layout_opts = {
+              dwindle = { default_split_ratio = 1.25 },
+            },
           },
           {
             workspace = "2",
             persistent = true,
             default_name = "creative",
             monitor = "primary",
-            layout = "dwindle",
-            layout_opts = { default_split_ratio = 1.0 },
+            layout = "scrolling",
+            layout_opts = {
+              dwindle = { default_split_ratio = 1.0 },
+            },
           },
           {
             workspace = "3",
             persistent = true,
             default_name = "proton",
             monitor = "primary",
-            layout = "dwindle",
-            layout_opts = { default_split_ratio = 1.0 },
+            layout = "scrolling",
+            layout_opts = {
+              dwindle = { default_split_ratio = 1.0 },
+            },
           },
           {
             workspace = "4",
@@ -247,12 +270,21 @@ local monitor_aliases = {
   primary = _G.config.host.primary_monitor,
   secondary = _G.config.host.secondary_monitor,
 }
+local gaps_by_monitor = _G.config.host.gaps_by_monitor or {}
 for _, spec in ipairs(_G.config.host.workspaces.workspace_specs) do
-  if spec.monitor == "primary" or spec.monitor == "secondary" then
+  local role = spec.monitor
+  if role == "primary" or role == "secondary" then
     spec.monitor = assert(
-      monitor_aliases[spec.monitor],
-      "workspace " .. tostring(spec.workspace) .. " uses '" .. spec.monitor .. "' but host has no such monitor"
+      monitor_aliases[role],
+      "workspace " .. tostring(spec.workspace) .. " uses '" .. role .. "' but host has no such monitor"
     )
+    -- Gaps the host declared for this monitor, unless the spec argued otherwise.
+    -- The gaming workspace sets its own zeroes and keeps them.
+    for key, value in pairs(gaps_by_monitor[role] or {}) do
+      if spec[key] == nil then
+        spec[key] = value
+      end
+    end
   end
 end
 

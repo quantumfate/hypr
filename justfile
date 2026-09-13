@@ -24,8 +24,13 @@ lint:
 	git ls-files '*.sh' '*.bash' | xargs -r shellcheck
 	yamllint .
 
-# CI/pre-commit gate: formatting + tests (lint is advisory)
-check: fmt-check
+# Unit tests for hypr/lib/ (pure Lua, no compositor needed)
+test:
+	lua tests/run.lua
+
+# CI/pre-commit gate: formatting + luacheck + tests (shellcheck/yamllint stay advisory via `lint`)
+check: fmt-check test
+	luacheck .
 
 # Ansible playbook syntax check (cheap; part of the CI gate)
 ansible-syntax:

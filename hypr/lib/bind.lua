@@ -121,7 +121,8 @@ function M.brightness(direction, cmd)
   )
 end
 
----@param key string XF86Audio suffix (e.g. "RaiseVolume", "Mute") — "XF86Audio" auto-prepended unless key already starts with "XF86"
+---@param key string XF86Audio suffix (e.g. "RaiseVolume", "Mute") — "XF86Audio" auto-prepended
+---unless key already starts with "XF86"
 ---@param cmd string shell command to execute
 ---@param description string
 ---@param mods string[]?

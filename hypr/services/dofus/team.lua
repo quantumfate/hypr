@@ -62,9 +62,9 @@ end
 ---maintains it live (DofusWindows service); the compositor no longer queries
 ---clients here. `team` is unused (the UI owns team order) but kept for the
 ---shared call sites. Guarded so it only acts while a Dofus window is focused.
----@param team string[] unused (UI-owned turn order); kept for call compat
+---@param _team string[] unused (UI-owned turn order); kept for call compat
 ---@param reversed boolean true = previous, false = next
-function M.iterate(team, reversed)
+function M.iterate(_team, reversed)
   if not on_dofus() then
     return
   end
@@ -88,9 +88,9 @@ end
 ---dense over open windows only: with 2 windows open, F1/F2 hit them regardless
 ---of their raw team position. Delegates to the UI join (0-based there); guarded
 ---to only act while on a Dofus window.
----@param team string[] unused (UI-owned turn order); kept for call compat
+---@param _team string[] unused (UI-owned turn order); kept for call compat
 ---@param i integer 1-based position among present windows
-function M.activate(team, i)
+function M.activate(_team, i)
   if not on_dofus() then
     return
   end
@@ -100,9 +100,9 @@ end
 ---@param title string
 ---@return string hyprctl eval to focus a window by title and raise it
 local function focus_eval(title)
-  return ("hyprctl -q eval 'hl.dispatch(hl.dsp.focus({ window = [[title:%s]] })) hl.dispatch(hl.dsp.window.bring_to_top())'"):format(
-    title
-  )
+  local eval = "hyprctl -q eval 'hl.dispatch(hl.dsp.focus({ window = [[title:%s]] })) "
+    .. "hl.dispatch(hl.dsp.window.bring_to_top())'"
+  return eval:format(title)
 end
 
 ---Visit each existing team window, left-click at the cursor's current position,

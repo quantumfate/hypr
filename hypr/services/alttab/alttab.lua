@@ -72,7 +72,9 @@ function M:alttab(direction)
   M:bind(false)
 
   local cmd = ([[footclient -a alttab sh -c ' \
-  fzf --color prompt:green,pointer:green,current-bg:-1,current-fg:green,gutter:-1,border:bright-black,current-hl:red,hl:red \
+  fzf_colors="prompt:green,pointer:green,current-bg:-1,current-fg:green,"\
+"gutter:-1,border:bright-black,current-hl:red,hl:red"
+  fzf --color "$fzf_colors" \
   --cycle --sync --wrap --delimiter="\t" --with-nth=2 --bind tab:down,shift-tab:up,double-click:ignore,start:%s \
   --preview-window=down:80%%,border-none \
   --preview "$XDG_CONFIG_HOME/hypr/hypr/services/alttab/preview.sh {}" \
