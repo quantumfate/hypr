@@ -51,6 +51,13 @@ local function close()
   end
 end
 
+-- The config can be reloaded while the peek is on screen, and a theme switch
+-- does exactly that. Reloading re-executes this file, so `shown` goes back to
+-- false while the Quickshell panel is still mapped — after which nothing here
+-- would ever ask it to close again, and the cheatsheet stays up forever.
+-- Closing on load costs nothing when it is already closed.
+qs.call("cheatsheetPeek", "close")
+
 hypr.on_submap_change(function(submap)
   -- Hyprland reports root as "" (raw event) or "reset" (the dispatcher keyword
   -- we use). Leaving the tree closes the panel, but only after a grace period:

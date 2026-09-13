@@ -9,7 +9,9 @@ hl.config({
   },
 
   decoration = {
-    rounding = 6,
+    -- Paper, not glass. A sheet has a crisp edge and barely any curve; 6 was
+    -- already a compromise and still reads as a soft UI chrome.
+    rounding = 3,
     -- Opaque by default: only the roles that opacity.lua's role table lists
     -- (terminals, file/process managers) get thinned, via per-class "override"
     -- rules — anything that renders images or video stays at this 1.
@@ -20,8 +22,10 @@ hl.config({
 
     blur = {
       enabled = true,
-      size = 6, -- blur kernel radius
-      passes = 3, -- 2 = cheap, 3 = sweet spot, 4+ = diminishing returns
+      -- Less blur than before: paper is opaque enough that a heavy frost just
+      -- muddies what is behind it. Enough to separate, not to dissolve.
+      size = 4, -- blur kernel radius
+      passes = 2,
       new_optimizations = true,
       xray = false, -- true = blur sees through ALL windows to wallpaper
       ignore_opacity = true, -- blur even fully-opaque regions of windows below
@@ -34,17 +38,20 @@ hl.config({
       popups_ignorealpha = 0.2,
     },
 
+    -- A sheet on a desk casts a short, tight shadow — enough to lift it off the
+    -- wallpaper, not enough to glow. The old 30px range was a halo.
     shadow = {
       enabled = true,
-      range = 30,
-      render_power = 4,
-      offset = { 0, 5 },
-      color = "rgba(00000070)",
+      range = 8,
+      render_power = 2,
+      offset = { 0, 2 },
+      color = "rgba(0000009a)",
     },
   },
 
   general = {
-    border_size = 2,
+    -- The edge is what makes it read as a sheet, so it stays crisp and single.
+    border_size = 1,
     -- Separation, not decoration: on the 5120x1440 panel these are roughly 1cm
     -- inner and 3.5cm outer at ~110 DPI. Per-monitor overrides live with the
     -- workspace rules; this is the value everything else deviates from.
@@ -88,7 +95,7 @@ hl.config({
       indicator_height = 3,
       gaps_in = 4,
       gaps_out = 6,
-      rounding = 6,
+      rounding = 3,
       gradients = false,
       -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
       scrolling = true,
