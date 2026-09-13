@@ -52,8 +52,30 @@ hl.bind(
   { description = "Close focused window (offers to kill its project)", submap_universal = true }
 )
 
+-- === The short path ===
+--
+-- The submap tree stays the discoverable route to everything. These four are the
+-- ones walked daily, and two chords for an action you take fifty times a day is
+-- one chord too many. Each keeps its entry in the tree, so nothing that already
+-- lives in muscle memory stops working.
+bind.exec("t", ",proj.sh pick", {
+  description = "Open a project (picker)",
+  submap_universal = true,
+})
+
+bind.exec("b", "uwsm app -- " .. config.apps.main_browser.cmd, {
+  description = "Open the Browser",
+  submap_universal = true,
+})
+
+-- SUPER+RETURN is a terminal, not a menu about terminals. The float and
+-- project-shell variants keep the tree, one SHIFT away.
+bind.exec("return", "uwsm app -- " .. config.apps.terminal.cmd, {
+  description = "Open the Terminal",
+})
+
 submap.tree({
-  mods = { config.main_mod, "return" },
+  mods = { config.main_mod, config.secondary_mod, "return" },
   name = "terminal",
   desc = "Terminal",
   entries = {
@@ -208,6 +230,13 @@ local function cycle_workspace_layout()
     hl.workspace_rule({ workspace = tostring(workspace.id), layout = next_layout })
   end
 end
+
+-- Repeatable on purpose: cycling layouts is a "try it and see" action, and
+-- reopening a menu between tries is what made it feel like work.
+hl.bind(config.main_mod .. " + x", cycle_workspace_layout, {
+  description = "Cycle the workspace layout",
+  submap_universal = true,
+})
 
 submap.tree({
   mods = { config.main_mod, config.secondary_mod, "r" },
