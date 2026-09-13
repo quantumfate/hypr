@@ -115,6 +115,29 @@ hl.layer_rule({
   ignore_alpha = 0.6,
 })
 
+-- The workspace switcher, the projects dashboard and the calendar. Thresholds
+-- sit under Theme.surfaceAlpha's modal (0.97) and peek (0.85).
+hl.layer_rule({
+  match = { namespace = "quickshell-workspace-switcher" },
+  animation = "popin 92%",
+  blur = true,
+  ignore_alpha = 0.6,
+})
+
+hl.layer_rule({
+  match = { namespace = "quickshell-projects-dashboard" },
+  animation = "slidefade 20%",
+  blur = true,
+  ignore_alpha = 0.4,
+})
+
+hl.layer_rule({
+  match = { namespace = "quickshell-calendar" },
+  animation = "slidefade 20%",
+  blur = true,
+  ignore_alpha = 0.4,
+})
+
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })
