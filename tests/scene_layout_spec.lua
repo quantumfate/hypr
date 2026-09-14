@@ -23,7 +23,10 @@ local function scene(blocks, over)
     define = function()
       return {
         get = function()
-          return { scenes = { code = { blocks = blocks, strays = over.strays, solo_frame = over.solo_frame } } }
+          return {
+            version = require("hypr.scene.defaults").version,
+            scenes = { code = { blocks = blocks, strays = over.strays, solo_frame = over.solo_frame } },
+          }
         end,
         put = function() end,
       }

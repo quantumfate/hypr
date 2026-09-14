@@ -18,7 +18,7 @@ local function define_store(scenes)
     define = function()
       return {
         get = function()
-          return { scenes = scenes }
+          return { version = require("hypr.scene.defaults").version, scenes = scenes }
         end,
         put = function(_, doc)
           scenes = doc.scenes
@@ -39,6 +39,54 @@ local function scene(blocks, barred)
   local lib = require("hypr.scene.spec")
   return lib.load().gaming, lib
 end
+
+t.describe("the store document", function()
+  local defaults = require("hypr.scene.defaults")
+
+  local function document_test(store_doc)
+    -- Seen through store.put calls rather than the file: the stub's put
+    -- mirrors what the real handle persists.
+    local saved
+    package.loaded["hypr.lib.store"] = {
+      define = function()
+        return {
+          get = function()
+            return store_doc
+          end,
+          put = function(_, doc)
+            saved = doc
+            store_doc = doc
+          end,
+        }
+      end,
+    }
+    package.loaded["hypr.scene.spec"] = nil
+    require("hypr.scene.spec").load()
+    return saved
+  end
+
+  t.it("a store carrying an older seed generation re-seeds once", function()
+    -- The live case this documents: the store was written before the
+    -- companion spawn shipped, so it cannot declare a companion no matter
+    -- how many times the config reloads. The version check is the seed's
+    -- one-way upgrade path.
+    local saved = document_test({ version = 1, scenes = {} })
+    t.eq(2, saved.version, "the store was written at the current generation")
+  end)
+
+  t.it("a version-less document is a stale seed, not present truth", function()
+    -- A document that never carried a version cannot claim to be current;
+    -- the seed's shape wins over a guess.
+    local saved = document_test({ scenes = { gaming = { blocks = {} } } })
+    t.eq(defaults.version, saved.version)
+  end)
+
+  t.it("a current generation is treated as present truth", function()
+    local saved =
+      document_test({ version = defaults.version, scenes = { gaming = { blocks = { classes = { "X" } } } } })
+    t.eq(nil, saved, "no rewrite happened")
+  end)
+end)
 
 ---A window fixture. Geometry defaults keep the two-tile shares satisfied, so
 ---a test that is not about `share` never trips over it.

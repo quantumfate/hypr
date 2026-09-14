@@ -14,7 +14,12 @@
 -- describe); the editor contract (LEO-239) owns that widening, in one store,
 -- so this document and that model converge rather than coexist.
 return {
-  version = 1,
+  -- The seed's own generation. A store carrying an OLDER generation (or none)
+  -- is re-seeded once on load — the seed is the shipped default, and a
+  -- document it predates cannot hold what it was never written with. User
+  -- edits after that are their own, so this is version-keyed and one-way:
+  -- a document can only be newer than this file, never older in interest.
+  version = 2,
   scenes = {
     gaming = {
       blocks = {

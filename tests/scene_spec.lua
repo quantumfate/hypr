@@ -26,7 +26,7 @@ local function define_store(scenes)
     define = function()
       return {
         get = function()
-          return { scenes = scenes }
+          return { version = require("hypr.scene.defaults").version, scenes = scenes }
         end,
         put = function(_, doc)
           scenes = doc.scenes

@@ -74,19 +74,38 @@ end
 ---@type table<string, Scene.Spec>?
 local cache
 
----The raw document: the store's, seeded once from the default if it is empty.
----A missing store says nothing about what the user wants, so it seeds; a
----store with even one scene says a lot, so it is used as-is — emptying the
----store is a declaration too, and truth does not override it.
+---The raw document: the store's, or the seed's if the store does not say.
+---
+---Migration is one step back and one step forward: a store absent at
+---$QF_STORE adopts the legacy document (the previous generation's location)
+---and WRITES it forward, so moving the collection needs no tooling and no
+---second read path afterwards. A store still carrying an older seed
+---generation is re-seeded, because "declared" cannot mean a document that
+---predates the features it governs — that is how a shipped default idea was
+---born before part of it existed. Emptying the store stays a declaration
+---(absent = seed, present = truth, once the version agrees).
 ---@return table raw scenes keyed by default_name
 local function document()
   local store = require("hypr.lib.store")
   local defaults = require("hypr.scene.defaults")
   local handle = store.define("scenes")
   local data = handle:get()
-  if type(data) == "table" and next(data.scenes or {}) then
-    return data.scenes
+  if type(data) == "table" then
+    -- A store written before the current seed (or migrated without exactly
+    -- the version key from an older file that never wore one) re-seeds once,
+    -- which is the cheapest way to adopt additively without renegotiating
+    -- every field the user may have touched.
+    if (data.version or 0) < defaults.version then
+      pcall(handle.put, handle, defaults)
+      data = handle:get()
+    end
+    if type(data) == "table" and next(data.scenes or {}) then
+      return data.scenes
+    end
+    return defaults.scenes
   end
+  -- Nothing at the new location at all: seed (and the store grows on the
+  -- first write, thinking regardless of whether the store write lands).
   pcall(handle.put, handle, defaults)
   local seeded = handle:get()
   return (type(seeded) == "table") and seeded.scenes or defaults.scenes

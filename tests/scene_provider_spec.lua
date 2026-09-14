@@ -24,7 +24,7 @@ local function fresh(scenes, gaps)
     define = function()
       return {
         get = function()
-          return { scenes = keyed }
+          return { version = require("hypr.scene.defaults").version, scenes = keyed }
         end,
         put = function(_, doc)
           keyed = doc.scenes
