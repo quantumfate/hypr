@@ -91,6 +91,7 @@ local function build()
       members[block.order] = {}
     end
     scenes[spec.default_name] = {
+      key = spec.default_name,
       ws_set = ws_ids_for(spec.default_name),
       blocks = blocks,
       members = members,
@@ -394,6 +395,44 @@ local function eject(foreign, members)
   restore_focus(prev, foreign.address)
 end
 
+---The first member of a scene block that drifted onto ANOTHER real
+---(non-special, id >= 1) workspace, or nil.
+---@param scene Scene
+---@param live table<string, HL.Window>
+---@return HL.Window?
+local function first_drifted(scene, live)
+  -- Collect only while the scene is occupied: a scene whose blocks hold no
+  -- member on their workspace is dormant — drifting windows there are user
+  -- workspace choice, not arrangement debt.
+  local occupied = false
+  for _, block in ipairs(scene.blocks) do
+    for _, w in ipairs(hl.get_windows() or {}) do
+      if on_scene(scene, w) and block_for(scene, w) == block and not w.floating then
+        occupied = true
+      end
+    end
+  end
+  if not occupied then
+    return nil
+  end
+  for _, block in ipairs(scene.blocks) do
+    for _, w in ipairs(hl.get_windows() or {}) do
+      if block_for(scene, w) == block then
+        local ws = w and w.workspace
+        if
+          ws
+          and tonumber(tostring(ws.id))
+          and tonumber(tostring(ws.id)) >= 1
+          and not scene.ws_set[tostring(ws.id)]
+        then
+          return w
+        end
+      end
+    end
+  end
+  return nil
+end
+
 ---The first group-block window not yet folded into its authoritative set.
 ---@param scene Scene
 ---@param live table<string, HL.Window>
@@ -538,6 +577,30 @@ local function realize(scene)
     end
 
     local live = live_map()
+
+    -- Collect a drifted member home first. A scene is the workspace's
+    -- arrangement: no matter how a window moves between workspaces, a block
+    -- member whose scene is occupied comes back, and the reorganization
+    -- proceeds as if it had always been there (LEO-245's bare minimum).
+    local drift = first_drifted(scene, live)
+    if drift then
+      local prev = hl.get_active_window()
+      if drift.floating then
+        -- A floated stray re-tiles before the move, or the arrangement
+        -- below cannot count it (floating windows are not members of the
+        -- layout the scene realizes into).
+        hl.dispatch(hl.dsp.focus({ window = "address:" .. drift.address }))
+        hl.dispatch(hl.dsp.window.float())
+      end
+      hl.dispatch(hl.dsp.window.move({
+        workspace = "name:" .. scene.key,
+        window = "address:" .. drift.address,
+      }))
+      restore_focus(prev, drift.address)
+      hyg.oneshot(VERIFY_MS, step)
+      return
+    end
+
     local foreign, foreign_block = first_foreigner(scene, live)
     if foreign then
       eject(foreign, foreign_block and scene.members[foreign_block.order])
@@ -620,6 +683,31 @@ hl.on("window.close", function(w)
   local key = w and w.address and scene_for(w)
   if key then
     schedule_realize(key)
+  end
+end)
+
+-- Cross-workspace moves are map/close events' equals in law: a window moving
+-- into or out of a scene quarantine its arrangement either way (the moved-back
+-- case is why this and the collect step exist). Every scene re-realizes; the
+-- no-op guard makes an already-settled scene a cheap verify pass.
+hl.on("window.move_to_workspace", function()
+  for key in pairs(scenes) do
+    schedule_realize(key)
+  end
+end)
+
+-- Re-entering a scene workspace restores its arrangement: whatever fiddling
+-- happened while it was behind the user (and whatever moved home) is
+-- rechecked, so the geometry users come back to is the scene's, not drift.
+hl.on("workspace.active", function()
+  local ws = hl.get_active_workspace()
+  if not ws then
+    return
+  end
+  for key, scene in pairs(scenes) do
+    if scene.ws_set[tostring(ws.id)] then
+      schedule_realize(key)
+    end
   end
 end)
 

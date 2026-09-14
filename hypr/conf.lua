@@ -83,16 +83,19 @@ hl.config({
     groupbar = {
       enabled = true,
       -- The defaults are 14px tall with 8px text, which is a decoration rather
-      -- than something you can read across a 5120px panel.
-      height = 26,
+      -- than something you can read across a 5120px panel. The bar takes the
+      -- tile's top edge — the client's own top — and both Hypr's native bar
+      -- and the group widget (quickshell/modules/dofus/GroupBar.qml) render on
+      -- exactly this slot: one bar, one reservation.
+      height = 30,
       font_family = "JetBrainsMono Nerd Font",
-      font_size = 13,
+      font_size = 14,
       font_weight_active = 600,
       font_weight_inactive = 400,
       render_titles = true,
       -- Only worth the vertical space once there is something to choose between.
       disable_when_only = true,
-      indicator_height = 3,
+      indicator_height = 4,
       gaps_in = 4,
       gaps_out = 6,
       rounding = 3,
