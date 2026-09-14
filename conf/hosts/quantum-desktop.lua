@@ -103,44 +103,8 @@ return {
       "bracketright",
       "asterisk",
     },
-    -- The scene document: workspaces that ask the compositor for the scene
-    -- layout get geometry from here (hypr/scene/provider.lua consumes the
-    -- class blocks; see docs/scenes.md). This is a TEMPORARY host fork of
-    -- the scene store until Lua consumes $XDG_STATE_HOME scenes.json.
-    -- #scenes are keyed by default_name, never by the local workspace id:
-    -- ids are host data and this block must stay host-independent.
-    scenes = {
-      {
-        default_name = "gaming",
-        blocks = {
-          -- `collect`: a Dofus client dragged to another workspace mid-session
-          -- comes back, because the group is the scene — a client left behind
-          -- is one the roster and the OBS crop both stop seeing.
-          { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true },
-          -- `deny`, not the default bar: this tile is a fixed region beside
-          -- the group, and grouping it — even deliberately — would collapse
-          -- the two-tile split the capture depends on.
-          { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
-        },
-        -- Classes that legitimately open here without belonging to a block.
-        -- They are barred because `auto_group` grabs whatever opens while a
-        -- group holds focus, and this workspace's main tile is a group.
-        barred = { "steam_app_default", "steam_app_\\d+", "Ankama Launcher" },
-        -- This scene's tile geometry is a fixed capture region, so a window
-        -- that matches no block floats above it rather than taking a slot
-        -- and shifting the split the crop is aimed at.
-        strays = "float",
-      },
-      {
-        default_name = "code",
-        blocks = {
-          -- No `collect`: a project terminal you moved to another workspace
-          -- is where you wanted it. Only the gaming group is cohesive enough
-          -- to be worth dragging home.
-          { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 },
-          { classes = { "zen-twilight", "firefox-developer-edition" }, order = 2, share = 0.33 },
-        },
-      },
-    },
+    -- The scene document moved to the state store ($XDG_STATE_HOME
+    -- scenes.json, seeded from hypr/scene/defaults.lua on first run) — a
+    -- host file describes a machine, not how its windows sit.
   },
 }

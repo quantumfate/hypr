@@ -11,7 +11,23 @@
 --- carried out.
 local t = require("tests.harness")
 
-_G.config = { host = { workspaces = { scenes = {} } } }
+---The scenes document lives in the state store now; the stub hands it over
+---the same shape the real store handle answers.
+local function define_store(scenes)
+  package.loaded["hypr.lib.store"] = {
+    define = function()
+      return {
+        get = function()
+          return { scenes = scenes }
+        end,
+        put = function(_, doc)
+          scenes = doc.scenes
+        end,
+      }
+    end,
+  }
+end
+
 local spec_lib = require("hypr.scene.spec")
 local model = require("hypr.scene.model")
 
@@ -19,9 +35,7 @@ local model = require("hypr.scene.model")
 ---@param barred string[]?
 local function scene(blocks, barred)
   package.loaded["hypr.scene.spec"] = nil
-  _G.config = {
-    host = { workspaces = { scenes = { { default_name = "gaming", blocks = blocks, barred = barred } } } },
-  }
+  define_store({ gaming = { blocks = blocks, barred = barred } })
   local lib = require("hypr.scene.spec")
   return lib.load().gaming, lib
 end

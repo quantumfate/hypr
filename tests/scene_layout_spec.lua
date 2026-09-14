@@ -15,15 +15,19 @@ _G.config = { host = { workspaces = { scenes = {} } } }
 local function scene(blocks, over)
   package.loaded["hypr.scene.spec"] = nil
   package.loaded["hypr.scene.layout"] = nil
+  package.loaded["hypr.lib.store"] = nil
   over = over or {}
-  _G.config = {
-    host = {
-      workspaces = {
-        scenes = {
-          { default_name = "code", blocks = blocks, strays = over.strays, solo_frame = over.solo_frame },
-        },
-      },
-    },
+  -- The scenes document lives in the state store; the stub hands it over the
+  -- same shape the real store handle answers.
+  package.loaded["hypr.lib.store"] = {
+    define = function()
+      return {
+        get = function()
+          return { scenes = { code = { blocks = blocks, strays = over.strays, solo_frame = over.solo_frame } } }
+        end,
+        put = function() end,
+      }
+    end,
   }
   local spec = require("hypr.scene.spec").load().code
   return spec, require("hypr.scene.layout")

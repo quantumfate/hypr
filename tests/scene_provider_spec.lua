@@ -14,7 +14,25 @@ local t = require("tests.harness")
 local function fresh(scenes, gaps)
   local stub = require("tests.hl_stub").new()
   _G.hl = stub
-  _G.config = { host = { workspaces = { scenes = scenes } } }
+  -- The scenes document lives in the state store; the stub hands the
+  -- array-form fixtures over in the document's keyed shape.
+  local keyed = {}
+  for _, raw in ipairs(scenes or {}) do
+    keyed[raw.default_name] = raw
+  end
+  package.loaded["hypr.lib.store"] = {
+    define = function()
+      return {
+        get = function()
+          return { scenes = keyed }
+        end,
+        put = function(_, doc)
+          keyed = doc.scenes
+        end,
+      }
+    end,
+  }
+  _G.config = { host = { workspaces = { workspace_specs = {} } } }
   for _, mod in ipairs({ "hypr.scene.spec", "hypr.scene.layout", "hypr.scene.provider" }) do
     package.loaded[mod] = nil
   end

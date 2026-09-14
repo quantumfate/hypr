@@ -12,13 +12,29 @@
 local t = require("tests.harness")
 
 local GAMING = {
-  default_name = "gaming",
   blocks = {
     { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true },
     { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
   },
   barred = { "steam_app_default" },
 }
+
+---The scenes document lives in the state store now; the stub hands it over
+---the same shape the real store handle answers.
+local function define_store(scenes)
+  package.loaded["hypr.lib.store"] = {
+    define = function()
+      return {
+        get = function()
+          return { scenes = scenes }
+        end,
+        put = function(_, doc)
+          scenes = doc.scenes
+        end,
+      }
+    end,
+  }
+end
 
 ---A fake Hyprland group: `add`/`remove` mutate the fixture the way the real
 ---object API mutates the compositor, so a pass that groups windows changes
@@ -55,7 +71,8 @@ end
 local function fresh(active)
   local stub = require("tests.hl_stub").new()
   _G.hl = stub
-  _G.config = { host = { workspaces = { workspace_specs = {}, scenes = { GAMING } } } }
+  _G.config = { host = { workspaces = { workspace_specs = {} } } }
+  define_store({ gaming = GAMING })
   for _, mod in ipairs({
     "hypr.lib.hypr",
     "hypr.scene.spec",
