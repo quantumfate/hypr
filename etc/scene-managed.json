@@ -23,34 +23,27 @@
     "proton-pass.service"
   ],
   "tasks": {
-    "theme-auto": ["theme-auto.service", "theme-auto.timer"],
-    "obsidian": ["obsidian.service"],
-    "state-backup": ["state-backup.service", "state-backup.timer"],
+    "theme-auto": [
+      "theme-auto.service",
+      "theme-auto.timer"
+    ],
+    "obsidian": [
+      "obsidian.service"
+    ],
+    "state-backup": [
+      "state-backup.service",
+      "state-backup.timer"
+    ],
     "chezmoi": [],
-    "audio-notify": ["audio-notify.service"],
-    "obsidian-index": ["obsidian-index-normalize.service"],
+    "audio-notify": [
+      "audio-notify.service"
+    ],
+    "obsidian-index": [
+      "obsidian-index-normalize.service"
+    ],
     "linear-sync": [
       "obsidian-linear-sync.service",
       "obsidian-linear-sync.timer"
     ]
-  },
-  "scenes": {
-    "gaming": {
-      "stop": [
-        "obsidian.service",
-        "obsidian-index-normalize.service",
-        "obsidian-linear-sync.service",
-        "obsidian-linear-sync.timer"
-      ],
-      "graceful": ["tmux"]
-    },
-    "media": {
-      "stop": [
-        "obsidian-index-normalize.service",
-        "obsidian-linear-sync.service",
-        "obsidian-linear-sync.timer"
-      ],
-      "graceful": []
-    }
   }
 }

@@ -7,11 +7,16 @@
 # It computes TWO unit sets from the mood-policy store + this repo's contract
 # (etc/scene-managed.json):
 #
-#   stop   — the contract's stop lists for every scene the active mood names
-#            "reachable", plus the units mapped from the mood's deferred and
-#            prevented background tasks.
+#   stop   — the units the mood's deferred and prevented background tasks map
+#            to through the contract's capability map (the mood panel's
+#            allow/defer/prevent cycle). Scene reachability lives in the
+#            DECLARATION now: the gaming mode retires the Obsidian suite
+#            through hyprfocus's own service resources, enforced by the CLI
+#            apply spawned at every converge, and LEO-270 removed the scene
+#            key from the contract because mode policy in the wrong home is
+#            the divergence this milestone closes.
 #   start  — whatever the previous apply had stopped that this mood no longer
-#            stops (leaving gaming hands Obsidian and the Linear sync back).
+#            stops (the handback for the task-level gates).
 #
 # Units on the contract's `protected` list are never touched, period. Stops go
 # through systemd — SIGTERM + the unit's own TimeoutStopSec, never SIGKILL — so
@@ -146,17 +151,13 @@ add_stop() {
     esac
 }
 
-# Scene-managed units: the contract's stop lists for every scene the active
-# mood names "reachable". Absent/blocked scenes stop nothing, and neutral
-# (scenes {}) names nothing, so a resting desk never touches units.
-while IFS= read -r scene; do
-    while IFS= read -r unit; do
-        add_stop "$unit"
-    done < <(jq -r --arg s "$scene" '.scenes[$s].stop[]? // empty' "$contract")
-    while IFS= read -r unit; do
-        [ -n "$unit" ] && log request "$unit" "requested"
-    done < <(jq -r --arg s "$scene" '.scenes[$s].graceful[]? // empty' "$contract")
-done < <(printf '%s' "$mood" | jq -r '.scenes // {} | to_entries[] | select(.value == "reachable") | .key')
+# The mood's own scene policy lives in the declaration, not here: the mode's
+# services (remove-gaming's obsidian suite, etc.) are enforced as CLI apply at
+# every converge (hypr/hyprfocus/init.lua). What this script stops is the
+# mood's OWN task-level policy (the mood panel's allow/defer/prevent cycle):
+# deferred tasks stop now and come back when the mood does, prevented tasks
+# stop too, and (LEO-270) the contract is pure capability-to-units: a scene
+# key read here would be policy in the wrong home again.
 
 # Task-level gates: deferred and prevented tasks map to their units. Defer is
 # stop-now (it waits for a friendlier mood), just recorded as deferred.
