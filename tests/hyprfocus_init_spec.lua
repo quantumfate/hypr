@@ -29,6 +29,7 @@ local function fresh(declaration, pointer)
   _G.hl = stub
   for _, mod in ipairs({
     "hypr.lib.store",
+    "hypr.hyprfocus.hold",
     "hypr.hyprfocus.binds",
     "hypr.hyprfocus.workspaces",
     "hypr.hyprfocus.init",
@@ -38,7 +39,11 @@ local function fresh(declaration, pointer)
 
   -- The store is a file on disk; stub the handle rather than the filesystem,
   -- so these specs stay about the wiring instead of about JSON.
-  local stores = { hyprfocus = declaration, focus = pointer or { mode = "neutral" } }
+  local stores = {
+    hyprfocus = declaration,
+    focus = pointer or { mode = "neutral" },
+    ["hyprfocus-held"] = {},
+  }
   package.loaded["hypr.lib.store"] = {
     define = function(name)
       return {
@@ -48,6 +53,12 @@ local function fresh(declaration, pointer)
             return data
           end
           return type(data) == "table" and data[key] or nil
+        end,
+        set = function(_, patch)
+          stores[name] = stores[name] or {}
+          for k, v in pairs(patch) do
+            stores[name][k] = v
+          end
         end,
       }
     end,
@@ -123,14 +134,32 @@ t.describe("applying", function()
     t.eq(true, rules.gaming.enabled)
   end)
 
-  t.it("refuses to withdraw a workspace that still holds windows", function()
+  t.it("holds a workspace's windows so it can actually be withdrawn", function()
+    -- Without holding in front of it the withdrawal is refused and silently
+    -- does nothing, which looks like the mode simply not working.
     local stub, hyprfocus, rules = fresh(DECLARATION)
+    local windows = { { address = "0x1", workspace = { id = 1, name = "code" } } }
     stub.get_windows = function()
-      return { { address = "0x1", workspace = { id = 1, name = "code" } } }
+      return windows
     end
     local report = hyprfocus.apply("game")
-    t.eq("code", table.concat(report.workspaces_refused, ","))
-    t.eq(true, rules.code.enabled, "a workspace with windows stays reachable")
+    t.eq(1, report.windows_held)
+    t.eq(0, #report.workspaces_refused, "nothing resisted being parked")
+    -- Withdrawn in the same pass: the move is dispatched, not performed, so a
+    -- second read would still show the window standing where it was.
+    t.eq(false, rules.code.enabled, "the emptied workspace was withdrawn")
+    t.ok(windows)
+  end)
+
+  t.it("gives windows back when a mode admits their workspace again", function()
+    local stub, hyprfocus = fresh(DECLARATION)
+    local windows = { { address = "0x1", workspace = { id = 1, name = "code" } } }
+    stub.get_windows = function()
+      return windows
+    end
+    hyprfocus.apply("game")
+    local report = hyprfocus.apply("neutral")
+    t.eq(1, report.windows_restored)
   end)
 
   t.it("restores the full desk on the resting mode", function()

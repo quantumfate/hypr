@@ -15,6 +15,7 @@ local resolve = require("hypr.hyprfocus.resolve")
 local plan = require("hypr.hyprfocus.plan")
 local binds = require("hypr.hyprfocus.binds")
 local workspaces = require("hypr.hyprfocus.workspaces")
+local hold = require("hypr.hyprfocus.hold")
 
 local M = {}
 
@@ -73,10 +74,18 @@ end
 ---the unit files, which can act on them without a compositor and keep working
 ---while this one restarts.
 ---
----Order matters. Binding trees go first because withdrawing one is instant and
----costs nothing; a workspace may refuse to go if it still holds windows, and
----leaving the binds of a half-applied desk enabled is the more confusing of
----the two failures.
+---Order matters, and it is the order that keeps windows reachable:
+---
+---  1. binding trees, because withdrawing one is instant and costs nothing
+---  2. restore, so a workspace this mode admits gets its windows back before
+---     anything looks at what is standing where
+---  3. hold, emptying the workspaces about to be withdrawn
+---  4. withdraw, which now finds them empty and can actually take them away
+---
+---Holding before withdrawing is not a preference. A workspace disabled while
+---its windows stand on it leaves them somewhere the user cannot reach, and the
+---registry refuses to do it — so without step 3, step 4 would silently do
+---nothing at all.
 ---@param mode string
 ---@return table? report, string? error
 function M.apply(mode)
@@ -91,15 +100,53 @@ function M.apply(mode)
   end
 
   local disabled = binds.admit(desk.bindings)
-  local withdrawn, refused = workspaces.admit(desk.workspaces, workspaces.occupied())
+
+  local admitted = {}
+  for _, name in ipairs(desk.workspaces) do
+    admitted[name] = true
+  end
+
+  -- Give back what this mode admits, before deciding what is occupied.
+  local restored = 0
+  for name in pairs(hold.workspaces()) do
+    if admitted[name] then
+      restored = restored + hold.restore(name)
+    end
+  end
+
+  -- Empty what it does not, so the withdrawal below is not refused.
+  --
+  -- What was emptied is tracked rather than re-read. A move is dispatched, not
+  -- performed: asking the compositor what is standing where in the same breath
+  -- returns the desk as it was a moment ago, the withdrawal is refused against
+  -- stale state, and the mode silently does nothing. Holding moves every
+  -- window on the workspace, so a workspace we held from is empty by
+  -- construction and does not need confirming.
+  local parked, emptied = 0, {}
+  for _, name in ipairs(workspaces.names()) do
+    if not admitted[name] then
+      parked = parked + hold.hold(name)
+      emptied[name] = true
+    end
+  end
+
+  local occupied = workspaces.occupied()
+  for name in pairs(emptied) do
+    occupied[name] = nil
+  end
+
+  local withdrawn, refused = workspaces.admit(desk.workspaces, occupied)
 
   return {
     mode = mode,
     bindings_disabled = disabled,
+    windows_held = parked,
+    windows_restored = restored,
     workspaces_withdrawn = withdrawn,
     -- Workspaces that could not be withdrawn because windows still stand on
-    -- them. Reported rather than forced: the caller holds or moves the windows
-    -- and asks again.
+    -- them. With holding in front of it this should stay empty; a name
+    -- appearing here means a window resisted being parked, which is worth
+    -- seeing rather than silently working around.
     workspaces_refused = refused,
   },
     nil
