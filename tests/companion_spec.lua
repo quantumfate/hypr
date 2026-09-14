@@ -97,24 +97,27 @@ t.describe("the companion lifecycle", function()
     t.eq(0, #companion.decisions(spec, "gaming", {}))
   end)
 
-  t.it("a pending spawn filters duplicates and its marker expires", function()
-    -- The caller tracks one thing: a spawn in flight. The filter respects
-    -- that marker, and expire() gives it a finite lifetime saw in tests.
+  t.it("a pending spawn filters duplicates until the caller clears it", function()
+    -- The caller tracks one thing: a spawn in flight. There is no expiry
+    -- timer — the events clear the marker (the companion maps, or the scene
+    -- it was spawned for emptied) — so the filter's semantics are plain:
+    -- a marker blocks the next spawn decision, presence is derived, and
+    -- clearing is the caller's move.
     local pending = {}
-    local hold
-    local spec, companion = scene_spec()
-    companion.expire(function(ms, cb)
-      hold = { ms = ms, cb = cb }
-    end, "gaming:zen-gaming-media", pending)
+    local spec, companion = fresh()
+    companion.expire("gaming:zen-gaming-media", pending)
     t.eq(true, pending["gaming:zen-gaming-media"], "the marker was armed")
 
     local d = companion.filter(companion.decisions(spec, "gaming", { dofus("0xa1"), dofus("0xa2") }), pending)
     t.eq(0, #d, "no second spawn while one is in flight")
 
-    hold.cb()
-    t.eq(nil, pending["gaming:zen-gaming-media"], "the marker's lifetime is finite")
+    -- A close arriving for the same key does the caller's clear: no marker
+    -- forces a spawn that presence already disproves, and vice versa.
+    d = companion.filter(companion.decisions(spec, "gaming", { media_on_gaming("0xb1") }), pending)
+    t.eq("close", d[1].action, "the marker never blocks a close")
+    pending["gaming:zen-gaming-media"] = nil
     d = companion.filter(companion.decisions(spec, "gaming", { dofus("0xa1"), dofus("0xa2") }), pending)
-    t.eq(1, #d, "the next scan may spawn again")
+    t.eq(1, #d, "once cleared, the next scan may spawn again")
   end)
 
   t.it("a close decision is not filtered and clears its caller state", function()

@@ -15,10 +15,11 @@ local spec_lib = require("hypr.scene.spec")
 -- Between dispatching a spawn and the companion's own open event there is a
 -- window where a scan cannot yet see what was asked for, and a second
 -- matching event in that gap would spawn a duplicate. The pending marker is
--- the only remembered fact, and its lifetime is finite: presence is not
--- state the desk keeps.
-local PENDING_MS = 4000
-
+-- the only remembered fact. It is cleared by the caller — when the companion
+-- maps, or when the scan converges on any other decision — and deliberately
+-- does NOT use a timer: an in-flight spawn with a member-scene still alive is
+-- one the user can reach with the same binds that spawned the member, and
+-- presence is not state the desk keeps.
 local M = {}
 
 ---@class Scene.CompanionDecision
@@ -83,17 +84,14 @@ function M.filter(decisions, pending)
   return out
 end
 
----The caller's pending marker for an in-flight spawn has a finite lifetime:
----a lost spawn self-heals on the next event instead of leaving the desk
----believing a companion is coming forever.
+---Arm the caller's in-flight marker for an in-flight spawn. It has no
+---self-expiry: the events clear it (the companion maps, or the scene it was
+---spawned for emptied), and a lost spawn still self-heals on the next event
+---because the marker is only a duplicate guard, not a presence record.
 ---@param pending table<string, true>
 ---@param key string
----@param timer fun(ms: integer, cb: fun()) the one-shot scheduling primitive, injected for testability
-function M.expire(timer, key, pending)
+function M.expire(key, pending)
   pending[key] = true
-  timer(PENDING_MS, function()
-    pending[key] = nil
-  end)
 end
 
 ---Workspace+class key for the pending marker.

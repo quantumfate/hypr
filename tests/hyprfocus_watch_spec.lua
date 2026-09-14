@@ -154,12 +154,16 @@ t.describe("the watcher", function()
     t.ok(spawned, "the services half was never asked for")
   end)
 
-  t.it("arms a re-arming poll at start, not a one-shot", function()
-    local stub, _, watch = fresh(DECLARATION, { mode = "game" })
-    watch.arm()
-    t.ok(#stub.timers == 1, "one chain of timers")
-    stub.timers[1].cb()
-    t.eq("game", require("hypr.hyprfocus.init").last_applied())
-    t.ok(#stub.timers == 2, "the tick re-armed itself")
+  t.it("attaches event subscriptions, not a clock", function()
+    -- The watcher subscribes to the desk's own events instead of paying a
+    -- clock tick forever: convergence is a chance the desk already runs.
+    local stub, hyprfocus, watch = fresh(DECLARATION, { mode = "game" })
+    t.eq(0, #stub.timers, "no timer chain — idle desks pay stats, not ticks")
+    watch.attach()
+    t.ok(#stub.timers == 0, "no timers were armed")
+    local handler = stub.event_handlers["workspace.active"]
+    t.ok(handler and #handler >= 1, "workspace.active triggers convergence")
+    -- The load-time convergence ran the pointer's mode once.
+    t.eq("game", hyprfocus.last_applied())
   end)
 end)

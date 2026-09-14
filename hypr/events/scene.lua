@@ -24,7 +24,6 @@ local spec_lib = require("hypr.scene.spec")
 local registry = require("hypr.scene.registry")
 local schedule = require("hypr.scene.schedule")
 local companion = require("hypr.scene.companion")
-local oneshot = require("hypr.lib.hypr").oneshot
 
 local specs = spec_lib.load()
 
@@ -33,7 +32,8 @@ registry.seed(specs)
 
 -- In-flight spawns, keyed workspace:companion-class, so a scan racing the
 -- companion's own open event never asks twice. Cleared when the companion
--- maps and expired short of that.
+-- maps or when the scan converges on another decision for the key; no timer
+-- arms it, because the events are what a companion's presence rides anyway.
 local pending = {}
 
 ---Run the companion lifecycle for the named scene against live windows.
@@ -46,9 +46,7 @@ local function converge_companions(name)
   end
   for _, decision in ipairs(companion.filter(companion.decisions(spec, name, hl.get_windows() or {}), pending)) do
     if decision.action == "spawn" then
-      companion.expire(function(ms, cb)
-        oneshot(ms, cb)
-      end, decision.pending_key, pending)
+      companion.expire(decision.pending_key, pending)
       hl.dispatch(hl.dsp.exec_cmd(("uwsm app -- %s"):format(decision.command)))
     elseif decision.addresses then
       for _, address in ipairs(decision.addresses) do

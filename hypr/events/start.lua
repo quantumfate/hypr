@@ -48,7 +48,8 @@ hl.on("hyprland.start", function()
   -- Converge on the pointer's mode and keep watching it: the shell (or a
   -- later schedule) edits focus.json without the compositor, and a mode
   -- change that reaches only the pointer would leave the desk describing a
-  -- mode it is not in.
-  watch.arm()
+  -- mode it is not in. Event subscriptions rather than a timer — an idle
+  -- desk pays stats, not ticks.
+  watch.attach()
   open_study_project()
 end)
