@@ -103,6 +103,17 @@ Compositor logic executes scene documents; see [docs/scenes.md](docs/scenes.md).
 Host `workspace_specs` bind workspace ids and monitors. Geometry profiles stay
 fingerprint-based.
 
+A scene covers geometry alone. Which workspaces exist, which binding trees are
+loaded and what runs in the background are declared by a **mode**, and this
+repo is one of several executors of that declaration — the others being the
+shell and the user units. The cross-repo model is `hyprfocus`, documented in
+the sibling `system-config` repo.
+
+The scene is registered as a Hyprland layout rather than run as a correction
+loop over one: the compositor asks where windows go and the scene answers.
+That is what keeps placement independent of which window has focus, and what
+removes the need to subscribe to the events that change a layout.
+
 ## Package classification (Arch/AUR)
 
 Most `hypr*` packages are in official CachyOS/Arch repos. Genuinely-AUR ones
