@@ -336,6 +336,10 @@ _G.config = {
             -- They are barred because `auto_group` grabs whatever opens while a
             -- group holds focus, and this workspace's main tile is a group.
             barred = { "steam_app_default", "steam_app_\\d+", "Ankama Launcher" },
+            -- This scene's tile geometry is a fixed capture region, so a
+            -- window that matches no block floats above it rather than taking
+            -- a slot and shifting the split the crop is aimed at.
+            strays = "float",
           },
           {
             default_name = "code",

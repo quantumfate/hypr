@@ -19,6 +19,7 @@ local M = {}
 ---@field name string workspace `default_name` — the scene's host-independent identity
 ---@field blocks Scene.Block[] sorted by `order`
 ---@field barred string[] classes that may land here but must never join a group
+---@field strays "slot"|"float" what happens to a window matching no block
 
 ---@param raw table
 ---@return Scene.Spec
@@ -42,7 +43,16 @@ local function normalize(raw)
   table.sort(blocks, function(a, b)
     return a.order < b.order
   end)
-  return { name = raw.default_name, blocks = blocks, barred = raw.barred or {} }
+  return {
+    name = raw.default_name,
+    blocks = blocks,
+    barred = raw.barred or {},
+    -- Slotting is the default: the desk adjusts to what is present. A scene
+    -- whose geometry is a fixed region — one being captured, where a box that
+    -- moves when something unrelated opens invalidates the crop — floats
+    -- strays instead so the declared split never shifts.
+    strays = raw.strays == "float" and "float" or "slot",
+  }
 end
 
 ---@type table<string, Scene.Spec>?
