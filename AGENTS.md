@@ -48,7 +48,7 @@ Scene.realize(name)
 Scene.tile(name, match)    -- first tile of that match, or nil
 ```
 
-Long-term store is `$XDG_STATE_HOME` `scenes.json` — Lua consumes it and seeds it from `hypr/scene/defaults.lua` on first run; the host files' `scenes` fork is gone (hypr `625a970`).
+Long-term store is `scenes.json` under the shared quantum-store directory (`QF_STORE`, default `$XDG_STATE_HOME/quantum-store`; env-hyprland exports it) — Lua consumes it and seeds it from `hypr/scene/defaults.lua` on first run; the host files' `scenes` fork is gone (hypr `625a970`), and every other state file moved under the same directory with a one-step legacy read-back (hypr `5d5200a`).
 
 ## Hyprland primitives (do not rediscover)
 

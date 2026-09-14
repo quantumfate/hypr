@@ -3,6 +3,14 @@ hypr_repo_path: "{{ playbook_dir }}/.."
 
 hypr_config_dir: "{{ ansible_facts.user_dir }}/.config/hypr"
 
+# The shared quantum-store directory every runtime keeps state under:
+# QF_STORE (the env the whole desk agrees on) takes precedence, otherwise one
+# dir deeper than the state home — the same resolution env-hyprland exports.
+qf_store_dir: >-
+  {{ ansible_facts.env.QF_STORE
+     | default((ansible_facts.env.XDG_STATE_HOME
+                | default(ansible_facts.user_dir + '/.local/state')) ~ '/quantum-store') }}
+
 hypr_install_packages: true
 hypr_channel: git                 # stable | git
 hypr_channel_replace_stable: true

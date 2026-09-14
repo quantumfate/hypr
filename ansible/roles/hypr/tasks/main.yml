@@ -144,6 +144,15 @@
           {{ (hypr_gpu != 'nvidia' and (line is match('^export (GBM_BACKEND|__GLX_VENDOR_LIBRARY_NAME|LIBVA_DRIVER_NAME|NVD_BACKEND)='))) | ternary('# ' ~ line, line) }}
           {% endfor %}
 
+    - name: Ensure the shared quantum-store directory exists
+      # The one directory every runtime's state files live under (QF_STORE);
+      # env-hyprland above exports it, and the store implementations adopt
+      # anything still at the legacy locations on read.
+      ansible.builtin.file:
+        path: "{{ qf_store_dir }}"
+        state: directory
+        mode: "0755"
+
     - name: Ensure systemd user dir exists
       ansible.builtin.file:
         path: "{{ ansible_facts.user_dir }}/.config/systemd/user"

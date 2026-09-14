@@ -14,7 +14,7 @@ integrate with the shared state / UI:
   `_qfs` lives in the quickshell repo's `completions/`.
 
 - `bin/dofus_swap.py` — Dofus auto turn-swap detector. Reads its roster from the
-  shared team source of truth (`$XDG_STATE_HOME/dofus/team.json`), the same file
+  shared team source of truth (`$QF_STORE/dofus/team.json`), the same file
   the Quickshell UI edits, so team changes take effect live.
   (Querying that team store from the shell is done with `dofus-team`, which lives
   in the quickshell repo's `scripts/`.)
@@ -27,7 +27,7 @@ integrate with the shared state / UI:
 - `bin/obsidian_vault.py` + `bin/,obsidian-cli-wrapper.sh` — Obsidian Zettelkasten
   bootstrap: scans `~/Documents/Obsidian/Main`, infers the missing
   `idx`/`meta_idx` index-note chain for a topic, creates notes via Templater, and
-  keeps a tag-structure store (`$XDG_STATE_HOME/obsidian/tags.json`, plus a
+  keeps a tag-structure store (`$QF_STORE/obsidian/tags.json`, plus a
   GPG-encrypted `.gpg` copy). The vault is the source of truth; the store is a
   projection. Full reference: quickshell
   `docs/obsidian-vault-manifest.md`.
@@ -48,7 +48,7 @@ integrate with the shared state / UI:
   role in **system-config**.
 
   Because tags are derived from Linear's naming, a rename moves a whole subtree.
-  The previous hierarchy is kept in `$XDG_STATE_HOME/obsidian/linear.json` so the
+  The previous hierarchy is kept in `$QF_STORE/obsidian/linear.json` so the
   next run can diff it and rename the old tag prefix wherever it appears —
   including on notes the sync never created.
 
@@ -68,7 +68,7 @@ integrate with the shared state / UI:
   `protected` list are never touched; stops go through systemd (SIGTERM + the
   unit's `TimeoutStopSec`, never SIGKILL); `graceful` entries are only
   requested and logged. Every decision lands in
-  `$XDG_STATE_HOME/scene-policy/log.jsonl`, the feed for the scene-policy
+  `$QF_STORE/scene-policy/log.jsonl`, the feed for the scene-policy
   logging workspace (LEO-241). `--dry-run` prints the plan without touching
   systemd. `,mood-bg.sh <task>` is the dispatch-time gate for a task's timer:
   it asks the shell (`focus bg <task>`) and exits 0 to run, 2 to defer, 3 to
@@ -86,3 +86,8 @@ integrate with the shared state / UI:
 
 How the shared state + IPC bridges work:
 [quickshell/ARCHITECTURE.md](https://github.com/quantumfate/quickshell/blob/main/ARCHITECTURE.md).
+
+The desk's shared state lives in one store directory: `$QF_STORE` (default
+`$XDG_STATE_HOME/quantum-store`, exported by `env-hyprland`). Every runtime
+reads backward one step to the location before it existed, so a store not yet
+moved still answers and migrates on the next write.
