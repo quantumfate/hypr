@@ -79,6 +79,10 @@
         procps
         xorg.setxkbmap
         inetutils
+        # Wallpaper daemon (`aww` — the crossfade backend,wallpaper.sh drives);
+        # awww is the swww fork caching the same CLI shape, so older nixpkgs
+        # without it fall back to swww rather than fail.
+        (pkgs.awww or pkgs.swww)
       ];
 
       hyprGitOverlay = final: prev: {

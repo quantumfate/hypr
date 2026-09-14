@@ -73,6 +73,7 @@ hypr_tool_packages:
   - procps-ng                   # pgrep / pkill
   - xorg-setxkbmap              # setxkbmap dvorak-custom
   - inetutils                   # hostname (per-host config selection)
+  - awww                        # wallpaper daemon (aww — crossfade, per ,wallpaper.sh)
 
 # AUR packages the ecosystem actually uses on this host. Installed via an AUR
 # helper (see hypr_aur_helper) when hypr_install_aur_packages is true. Classified
