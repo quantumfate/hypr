@@ -47,7 +47,10 @@ def state_dir() -> Path:
     """The shared quantum-store directory (QF_STORE), legacy as the read-back."""
     if os.environ.get("QF_STORE"):
         return Path(os.environ["QF_STORE"])
-    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "quantum-store"
+    return (
+        Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
+        / "quantum-store"
+    )
 
 
 def legacy_state_dir() -> Path:

@@ -70,7 +70,9 @@ class Config:
         self.enc_store: Path = self.store_dir / "tags.json.gpg"
         # The one step back, for a store the desk has not migrated yet.
         self.legacy_store: Path = (
-            Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+            Path(
+                os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))
+            )
             / STORE_NAME
             / "tags.json"
         )
