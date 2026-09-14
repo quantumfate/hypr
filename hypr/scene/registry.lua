@@ -16,8 +16,12 @@ local owner = {}
 ---@param specs table<string, Scene.Spec>
 ---@param w HL.Window?
 function M.claim(specs, w)
-  local ws = w and w.workspace
-  local spec = ws and specs[ws.name]
+  -- A single guard, not `w and w.workspace and ...`: the nil righteousness of
+  -- `w.class` below has to be obvious.
+  if not w then
+    return
+  end
+  local spec = w.workspace and specs[w.workspace.name]
   if spec and spec_lib.block_for(spec, w.class) then
     owner[w.address] = spec.name
   end

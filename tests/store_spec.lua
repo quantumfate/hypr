@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 local t = require("tests.harness")
 
 -- store.lua reads XDG_STATE_HOME once at require-time (ROOT), so point it at

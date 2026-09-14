@@ -43,9 +43,10 @@ local SHARE_TOL = 0.02
 ---@field width number? resize: target width in pixels
 
 ---The scene's own tiles: on its workspace, not floating, belonging to a block.
+---`blocks` indexes a tile's block by address.
 ---@param spec Scene.Spec
 ---@param snap Scene.Snapshot
----@return Scene.Win[], table<string, Scene.Block> tiles, and each tile's block
+---@return Scene.Win[] tiles, table<string, Scene.Block> blocks
 local function scene_tiles(spec, snap)
   local tiles, blocks = {}, {}
   for _, w in ipairs(snap.windows) do
@@ -105,10 +106,13 @@ end
 ---makes the engine recover from a split. Two groups can form for one block
 ---whenever `auto_group` wins a race at map time; a remembered set would treat
 ---one of them as authoritative forever and re-fight the other every event.
+---The winning group is the one with the most of the block's tiles; `member`
+---is one of its windows, so the caller has something to address. nil when the
+---block holds no tiles.
 ---@param tiles Scene.Win[]
 ---@param blocks table<string, Scene.Block>
 ---@param block Scene.Block
----@return string? group key, Scene.Win? a member to address it by
+---@return string? group, Scene.Win? member
 local function dominant_group(tiles, blocks, block)
   local count, seed = {}, {}
   for _, w in ipairs(tiles) do

@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- Specs for hypr.lib.diagnose (LEO-213): the window-placement diagnosis
 --- (PCRE-subset matcher, rule evaluation, report builder) and the diag service
 --- that wraps it into the "shell/x" bind.

@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- The highest-value spec in this suite: two entries bound to the same key
 --- inside one submap are invisible until someone presses the wrong one, and
 --- an undescribed bind is invisible to the cheatsheet. Both are silent until

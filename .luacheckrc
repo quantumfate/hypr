@@ -6,7 +6,7 @@ quote_style = "AutoPreferDouble"
 call_parentheses = "Always"
 
 -- `hl` and `config` are provided by the Hyprland Lua runtime and by
--- hyprland.lua's bootstrap respectively; neither is reassigned by the config.
+-- conf/'s bootstrap respectively; neither is reassigned by the config.
 read_globals = {
   "hl",
   "config",

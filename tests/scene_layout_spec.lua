@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- Scene geometry: where the tiles go.
 ---
 --- Pure arithmetic, so these are plain tables — no compositor, no timers, no
@@ -15,7 +20,7 @@ local function scene(blocks, over)
     host = {
       workspaces = {
         scenes = {
-          { default_name = "code", blocks = blocks, strays = over.strays },
+          { default_name = "code", blocks = blocks, strays = over.strays, solo_frame = over.solo_frame },
         },
       },
     },

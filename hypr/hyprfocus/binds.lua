@@ -68,7 +68,7 @@ function M.submap(name, reset_or_fn, fn)
 end
 
 ---Every tree that has at least one bind.
----@return string[] sorted, so callers and logs see a stable order
+---@return string[] names # sorted, so callers and logs see a stable order
 function M.names()
   local out = {}
   for name in pairs(trees) do

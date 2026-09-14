@@ -109,6 +109,9 @@ encode = function(val, stack)
   error("unexpected type '" .. t .. "'")
 end
 
+---Encode a Lua value as JSON (third-party lib: public surface only is typed).
+---@param val any
+---@return string
 function json.encode(val)
   return (encode(val))
 end
@@ -342,6 +345,9 @@ parse = function(str, idx)
   decode_error(str, idx, "unexpected character '" .. chr .. "'")
 end
 
+---Decode a JSON string (third-party lib: public surface only is typed).
+---@param str string
+---@return table
 function json.decode(str)
   if type(str) ~= "string" then
     error("expected argument of type string, got " .. type(str))

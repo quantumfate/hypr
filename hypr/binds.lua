@@ -1,6 +1,7 @@
 local toggle_minimize = require("hypr.lib.minimize")
 local bind = require("hypr.lib.bind")
 local submap = require("hypr.lib.submap")
+local layout_lib = require("hypr.lib.layout")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
 local diag = require("hypr.services.diag")
@@ -230,8 +231,8 @@ submap.tree({
   },
 })
 
-bind.focus_workspace("TAB", "e-1")
-bind.focus_workspace("TAB", "e+1", { config.secondary_mod })
+bind.focus_workspace("TAB", "e-1", "the previous used workspace")
+bind.focus_workspace("TAB", "e+1", "the next used workspace", { config.secondary_mod })
 
 -- Focus mode also blocks reaching the media workspace, not just launching
 -- apps on it. bind_workspaces() below registers every workspace key
@@ -248,7 +249,9 @@ do
     end
   end
   if media_idx and keys[media_idx] then
-    local ws = specs[media_idx].workspace
+    -- Addressed the environment's way: a named default_name, else the id.
+    local spec = specs[media_idx]
+    local ws = spec.default_name and ("name:" .. spec.default_name) or tostring(spec.workspace)
     hyprfocus_binds.bind(config.main_mod .. "+" .. keys[media_idx], function()
       local reason = focus_block_reason("media") or scene_block_reason("media")
       if reason then
@@ -280,7 +283,7 @@ bind.layout_action({ config.main_mod, config.secondary_mod, "k" }, "swap_down", 
 -- Each layout declares its own ops (see hypr/layouts/*); this just composes them
 -- into groups, so it never needs touching when a layout gains a new op.
 local layout_groups = {}
-for _, ls in ipairs(require("hypr.lib.layout").get_submaps()) do
+for _, ls in ipairs(layout_lib.get_submaps()) do
   layout_groups[#layout_groups + 1] = {
     key = ls.key,
     name = "layout-" .. ls.layout,
@@ -297,24 +300,29 @@ submap.tree({
 })
 
 local function cycle_workspace_layout()
-  local layouts = { "scrolling", "dwindle", "master", "monocle" }
+  local layouts = { "scrolling", "dwindle", "master", "monocle", "scene" }
   local workspace = hl.get_active_special_workspace() or hl.get_active_workspace()
   if not workspace then
     return
   end
 
+  -- tiled_layout reports the compositor's match key ("scene" comes back as
+  -- "lua:scene"), so comparisons run against the same normalized form.
+  local current = layout_lib.rule_layout(workspace.tiled_layout)
+  current = current and current:gsub("^lua:", "") or nil
   local next_layout = "dwindle"
   for i = 1, #layouts do
-    if layouts[i] == workspace.tiled_layout then
+    if layouts[i] == current then
       next_layout = layouts[(i % #layouts) + 1]
       break
     end
   end
 
+  local rule_layout = layout_lib.rule_layout(next_layout)
   if workspace.special then
-    hl.workspace_rule({ workspace = tostring(workspace.name), layout = next_layout })
+    hl.workspace_rule({ workspace = tostring(workspace.name), layout = rule_layout })
   else
-    hl.workspace_rule({ workspace = tostring(workspace.id), layout = next_layout })
+    hl.workspace_rule({ workspace = tostring(workspace.id), layout = rule_layout })
   end
 end
 

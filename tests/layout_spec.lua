@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 local t = require("tests.harness")
 local layout = require("hypr.lib.layout")
 
@@ -63,5 +68,11 @@ t.describe("layout", function()
     local submaps = layout.get_submaps()
     t.eq(spec_a, submaps[#submaps - 1])
     t.eq(spec_b, submaps[#submaps])
+  end)
+
+  t.it("rule_layout() spells builtins bare and prefixes custom Lua layouts", function()
+    t.eq("dwindle", layout.rule_layout("dwindle"))
+    t.eq("master", layout.rule_layout("master"))
+    t.eq("lua:scene", layout.rule_layout("scene"))
   end)
 end)

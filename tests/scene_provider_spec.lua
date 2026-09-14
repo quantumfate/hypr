@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- The scene layout provider: the compositor asks, the scene answers.
 ---
 --- The provider is a thin shell over the pure geometry, so what is under test
@@ -140,6 +145,16 @@ t.describe("gaps", function()
     local a = target("0x1", "Kitty-Main", "code")
     provider.recalculate({ area = AREA, targets = { a } })
     t.ok(placed(a), "a missing config value must not stop the layout")
+  end)
+
+  t.it("honours the scene document's own solo_frame opt-out", function()
+    -- conf/hosts scenes spell `solo_frame = false` for fixed capture regions;
+    -- a normalize that dropped it would re-frame the workspace silently.
+    local _, provider = fresh({ { default_name = "code", blocks = CODE.blocks, solo_frame = false } })
+    local a = target("0x1", "Kitty-Main", "code")
+    provider.recalculate({ area = AREA, targets = { a } })
+    t.eq(0, placed(a).x, "no widened frame: the capture split does not move")
+    t.eq(1000, placed(a).w)
   end)
 end)
 

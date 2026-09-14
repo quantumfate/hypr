@@ -24,11 +24,9 @@ local M = {}
 -- that already decides every box, so there is nothing to race.
 local SOLO_EXTRA = 180
 
----@class Scene.Area
----@field x number
----@field y number
----@field w number
----@field h number
+---The work area the compositor offered: the runtime's own HL.Box (the stub's
+---LayoutContext.area type), so provider code needs no second geometry table.
+---@alias Scene.Area HL.Box
 
 ---@class Scene.Tile
 ---@field address string

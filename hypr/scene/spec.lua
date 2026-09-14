@@ -20,6 +20,7 @@ local M = {}
 ---@field blocks Scene.Block[] sorted by `order`
 ---@field barred string[] classes that may land here but must never join a group
 ---@field strays "slot"|"float" what happens to a window matching no block
+---@field solo_frame? boolean explicit host opt-out of the lone-tile frame (nil means default)
 
 ---@param raw table
 ---@return Scene.Spec
@@ -52,6 +53,7 @@ local function normalize(raw)
     -- moves when something unrelated opens invalidates the crop — floats
     -- strays instead so the declared split never shifts.
     strays = raw.strays == "float" and "float" or "slot",
+    solo_frame = raw.solo_frame,
   }
 end
 

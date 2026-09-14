@@ -31,6 +31,7 @@ end
 ---@field repeating? boolean
 ---@field release? boolean
 ---@field transparent? boolean
+---@field non_consuming? boolean repeated keypresses, not a keypress-and-release pair
 
 ---Register a base-layer Dofus bind. On a Dofus window it runs `action`; off it,
 ---the key is forwarded to the focused window so nothing else notices the bind.

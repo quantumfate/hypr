@@ -34,11 +34,14 @@ end
 
 -- ---- PCRE2-subset matcher (unchanged: unanchored first match, like Hyprland)
 
+-- Forward declaration; the annotations below belong to the assignment at the
+-- bottom of the matcher and to match_one, which share the seq/s/pos contract.
+local match_seq
+
 ---@param piece table
 ---@param s string
 ---@param pos integer 1-based position of the next character to consume
 ---@return integer? end position (1 past the consumed char) or nil
-local match_seq
 local function match_one(piece, s, pos)
   if piece.kind == "caret" then
     return pos == 1 and pos or nil
@@ -150,9 +153,6 @@ local function match_alt(alts, s, pos)
   return nil
 end
 
----@param text string
----@param i integer index of the backslash
----@return string, any, integer kind ("char"|"class"), data, next index
 local ESC_LITERALS = {
   ["\\"] = "\\",
   ["."] = ".",
@@ -168,6 +168,9 @@ local ESC_LITERALS = {
   ["|"] = "|",
   ["-"] = "-",
 }
+---@param text string
+---@param i integer index of the backslash
+---@return string, any, integer kind ("char"|"class"), data, next index
 local function parse_escape(text, i)
   local e = text:sub(i + 1, i + 1)
   if ESC_LITERALS[e] then

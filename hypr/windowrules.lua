@@ -186,7 +186,7 @@ windowrule.tag_props({
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
-  -- These classes are in the gaming scene's `barred` list (hyprland.lua), so
+  -- These classes are in the gaming scene's `barred` list (conf/hosts/), so
   -- the bar that keeps auto_group from swallowing a game into the Dofus tab
   -- strip is emitted by hypr/scene/compile.lua rather than repeated here.
   static = {
@@ -279,7 +279,7 @@ hl.window_rule({
   match = { class = "Ankama Launcher", title = "overlay" },
   workspace = "name:gaming",
   -- The bar that keeps this overlay out of the Dofus group is the gaming
-  -- scene's (`barred` in hyprland.lua), emitted by hypr/scene/compile.lua.
+  -- scene's (`barred` in conf/hosts/), emitted by hypr/scene/compile.lua.
   float = true,
   center = true,
   tag = "+floating-window",
@@ -383,7 +383,7 @@ windowrule.tag_set_effects("music", { static = { workspace = "special:music" } }
 -- Grouped, they are one tile with a tab strip: the split stays two-way whatever
 -- the count, and the groupbar (styled in conf.lua) says which one is in front.
 --
--- The grouping itself is the `code` scene's first block (hyprland.lua):
+-- The grouping itself is the `code` scene's first block (conf/hosts/):
 -- `Kitty-Main` and `Proj-*` are its classes, and hypr/scene/compile.lua emits
 -- the `set always` for both. It is `set always` rather than plain `set`
 -- because the default only groups a window the first time, and the point here

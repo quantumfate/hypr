@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- Group-membership addressing for the Dofus roster (LEO-230): iterate/nav
 --- cycle the Hyprland group natively, and activate/press read membership off
 --- any client's `.group` rather than a standalone window list.

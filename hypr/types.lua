@@ -1,8 +1,44 @@
 ---@meta
 
+---The store module's shared-handle factory (hypr/lib/store.lua).
+---@class Store
+---@field define fun(name: string): Store.Handle
+
 ---@class Workspaces
 ---@field workspace_specs HL.WorkspaceRuleSpec[]
 ---@field workspace_keys string[]
+---@field scenes? SceneFork[] the temporary host fork consumed by hypr/scene/spec.lua
+
+---One scene block of the temporary host fork (conf/hosts): key by
+---`default_name` (host-independent); the long-term store is the
+---$XDG_STATE_HOME scenes.json document (docs/scenes.md).
+---@class SceneFork
+---@field default_name string
+---@field blocks SceneForkBlock[]
+---@field barred? string[]
+---@field strays? "slot"|"float"
+---@field solo_frame? boolean
+
+---@class SceneForkBlock
+---@field classes string[]
+---@field group? boolean
+---@field order? number
+---@field share? number
+---@field collect? boolean
+---@field guard? "deny"
+
+---Layout a workspace spec may spell (upstream stub spells it a bare string).
+---The desk's own vocabulary, the compositor's registration names. Custom Lua
+---layouts select as `lua:<name>`; a spec omitting the field gets "scene"
+---filled by conf/host.lua's spec-default pass.
+---@alias LayoutName "dwindle" | "master" | "monocle" | "scrolling" | "scene"
+
+-- Local refinement of the installed stub (/usr/share/hypr/stubs): LuaLS
+-- merges class declarations, so only the field the desk sharpens carries; the
+-- duplicate is deliberate.
+---@class HL.WorkspaceRuleSpec
+---@diagnostic disable-next-line: duplicate-doc-field
+---@field layout? LayoutName
 
 ---@class AppScope
 ---@field cmd string

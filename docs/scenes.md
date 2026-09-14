@@ -26,7 +26,7 @@ Config is the only declaration. No per-feature merge, `barred`, or `spawn` code.
 
 Scenes are keyed by workspace `default_name` (`code`, `gaming`). Workspace id is host data in `workspace_specs`.
 
-Source of truth: `$XDG_STATE_HOME` scenes store (`scenes.json`). Schema lives in the sibling quickshell repo. Lua consumes that document; a parallel table in `hyprland.lua` is not the long-term store.
+Source of truth: `$XDG_STATE_HOME` scenes store (`scenes.json`). Schema lives in the sibling quickshell repo. Lua consumes that document; a parallel table in the host files (`conf/hosts/`) is not the long-term store.
 
 ## Split
 

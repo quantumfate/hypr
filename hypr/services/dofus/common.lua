@@ -15,6 +15,10 @@
 --- The store keeps a decoded copy in RAM and refreshes it whenever the file
 --- changes, so edits made in the UI (or by any script) are picked up on the
 --- next access without a config reload.
+-- Typed: by require alone LuaLS resolves this module table only where the
+-- whole tree is loaded at once; the declared shape keeps `define` visible in
+-- any per-file analysis.
+---@type Store
 local Store = require("hypr.lib.store")
 
 local M = {}

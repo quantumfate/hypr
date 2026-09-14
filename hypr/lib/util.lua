@@ -11,7 +11,7 @@ function M.hostname()
   return name
 end
 
----Current host config. Resolved once in hyprland.lua; prefer `config.host`.
+---Current host config. Resolved once by conf/host.lua; prefer `config.host`.
 ---@return Hosts
 function M.host_config()
   return config.host

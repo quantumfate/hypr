@@ -1,12 +1,12 @@
 -- Geometry profile, picked from the outputs rather than the hostname.
 --
--- host_configs (hyprland.lua) says which workspaces exist per machine — that
+-- The host files (conf/hosts/) say which workspaces exist per machine — that
 -- really is a property of the hostname, since it encodes the workstations we
 -- built by hand. Gaps, region rules and layout choices are not: they depend
 -- on what the panel actually is, and a hostname has no way to say "this is a
 -- 5120x1440 ultrawide". So they're fingerprinted off hl.get_monitors()
--- instead, independent of host_configs, and hyprland.lua looks the result up
--- in a `geometry_profiles` table rather than in `config.host`.
+-- instead, independent of hostname, and conf/host.lua looks the result up
+-- in a `geometry_profiles` table (conf/base.lua) rather than in `config.host`.
 local Store = require("hypr.lib.store")
 
 local M = {}
@@ -45,7 +45,7 @@ function M.current()
   return M.fingerprint(hl.get_monitors() or {})
 end
 
----The profile hyprland.lua should apply this load: a manual override from
+---The profile this load should apply: a manual override from
 ---M.switch() if one is standing, else the live fingerprint.
 ---@return "desk-dual"|"laptop-solo"
 function M.resolve()
@@ -54,7 +54,7 @@ end
 
 ---Writes the resolved profile where Quickshell can read it (e.g. to collapse
 ---which-key to a bottom sheet on laptop-solo). Called once per config load,
----after hyprland.lua has resolved the profile.
+---after conf/host.lua has resolved the profile.
 ---@param name string
 function M.publish(name)
   store:set({ profile = name })

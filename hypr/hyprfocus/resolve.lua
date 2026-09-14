@@ -176,9 +176,13 @@ local function close_requirements(desk, base, mode, removed)
       for strength, graph in pairs({ requires = requires, wants = wants }) do
         for _, ref in ipairs(graph[key] or {}) do
           local kind, name = parse_ref(ref)
-          if not kind then
-            error(("mode '%s': malformed %s reference '%s' on %s"):format(mode, strength, tostring(ref), key), 0)
-          end
+          -- assert, not `if not kind then error()`: re-assignment keeps both
+          -- narrowed to string for the lookups below.
+          local malformed = ("mode '%s': malformed %s reference '%s' on %s"):format(mode, strength, tostring(ref), key)
+          kind = assert(kind, malformed)
+          name = assert(name, malformed)
+          name =
+            assert(name, ("mode '%s': malformed %s reference '%s' on %s"):format(mode, strength, tostring(ref), key))
           if removed[kind][name] then
             if strength == "requires" then
               -- `remove` says this should not be here and a hard requirement
@@ -249,7 +253,21 @@ function M.resolve(declaration, mode)
     error(("unknown mode '%s'"):format(mode), 0)
   end
 
-  local desk = { mode = mode }
+  -- Explicit shape, filled wholesale: LuaLS checks a table literal against
+  -- its assigned type, so a half-built desk would read as missing fields ten
+  -- assignments too early. Every per-kind list and presentation is patched
+  -- further down before the desk leaves this function.
+  local desk = {
+    mode = mode,
+    workspaces = {},
+    bindings = {},
+    services = {},
+    projects = {},
+    scenes = {},
+    notify = {},
+    revoke = {},
+    presentation = {},
+  }
   local removed = {}
   for _, kind in ipairs(LIST_KINDS) do
     desk[kind] = apply(base[kind], spec[kind], ("mode '%s', %s"):format(mode, kind))

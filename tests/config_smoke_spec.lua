@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- The whole config, loaded.
 ---
 --- The failure this exists for is not subtle and has cost three sessions: a
@@ -46,6 +51,18 @@ t.describe("the config loads", function()
     end)
   end
 
+  t.it("a host with no file of its own takes the default desk", function()
+    local ok, err = load_config("quantum-nowhere")
+    t.ok(ok, "fallback host failed to load: " .. tostring(err))
+    t.eq("eDP-1", config.host.primary_monitor)
+    t.ok(config.host.workspaces.workspace_specs[1].persistent, "spec defaults filled for the fallback anytime")
+    t.eq("scene", config.host.workspaces.workspace_specs[1].layout)
+
+    local ok2, err2 = load_config("quantum-desktop")
+    t.ok(ok2, "config failed to load after the fallback: " .. tostring(err2))
+    t.eq("lua:scene", hl.workspace_rules[1].layout)
+  end)
+
   t.it("registers binds and workspace rules", function()
     -- A config that loads but registers nothing is the same desk as one that
     -- raised, so loading is not on its own the thing worth asserting.
@@ -53,5 +70,16 @@ t.describe("the config loads", function()
     t.ok(#hl.binds > 10, "expected the bind tree to be built")
     t.ok(#hl.workspace_rules > 0, "expected workspace rules")
     t.ok(hl.layouts and hl.layouts.scene, "expected the scene layout to register")
+
+    -- A named workspace keys its rule on the name, or any auto-named duplicate
+    -- created while the id-backed workspace is withdrawn inherits no rule.
+    local named = {}
+    for _, rule in ipairs(hl.workspace_rules) do
+      if rule.default_name then
+        named[rule.default_name] = rule
+      end
+    end
+    t.eq("name:code", named.code.workspace, "workspace 1 must key its rule on default_name")
+    t.eq("lua:scene", named.code.layout, "workspace 1 is the desktop's scene workspace")
   end)
 end)

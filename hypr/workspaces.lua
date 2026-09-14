@@ -7,10 +7,17 @@
 --     the nested per-layout tables outright.
 --   engine.solo_gaps   -- consumed by hypr/events/solo_gaps.lua as the framing
 --     opt-out.
+-- A spec with a `default_name` keys its rule on that name, not on the id. The
+-- rest of the environment addresses workspaces by name (binds, hold restore,
+-- window rules, the scene actuator), and when a mode withdrew an id-keyed
+-- workspace, a later `name:code` dispatch spawned an auto-named duplicate that
+-- inherited no rule and fell back to the default layout. A name-keyed rule
+-- matches both the id-backed workspace and any named duplicate.
 -- The handle is kept, not discarded: it carries `set_enabled`, which is how a
 -- mode withdraws a workspace and brings it back without a reload. This is the
 -- only place workspace rules are created, so recording here needs no wrapper.
 local registry = require("hypr.hyprfocus.workspaces")
+local layout = require("hypr.lib.layout")
 
 for _, workspace_spec in ipairs(config.host.workspaces.workspace_specs) do
   local rule = {}
@@ -19,5 +26,9 @@ for _, workspace_spec in ipairs(config.host.workspaces.workspace_specs) do
       rule[field] = value
     end
   end
+  if workspace_spec.default_name and not tostring(workspace_spec.workspace):find(":", 1, true) then
+    rule.workspace = "name:" .. workspace_spec.default_name
+  end
+  rule.layout = layout.rule_layout(rule.layout)
   registry.record(workspace_spec.default_name, hl.workspace_rule(rule))
 end

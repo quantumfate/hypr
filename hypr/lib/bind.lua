@@ -6,60 +6,51 @@ function M.parse_mods(mods)
   return mods and "+" .. table.concat(mods, "+") .. "+" or "+"
 end
 
----Binds workspace focus and window move actions
+---Binds workspace focus and window move actions. Namespace rule: a spec's
+---`default_name` is what the environment addresses (window rules, hold
+---restore, the scene actuator), so binds speak "name:<default_name>"; a spec
+---without one keeps its numeric or special: selector.
 function M.bind_workspaces()
   local host = config.host
   for i, key in ipairs(host.workspaces.workspace_keys) do
-    if host.workspaces.workspace_specs[i] then
-      M.focus_workspace(key, tostring(i))
-      M.move_focused_to_workspace(key, tostring(i), { "SHIFT" })
+    local spec = host.workspaces.workspace_specs[i]
+    if spec then
+      local selector = spec.default_name and ("name:" .. spec.default_name) or tostring(spec.workspace)
+      local label = spec.default_name or tostring(spec.workspace)
+      M.focus_workspace(key, selector, label)
+      M.move_focused_to_workspace(key, selector, { "SHIFT" }, label)
     end
   end
 end
 
----@param workspace string
----@return string, string?
-local function get_workspace_direction(workspace)
-  return workspace:match("%d") and workspace,
-    workspace or function()
-      if workspace == "e-1" then
-        return "previous", workspace
-      elseif workspace == "e+1" then
-        return "next", workspace
-      else
-        return workspace, ("name:%s"):format(workspace)
-      end
-    end
-end
-
 ---@param key string
----@param workspace string workspace name unless it's a single diget or a "e+" selector
+---@param selector string the workspace selector the dispatcher speaks, e.g. "name:code"
+---@param label string how the bind's description spells the workspace
 ---@param mods string[]?
-function M.move_focused_to_workspace(key, workspace, mods)
-  local direction, ws_selector = get_workspace_direction(workspace)
+function M.move_focused_to_workspace(key, selector, mods, label)
   hyprfocus_binds.bind(
     config.main_mod .. M.parse_mods(mods) .. key,
-    hl.dsp.window.move({ workspace = ws_selector, follow = true }),
+    hl.dsp.window.move({ workspace = selector, follow = true }),
     {
-      description = ("Workspace: Move focused to %s"):format(direction),
+      description = ("Workspace: Move focused to %s"):format(label),
     }
   )
 end
 
 ---@param key string
----@param workspace string workspace name unless it's a single diget or a "e+" selector
+---@param selector string the workspace selector the dispatcher speaks, e.g. "name:code"
+---@param label string how the bind's description spells the workspace
 ---@param mods string[]?
-function M.focus_workspace(key, workspace, mods)
-  local direction, ws_selector = get_workspace_direction(workspace)
+function M.focus_workspace(key, selector, label, mods)
   hyprfocus_binds.bind(
     config.main_mod .. M.parse_mods(mods) .. key,
     hl.dispatch(function()
       if hl.get_active_workspace() and hl.get_active_workspace().special then
         hl.dsp.workspace.toggle_special()
       end
-      return hl.dsp.focus({ workspace = ws_selector })
+      return hl.dsp.focus({ workspace = selector })
     end),
-    { description = ("Workspace: Focus %s"):format(direction) }
+    { description = ("Workspace: Focus %s"):format(label) }
   )
 end
 

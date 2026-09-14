@@ -21,7 +21,7 @@ local NAME = "scene"
 ---Live gap values. Read from the compositor rather than cached, so a reload
 ---that changes them is picked up on the next recalculate without a second
 ---mechanism to keep in sync.
----@return number, number gaps_in, gaps_out
+---@return number gaps_in, number gaps_out
 local function gaps()
   local function number(key, fallback)
     local ok, value = pcall(hl.get_config, key)

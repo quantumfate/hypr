@@ -12,10 +12,22 @@ local json = require("hypr.lib.json")
 
 local ROOT = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
 
----@type table<string, string>
+-- The store file the Quickshell `Store { name = "whichkey" }` side mirrors.
 M.path = ROOT .. "/whichkey.json"
 
--- name -> { parent = string?, items = { { key, mods: string[], desc, group?, child? } } }
+-- One registry node as the Quickshell side reads it.
+---@class WhichKeyItem
+---@field key string
+---@field mods string[]
+---@field desc string
+---@field group boolean
+---@field child? string
+
+---@class WhichKeyNode
+---@field parent string
+---@field items WhichKeyItem[]
+
+-- name -> { parent, items }
 ---@type table<string, WhichKeyNode>
 local nodes = {}
 
@@ -50,7 +62,7 @@ function M.register(name, parent, entries)
 end
 
 ---@param name string
----@return table? registered node
+---@return WhichKeyNode?
 function M.node(name)
   return nodes[name]
 end

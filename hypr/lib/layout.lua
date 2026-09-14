@@ -2,10 +2,27 @@ local M = {}
 
 local notify = require("hypr.lib.notify")
 
+---The layouts Hyprland itself registers, selected bare in rules. Anything else
+---is a custom Lua layout, matched verbatim under "lua:<name>"
+---(normalizeLuaLayoutName prefixes at registration); the bare name cannot
+---resolve and the workspace silently falls back to its default layout.
+local BUILTINS = { dwindle = true, master = true, scrolling = true, monocle = true }
+
+---The layout string a workspace rule should spell. Specs and cycle code keep
+---the bare config name; this is the only place the "lua:" prefix is written.
+---@param name string?
+---@return string?
+function M.rule_layout(name)
+  if name == nil or BUILTINS[name] then
+    return name
+  end
+  return "lua:" .. name
+end
+
 ---Context handed to every layout action handler.
 ---@class LayoutContext
 ---@field ws HL.Workspace The active (special or normal) workspace.
----@field layout string The workspace's tiled_layout.
+---@field layout string? The workspace's tiled_layout (nil if the compositor reports none).
 
 ---registry[action][layout] = handler
 ---@type table<string, table<string, fun(ctx: LayoutContext)>>

@@ -1,9 +1,10 @@
--- Pure geometry resolution for workspace_specs, split out of hyprland.lua so
+-- Pure geometry resolution for workspace_specs, split out of conf/host.lua so
 -- it can run under a plain `lua` interpreter in tests/ (no hl, no hostname).
 --
 -- Two different things get resolved here, and they stay separate for a
 -- reason: `monitor_aliases` (primary/secondary -> real output names) comes
--- from host_configs, because which monitor is "primary" is a property of the
+-- from the host file (conf/hosts/), because which monitor is "primary" is a
+-- property of the
 -- machine. `gaps_by_role` comes from a geometry profile keyed by output
 -- fingerprint (hypr/lib/profile.lua), because how much air a monitor gets is
 -- a property of its panel size, not of which machine it's plugged into.

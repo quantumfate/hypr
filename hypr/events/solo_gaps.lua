@@ -12,7 +12,7 @@
 -- window (LEO-191). Each group counts once, and every ungrouped tiled window
 -- once.
 --
--- Workspace rules own gaps per workspace (see hyprland.lua's gaps_by_monitor),
+-- Workspace rules own gaps per workspace (see conf/base.lua's geometry_profiles),
 -- so this rewrites the rule rather than the global: a workspace keeps whatever
 -- it was given the moment a second tile arrives.
 --

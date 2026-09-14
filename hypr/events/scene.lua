@@ -35,8 +35,12 @@ registry.seed(specs)
 ---@param w HL.Window?
 ---@return string?
 local function scene_for(w)
-  local ws = w and w.workspace
-  local spec = ws and specs[ws.name]
+  -- Guarding `w` first, not `w and w.workspace and ...`: reading `w.class`
+  -- below stays honest about what is guaranteed.
+  if not w then
+    return nil
+  end
+  local spec = w.workspace and specs[w.workspace.name]
   return spec and spec_lib.block_for(spec, w.class) and spec.name or nil
 end
 

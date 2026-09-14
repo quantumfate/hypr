@@ -36,7 +36,9 @@ local function on_scene(w)
     return false
   end
   for _, spec in ipairs(config.host.workspaces.workspace_specs) do
-    if spec.default_name == "gaming" and tostring(spec.workspace) == tostring(ws.id) then
+    -- Matched by name, not id: the scene's browser logic must also hold on a
+    -- named auto workspace, the address window rules and mode restore speak.
+    if spec.default_name == "gaming" and ws.name == spec.default_name then
       return true
     end
   end

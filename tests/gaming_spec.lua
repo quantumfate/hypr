@@ -1,3 +1,8 @@
+-- Test fixtures stub the runtime: partial `hl` objects, repeated assignments
+-- to the module handles, and lookups the type system cannot prove non-nil.
+-- The stub shape is the contract under test; these diagnostics read every
+-- deliberately-hacked accessor as a mistake and bury real signals.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 --- gaming scene: the media browser lifecycle beside the Dofus group.
 ---
 --- The engine holds address registries in module state, so every test gets a
@@ -54,15 +59,15 @@ local function last_dispatch_named(stub, name)
 end
 
 local function dofus_on(addr)
-  return { workspace = { id = 4 }, class = "Dofus.x64", address = addr }
+  return { workspace = { id = 4, name = "gaming" }, class = "Dofus.x64", address = addr }
 end
 
 local function media_on(addr)
-  return { workspace = { id = 4 }, class = "zen-gaming-media", address = addr }
+  return { workspace = { id = 4, name = "gaming" }, class = "zen-gaming-media", address = addr }
 end
 
 local function media_on_other(addr)
-  return { workspace = { id = 5 }, class = "zen-gaming-media", address = addr }
+  return { workspace = { id = 5, name = "media" }, class = "zen-gaming-media", address = addr }
 end
 
 t.describe("gaming scene media browser", function()
