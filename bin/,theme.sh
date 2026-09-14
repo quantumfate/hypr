@@ -468,8 +468,13 @@ process_wallpaper() {
 }
 
 # Which wallpaper this palette should show: mood binding, then palette binding,
-# then the single fallback, then <palette>.jpg. Shared with `status` so the two
-# can never disagree about what is bound.
+# then the single fallback, then <palette>.jpg. A palette with none of those is
+# legitimate configuration, so the last fallback is a random pick from the
+# wallpapers directory — the same semantics `,wallpaper.sh` gives a user who
+# asked for anything — rather than an error. The pick is not persisted: a
+# binding is a user decision, and applying it instead of forgetting it would
+# re-roll on every palette switch. Shared with `status` so the two can never
+# disagree about what is bound.
 resolve_wallpaper() {
     local palette=$1 mood wall
     mood=$(get mood "")
@@ -486,6 +491,11 @@ resolve_wallpaper() {
                 break
             }
         done
+    fi
+    if [ -z "$wall" ]; then
+        wall=$(find "$CONFIG/hypr/wallpapers" -maxdepth 1 -type f \
+            \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) 2>/dev/null |
+            shuf -n 1)
     fi
     printf '%s' "$wall"
 }

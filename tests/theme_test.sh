@@ -299,6 +299,28 @@ contains "mood wins over the bound palette" "mood.png" "$(cat "$AWWW_LOG")"
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
 teardown
 
+echo "wallpaper resolution: an unbound palette fails open to a random pick"
+setup
+export THEME_MAGICK="$ROOT/no-such-magick-binary"
+awww_stub
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'fallback' >"$XDG_CONFIG_HOME/hypr/wallpapers/rain.png"
+# frappe has no binding, no bare fallback, no frappe.jpg — the pick answers.
+printf '{"palette":"frappe"}\n' >"$STORE"
+"$THEME" apply >/dev/null
+contains "an unbound palette falls open to the wallpapers directory" "rain.png" "$(cat "$AWWW_LOG")"
+check "the random pick is not persisted as a binding" "0" \
+    "$(jq -r '.wallpapers // {} | length' "$STORE")"
+: >"$AWWW_LOG"
+"$THEME" apply >/dev/null
+contains "a second unbound apply still answers" "rain.png" "$(cat $AWWW_LOG)"
+
+rm -f "$XDG_CONFIG_HOME/hypr/wallpapers"/*
+"$THEME" apply >"$ROOT/out" 2>&1
+contains "an empty wallpaper directory still reports unchanged" "wallpaper: unchanged" "$(cat $ROOT/out)"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
+teardown
+
 echo "wallpaper resolution: an unknown mood is refused, like an unknown palette"
 setup
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
