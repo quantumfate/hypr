@@ -52,8 +52,10 @@ local function fresh(cfg)
   return stub, live
 end
 
----Run pending timers until the driver goes quiet (`between` applies a
----correction's result between rounds, the way the compositor would). Each
+---Run pending timers until the driver goes quiet. `between` applies the
+---compositor's response to whatever the engine dispatched this round — the
+---real compositor reacts to dispatched corrections, never fires gratuitous
+---geometry changes, so this hook also fires only when a dispatch landed. Each
 ---round runs a snapshot of the then-pending timers; timers a callback appends
 ---run in the next round.
 local function drain(stub, between)
@@ -65,10 +67,11 @@ local function drain(stub, between)
       break
     end
     stub.timers_flushed = #stub.timers
+    local dispatch_start = #stub.dispatched
     for i = start + 1, stub.timers_flushed do
       stub.timers[i].cb()
     end
-    if between then
+    if between and #stub.dispatched > dispatch_start then
       between(rounds)
     end
   end
@@ -94,11 +97,27 @@ local function count_dispatches(stub, name)
 end
 
 local function dofus(addr, at, size)
-  return { address = addr, class = "Dofus.x64", workspace = { id = 4 }, floating = false, at = at, size = size }
+  -- Workspace id is host data; the activity matches the workspace by its
+  -- `default_name`, so fixtures carry the name next to the id.
+  return {
+    address = addr,
+    class = "Dofus.x64",
+    workspace = { id = 4, name = "gaming" },
+    floating = false,
+    at = at,
+    size = size,
+  }
 end
 
 local function media(addr, at, size)
-  return { address = addr, class = "zen-gaming-media", workspace = { id = 4 }, floating = false, at = at, size = size }
+  return {
+    address = addr,
+    class = "zen-gaming-media",
+    workspace = { id = 4, name = "gaming" },
+    floating = false,
+    at = at,
+    size = size,
+  }
 end
 
 local function solo_group(w)
@@ -328,6 +347,53 @@ t.describe("scene engine share and order", function()
   end)
 end)
 
+t.describe("scene engine atomicity", function()
+  t.it("a scene still changing underneath is never corrected", function()
+    -- Hypr animates corrections; geometry measured mid-flight is how the
+    -- engine wiggles windows. The gate: while the digest keeps changing
+    -- between reads, corrections hold off entirely (no moves, no resizes,
+    -- no focus dances), no matter how long the in-flight part lasts.
+    local stub, live = fresh(SCENE_CONFIG)
+    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
+    local b = media("0xb1", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
+    solo_group(a1)
+    live[1], live[2] = a1, b
+
+    emit(stub, "window.open", a1)
+    -- A never-settling desktop: the tile's geometry keeps moving under the
+    -- engine's verify rounds — the loop is bounded, so the drain terminates;
+    -- the pin is that NOTHING is ever dispatched while it runs.
+    local rounds = 0
+    while rounds < 60 do
+      rounds = rounds + 1
+      a1.at.x = (a1.at.x + 1) % 32
+      b.at.x = a1.at.x + 1600
+      if #stub.timers > 0 then
+        stub.timers[#stub.timers].cb()
+      end
+    end
+
+    t.eq(0, count_dispatches(stub, "dsp.window.resize"), "no resize while the scene is in flight")
+    t.eq(0, count_dispatches(stub, "dsp.window.move"), "no merge while the scene is in flight")
+  end)
+
+  t.it("a correction that lands without effect is never re-issued", function()
+    -- A fix the compositor does not honour (the geometry reads the same
+    -- next turn) is commanded once; re-commanding it is the loop the engine
+    -- must never run. One attempt, then the pass ends.
+    local stub, live = fresh(SCENE_CONFIG)
+    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
+    local b = media("0xb1", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
+    solo_group(a1)
+    live[1], live[2] = a1, b
+
+    emit(stub, "window.open", a1)
+    drain(stub, function() end) -- the compositor IGNORES the resize
+
+    t.eq(1, count_dispatches(stub, "dsp.window.resize"), "one attempt, no repeated push")
+  end)
+end)
+
 t.describe("scene engine scope", function()
   t.it("ignores windows outside any scene block", function()
     local stub, live = fresh(SCENE_CONFIG)
@@ -383,8 +449,8 @@ t.describe("scene engine api", function()
   t.it("names the scene for a workspace, or nil", function()
     fresh(SCENE_CONFIG)
     local M = require("hypr.events.scene")
-    t.eq("gaming", M.active({ id = 4 }))
-    t.eq(nil, M.active({ id = 2 }))
+    t.eq("gaming", M.active({ id = 4, name = "gaming" }))
+    t.eq(nil, M.active({ id = 2, name = "logs" }))
   end)
 
   t.it("returns the live tile matching a class", function()

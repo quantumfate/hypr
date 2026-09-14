@@ -44,34 +44,19 @@ local SHARE_TOL = 0.02
 -- as windows fold in, so the scene is "that set", not whatever Hyprland
 -- happens to be splitting.
 ---@class Scene
----@field ws_set table<string, true> matching workspace ids (as strings)
+---@field name string workspace `default_name` (the scene's own identity)
 ---@field blocks SceneBlock[]
 ---@field members table<integer, table<string, true>> membership per block order
 ---@field busy boolean a realize is in flight for this scene
 ---@field pending boolean a realize is armed but not yet started the loop
+---@field last_fix string? the most recent correction applied in this pass
+---@field last_digest string? geometry digest of the previous step
 ---@class SceneBlock
 ---@field classes string[]
 ---@field group boolean
 ---@field order integer
 ---@field share number|nil
 local scenes = {}
-
----@return boolean
-local function is_special_workspace(spec_workspace)
-  return tostring(spec_workspace):find("^special:")
-end
-
----@param default_name string
----@return table<string, true>
-local function ws_ids_for(default_name)
-  local out = {}
-  for _, spec in ipairs(config.host.workspaces.workspace_specs) do
-    if not is_special_workspace(spec.workspace) and spec.default_name == default_name then
-      out[tostring(spec.workspace)] = true
-    end
-  end
-  return out
-end
 
 local function build()
   for _, spec in ipairs(config.host.workspaces.scenes or {}) do
@@ -92,12 +77,13 @@ local function build()
       members[block.order] = {}
     end
     scenes[spec.default_name] = {
-      key = spec.default_name,
-      ws_set = ws_ids_for(spec.default_name),
+      name = spec.default_name,
       blocks = blocks,
       members = members,
       busy = false,
       pending = false,
+      last_digest = nil,
+      last_fix = nil,
     }
   end
 end
@@ -106,8 +92,13 @@ end
 ---@param w HL.Window
 ---@return boolean
 local function on_scene(scene, w)
+  -- A scene is keyed by its workspace `default_name`, not by the integer id:
+  -- ids are assigned by the compositor at creation and are host data (this
+  -- host runs gaming on id 4 while the spec writes "5"), so a member check
+  -- against spec numbers is a race-wired guess. `default_name` is the one
+  -- identity that means the same thing on every host (LEO-235 contract).
   local ws = w and w.workspace
-  return ws ~= nil and scene.ws_set[tostring(ws.id)] ~= nil
+  return ws ~= nil and ws.name == scene.name
 end
 
 ---A class entry may be a plain literal ("Dofus.x64", "zen-gaming-media",
@@ -380,13 +371,11 @@ local function first_drifted(scene)
   for _, block in ipairs(scene.blocks) do
     for _, w in ipairs(hl.get_windows() or {}) do
       if block_for(scene, w) == block then
+        -- Real workspaces only: special workspaces carry negative ids and
+        -- are never a scene's home.
         local ws = w and w.workspace
-        if
-          ws
-          and tonumber(tostring(ws.id))
-          and tonumber(tostring(ws.id)) >= 1
-          and not scene.ws_set[tostring(ws.id)]
-        then
+        local id = ws and tonumber(tostring(ws.id))
+        if ws and id and id >= 1 and ws.name ~= scene.name then
           return w
         end
       end
@@ -518,11 +507,38 @@ local function wrong_share(scene)
   return nil
 end
 
----Run one corrective action for the scene, then re-verify. A single action per
----turn — join is priority, then order, then share — keeps the geometry stable
----between dispatches, and the verify step makes the loop self-correcting:
----if a merge did not stick, the next turn sees a stray again and folds it with
----adjacency already in place (which is when `moveintogroup` actually works).
+---One pass of the scene's live geometry (block windows only, floating
+---excluded), as a stable string. Two reads a VERIFY_MS apart that agree mean
+---the layout is done moving — Hypr animates every correction, and geometry
+---measured mid-flight is how corrections loop.
+---@param scene Scene
+---@param live table<string, HL.Window>
+---@return string
+local function digest(scene, live)
+  local tiles = {}
+  for addr, w in pairs(live) do
+    if w.at and w.size and on_scene(scene, w) and block_for(scene, w) and not w.floating then
+      tiles[#tiles + 1] = addr .. ":" .. w.at.x .. "," .. w.at.y .. ":" .. w.size.x .. "," .. w.size.y
+    end
+  end
+  table.sort(tiles)
+  return table.concat(tiles, ";")
+end
+
+---Run one corrective action for the scene, then re-verify — ATOMICALLY. The
+---step's contract, in order:
+---
+---  1. The step compares this turn's geometry digest with the previous
+---     turn's: unequal reads mean something (animation, user drag, another
+---     turn) is still in flight — the turn re-measures instead of acting
+---     (this is what makes a workspace switch or a burst of moves settle
+---     instead of wiggle).
+---  2. Pick the highest-priority unsettled invariant (collect home, join,
+---     order, share), commit it once, and re-verify.
+---  3. Never run the same correction twice in a row: if the geometry did not
+---     change after a correction, re-picking it would oscillate — the pass
+---     ends instead and the scene keeps the user's arrangement.
+---  4. Turn-bounded throughout (MAX_TURNS): no chain of timers can loop.
 ---@param scene Scene
 local function realize(scene)
   if scene.busy then
@@ -539,11 +555,21 @@ local function realize(scene)
     end
 
     local live = live_map()
-
+    local now = digest(scene, live)
+    if not scene.last_digest or scene.last_digest ~= now then
+      -- Nothing to measure against yet, or something moved since the last
+      -- read (animation, user drag, another turn): re-measure next tick,
+      -- never correct mid-flight. Acting on one reading alone is exactly
+      -- how corrections loop.
+      scene.last_digest = now
+      hyg.oneshot(VERIFY_MS, step)
+      return
+    end
+    scene.last_digest = now
     -- Collect a drifted member home first. A scene is the workspace's
-    -- arrangement: no matter how a window moves between workspaces, a block
-    -- member whose scene is occupied comes back, and the reorganization
-    -- proceeds as if it had always been there (LEO-245's bare minimum).
+    -- arrangement: a block member whose scene is occupied comes back, and
+    -- the reorganization proceeds as if it had always been there
+    -- (LEO-245's bare minimum).
     local drift = first_drifted(scene)
     if drift then
       local prev = hl.get_active_window()
@@ -554,8 +580,14 @@ local function realize(scene)
         hl.dispatch(hl.dsp.focus({ window = "address:" .. drift.address }))
         hl.dispatch(hl.dsp.window.float())
       end
+      local fix = "collect:" .. drift.address
+      if scene.last_fix == fix then
+        scene.busy = false
+        return
+      end
+      scene.last_fix = fix
       hl.dispatch(hl.dsp.window.move({
-        workspace = "name:" .. scene.key,
+        workspace = "name:" .. scene.name,
         window = "address:" .. drift.address,
       }))
       restore_focus(prev, drift.address)
@@ -565,6 +597,7 @@ local function realize(scene)
 
     local stray, stray_block = first_stray(scene, live)
     if stray then
+      scene.last_fix = nil
       fold_stray(stray, scene.members[stray_block.order], function()
         hyg.oneshot(VERIFY_MS, step)
       end)
@@ -574,6 +607,12 @@ local function realize(scene)
     local order = wrong_order(scene)
     if order then
       local tile = first_tile(scene, order.block)
+      local fix = "order:" .. order.block.order .. ":" .. tile.address
+      if scene.last_fix == fix then
+        scene.busy = false
+        return
+      end
+      scene.last_fix = fix
       local prev = hl.get_active_window()
       hl.dispatch(hl.dsp.focus({ window = "address:" .. tile.address }))
       hl.dispatch(hl.dsp.window.move({ direction = order.dir }))
@@ -584,6 +623,12 @@ local function realize(scene)
 
     local share = wrong_share(scene)
     if share then
+      local fix = "share:" .. share.block.order .. ":" .. share.target
+      if scene.last_fix == fix then
+        scene.busy = false
+        return
+      end
+      scene.last_fix = fix
       local prev = hl.get_active_window()
       hl.dispatch(hl.dsp.focus({ window = "address:" .. share.tile.address }))
       hl.dispatch(hl.dsp.window.resize({ x = share.target, y = share.tile.size.y }))
@@ -592,19 +637,25 @@ local function realize(scene)
       return
     end
 
+    -- Settled: nothing left to correct.
+    scene.last_digest = nil
+    scene.last_fix = nil
     scene.busy = false
   end
 
   step()
 end
 
+---The scene whose blocks `w` belongs to, by workspace default_name, or nil.
 ---@param w HL.Window
 ---@return string? the scene whose scene window `w` is, if any
 local function scene_for(w)
-  for key, scene in pairs(scenes) do
-    if on_scene(scene, w) and block_for(scene, w) then
-      return key
-    end
+  if not w or not w.workspace then
+    return nil
+  end
+  local scene = scenes[w.workspace.name]
+  if scene and block_for(scene, w) then
+    return scene.name
   end
   return nil
 end
@@ -673,10 +724,9 @@ hl.on("workspace.active", function()
   if not ws then
     return
   end
-  for key, scene in pairs(scenes) do
-    if scene.ws_set[tostring(ws.id)] then
-      schedule_realize(key)
-    end
+  local scene = scenes[ws.name]
+  if scene then
+    schedule_realize(ws.name)
   end
 end)
 
@@ -686,16 +736,10 @@ local M = {}
 ---@param ws { id: integer|string }?
 ---@return string?
 function M.active(ws)
-  if not ws then
+  if not ws or not ws.name then
     return nil
   end
-  local id = tostring(ws.id)
-  for name, scene in pairs(scenes) do
-    if scene.ws_set[id] then
-      return name
-    end
-  end
-  return nil
+  return scenes[ws.name] and ws.name or nil
 end
 
 ---Run the realize loop for the named scene.
