@@ -1,88 +1,152 @@
---- window scene engine (LEO-245): join / order / share a declarative scene.
+--- The scene engine end to end (LEO-245): events in, dispatches out.
 ---
---- The engine holds membership sets and one-shot timers in module state, so
---- every test gets a fresh module + stub (run.lua resets package.loaded only
---- between spec files). Tests drive the driver exactly the way the compositor
---- would: poke windows into the stub's get_windows, emit window.open/close,
---- and let `drain` run the pending timers — with a `between` hook applying
---- Hyprland's *response* to each dispatched correction (groups merged, tiles
---- relocated) before the next settle timer re-checks.
+--- The decisions themselves are covered by scene_model_spec; what is under
+--- test here is everything the model deliberately does not know — when a pass
+--- is allowed to run, which compositor call carries out an intent, and who
+--- the scene considers its own.
 local t = require("tests.harness")
 
-local function scene_config(blocks)
-  return {
-    host = {
-      workspaces = {
-        workspace_specs = { { workspace = "4", default_name = "gaming" } },
-        scenes = { { default_name = "gaming", blocks = blocks } },
-      },
-    },
-  }
+local GAMING = {
+  default_name = "gaming",
+  blocks = {
+    { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true },
+    { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
+  },
+  barred = { "steam_app_default" },
+}
+
+---A fake Hyprland group: `add`/`remove` mutate the fixture the way the real
+---object API mutates the compositor, so a pass that groups windows changes
+---what the next read sees.
+local function new_group(world, key)
+  local group = { key = key, members = {} }
+  function group:add(w)
+    if w.group then
+      w.group:remove(w)
+    end
+    self.members[#self.members + 1] = w
+    w.group = self
+  end
+  function group:remove(w)
+    for i, member in ipairs(self.members) do
+      if member == w then
+        table.remove(self.members, i)
+        break
+      end
+    end
+    w.group = nil
+    if #self.members <= 1 then
+      for _, member in ipairs(self.members) do
+        member.group = nil
+      end
+      self.members = {}
+    end
+  end
+  world.groups[#world.groups + 1] = group
+  return group
 end
 
----One group block; the merge machinery by itself (no order/share noise).
-local FOLD_CONFIG = scene_config({
-  { classes = { "Dofus.x64" }, group = true, order = 1 },
-})
-
----The full gaming scene: Dofus group on the left at 0.67, browser on the
----right at 0.33.
-local SCENE_CONFIG = scene_config({
-  { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67 },
-  { classes = { "zen-gaming-media" }, order = 2, share = 0.33 },
-})
-
----Pure order (no shares): order corrections in isolation.
-local ORDER_CONFIG = scene_config({
-  { classes = { "Dofus.x64" }, group = true, order = 1 },
-  { classes = { "zen-gaming-media" }, order = 2 },
-})
-
-local function fresh(cfg)
+---@return table stub, table world
+local function fresh(active)
   local stub = require("tests.hl_stub").new()
   _G.hl = stub
-  _G.config = cfg
-  package.loaded["hypr.lib.hypr"] = nil
-  package.loaded["hypr.events.scene"] = nil
-  local live = {}
-  stub.get_windows = function()
-    return live
+  _G.config = { host = { workspaces = { workspace_specs = {}, scenes = { GAMING } } } }
+  for _, mod in ipairs({
+    "hypr.lib.hypr",
+    "hypr.scene.spec",
+    "hypr.scene.model",
+    "hypr.scene.snapshot",
+    "hypr.scene.registry",
+    "hypr.scene.actuator",
+    "hypr.scene.schedule",
+    "hypr.events.scene",
+  }) do
+    package.loaded[mod] = nil
   end
-  require("hypr.events.scene")
-  return stub, live
+
+  local world = { windows = {}, groups = {}, active = active or "gaming", focused = nil }
+  stub.get_windows = function()
+    return world.windows
+  end
+  stub.get_active_workspace = function()
+    return { id = 4, name = world.active }
+  end
+  stub.get_active_window = function()
+    return world.focused
+  end
+  stub.get_window = function(selector)
+    local address = selector:match("^address:(.+)$")
+    for _, w in ipairs(world.windows) do
+      if w.address == address then
+        return w
+      end
+    end
+    return nil
+  end
+  world.group = function(key)
+    return new_group(world, key)
+  end
+
+  -- The compositor's side of the two dispatchers the engine still needs:
+  -- focus moves, and toggling a group on a lone window creates one. Without
+  -- these the fixture would answer "nothing happened" to a correction that
+  -- does in fact land, and the pass would look like an oscillation.
+  local record = stub.dispatch
+  stub.dispatch = function(action)
+    record(action)
+    if action.name == "dsp.focus" then
+      local selector = action.args[1] and action.args[1].window
+      local address = selector and selector:match("^address:(.+)$")
+      world.focused = address and stub.get_window("address:" .. address) or world.focused
+    elseif action.name == "dsp.group.toggle" and world.focused then
+      local w = world.focused
+      if w.group then
+        w.group:remove(w)
+      else
+        world.group("toggled"):add(w)
+      end
+    end
+  end
+  return stub, world
 end
 
----Run pending timers until the driver goes quiet. `between` applies the
----compositor's response to whatever the engine dispatched this round — the
----real compositor reacts to dispatched corrections, never fires gratuitous
----geometry changes, so this hook also fires only when a dispatch landed. Each
----round runs a snapshot of the then-pending timers; timers a callback appends
----run in the next round.
-local function drain(stub, between)
-  local rounds = 0
-  while rounds < 1000 do
-    rounds = rounds + 1
-    local start = stub.timers_flushed or 0
-    if start >= #stub.timers then
-      break
-    end
-    stub.timers_flushed = #stub.timers
-    local dispatch_start = #stub.dispatched
-    for i = start + 1, stub.timers_flushed do
-      stub.timers[i].cb()
-    end
-    if between and #stub.dispatched > dispatch_start then
-      between(rounds)
-    end
-  end
+local function win(world, over)
+  local w = {
+    address = over.address,
+    class = over.class,
+    workspace = { id = over.ws_id or 4, name = over.ws or "gaming" },
+    floating = over.floating or false,
+    at = { x = over.x or 0, y = 0 },
+    size = { x = over.w or 1000, y = 1000 },
+  }
+  world.windows[#world.windows + 1] = w
+  return w
 end
 
 local function emit(stub, event, w)
-  local handlers = stub.event_handlers[event]
-  handlers[#handlers](w)
+  for _, cb in ipairs(stub.event_handlers[event] or {}) do
+    cb(w)
+  end
 end
 
-local function dispatches_named(stub, name)
+---Run pending timers until the engine goes quiet, bounded so a runaway chain
+---fails the test instead of hanging the suite.
+local function drain(stub)
+  local flushed = 0
+  for _ = 1, 200 do
+    if flushed >= #stub.timers then
+      return true
+    end
+    local upto = #stub.timers
+    for i = flushed + 1, upto do
+      stub.timers[i].cb()
+    end
+    flushed = upto
+  end
+  return false
+end
+
+local function named(stub, name)
   local out = {}
   for _, d in ipairs(stub.dispatched) do
     if d.name == name then
@@ -92,373 +156,191 @@ local function dispatches_named(stub, name)
   return out
 end
 
-local function count_dispatches(stub, name)
-  return #dispatches_named(stub, name)
-end
-
-local function dofus(addr, at, size)
-  -- Workspace id is host data; the activity matches the workspace by its
-  -- `default_name`, so fixtures carry the name next to the id.
-  return {
-    address = addr,
-    class = "Dofus.x64",
-    workspace = { id = 4, name = "gaming" },
-    floating = false,
-    at = at,
-    size = size,
-  }
-end
-
-local function media(addr, at, size)
-  return {
-    address = addr,
-    class = "zen-gaming-media",
-    workspace = { id = 4, name = "gaming" },
-    floating = false,
-    at = at,
-    size = size,
-  }
-end
-
-local function solo_group(w)
-  w.group = { members = { w } }
-end
-
-t.describe("scene engine join", function()
-  t.it("seeds the group from the first member without dispatching", function()
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-
-    t.eq(0, count_dispatches(stub, "dsp.window.move"), "seeding is not a correction")
+t.describe("visibility", function()
+  t.it("dispatches nothing while its workspace is behind the user", function()
+    -- The regression this pins: corrections reach a hidden workspace only by
+    -- focusing a window on it, which carries the user there and fires
+    -- workspace.active, which arms the next scene. One workspace switch used
+    -- to set the whole desk off.
+    local stub, world = fresh("code")
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
+    t.ok(drain(stub), "the engine settled")
+    t.eq(0, #stub.dispatched, "nothing dispatched for a scene the user cannot see")
   end)
 
-  t.it("folds an adjacent stray into the seeded group and restores focus", function()
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local a2 = dofus("0xa2", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    solo_group(a2)
-    live[1] = a1
-    stub.get_active_window = function()
-      return { address = "0xprev", class = "Proj-nvim" }
-    end
-
-    emit(stub, "window.open", a1)
+  t.it("realizes the scene when the user arrives on it", function()
+    local stub, world = fresh("code")
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
     drain(stub)
-    live[2] = a2
-    emit(stub, "window.open", a2)
-    drain(stub, function()
-      a1.group = { members = { a1, a2 } }
-      a2.group = { members = { a1, a2 } }
-    end)
 
-    local merges = dispatches_named(stub, "dsp.window.move")
-    local merge
-    for _, d in ipairs(merges) do
-      if d.args[1].into_group then
-        merge = d
-      end
-    end
-    t.ok(merge, "expected an into_group merge")
-    t.eq("l", merge.args[1].into_group, "the group sits left of the new window")
-    t.ok(not merge.args[1].window, "merge acts on the focused window (the window: arg is ignored anyway)")
-
-    local focuses = dispatches_named(stub, "dsp.focus")
-    t.eq("address:0xa2", focuses[1].args[1].window, "stray focused before the merge")
-    t.eq("address:0xprev", focuses[#focuses].args[1].window, "focus returns where it was")
+    world.active = "gaming"
+    emit(stub, "workspace.active", nil)
+    t.ok(drain(stub), "the engine settled")
+    t.ok(a.group, "the block was grouped on arrival")
+    t.eq(2, #a.group.members)
   end)
 
-  t.it("hops a non-adjacent stray toward the group before merging", function()
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local a2 = dofus("0xa2", { x = 3200, y = 0 }, { x = 1600, y = 1000 }) -- separated by a gap
-    solo_group(a1)
-    solo_group(a2)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-    live[2] = a2
-    emit(stub, "window.open", a2)
-    local hops = 0
-    drain(stub, function()
-      hops = hops + 1
-      if hops == 1 then
-        a2.at.x = 1600 -- Hyprland relocates the stray next to the group
-      end
-    end)
-
-    local moves = dispatches_named(stub, "dsp.window.move")
-    t.eq("l", moves[1].args[1].direction, "first a movewindow hop toward the group")
-    t.eq("l", moves[2].args[1].into_group, "then the adjacent merge")
-  end)
-
-  t.it("leaves a group that already holds every member alone", function()
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local a2 = dofus("0xa2", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    a1.group = { members = { a1, a2 } }
-    a2.group = { members = { a1, a2 } }
-    live[1], live[2] = a1, a2
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-
-    t.eq(0, count_dispatches(stub, "dsp.window.move"), "already grouped -- nothing to merge")
-  end)
-
-  t.it("does not restore focus when the stray is already focused", function()
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local a2 = dofus("0xa2", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    solo_group(a2)
-    live[1] = a1
-    stub.get_active_window = function()
-      return a2
-    end
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-    live[2] = a2
-    emit(stub, "window.open", a2)
-    drain(stub, function()
-      a1.group = { members = { a1, a2 } }
-      a2.group = { members = { a1, a2 } }
-    end)
-
-    t.eq(1, count_dispatches(stub, "dsp.focus"), "only the stray focus; the restore is skipped")
-  end)
-
-  t.it("gives up after bounded hops when the stray never reaches the group", function()
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local a2 = dofus("0xa2", { x = 3200, y = 0 }, { x = 1600, y = 1000 }) -- never approaches
-    solo_group(a1)
-    solo_group(a2)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-    live[2] = a2
-    emit(stub, "window.open", a2)
-    drain(stub)
-
-    local moves = dispatches_named(stub, "dsp.window.move")
-    t.ok(#moves > 0, "it hops while it can")
-    local merged = false
-    for _, d in ipairs(moves) do
-      if d.args[1].into_group then
-        merged = true
-      end
-    end
-    t.ok(not merged, "never folds across the gap")
-    t.ok(#stub.timers <= stub.timers_flushed or true, "drain terminated (bounded hops, no live loop)")
+  t.it("stops mid-pass if the user leaves", function()
+    local stub, world = fresh("gaming")
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
+    world.active = "code"
+    t.ok(drain(stub), "the engine settled")
+    t.eq(0, #stub.dispatched)
   end)
 end)
 
-t.describe("scene engine arrangement is not a gatekeeper", function()
-  t.it("a group the user assembled by hand is never rearmed by the engine", function()
-    -- Purity is the compositor's contract (locked groups, `group.barred`,
-    -- `group.deny` in windowrules.lua); the engine arranges the scene's
-    -- blocks and never uses corrections to kick windows out of groups a
-    -- user built. This keeps the invariant visible even though the engine
-    -- no longer ejects.
-    local stub, live = fresh(FOLD_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local foreign = {
-      address = "0xc1",
-      class = "rustdesk",
-      workspace = { id = 4 },
-      floating = false,
-      at = { x = 1600, y = 0 },
-      size = { x = 1600, y = 1000 },
-    }
-    a1.group = { members = { a1, foreign } }
-    live[1], live[2] = a1, foreign
+t.describe("grouping", function()
+  t.it("joins through the group object, not a hop chain", function()
+    -- `HL.Group:add` names the window it acts on. The movewindow/moveintogroup
+    -- dance it replaced could only reach the window beside the group, so it
+    -- walked one tile at a time — and every hop was a visible jump.
+    local stub, world = fresh()
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    local b = win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
+    t.ok(drain(stub))
+    t.ok(a.group and a.group == b.group, "both clients share one group")
+    t.eq(0, #named(stub, "dsp.window.move"), "no positional hops were needed")
+  end)
 
-    emit(stub, "window.move_to_workspace", { address = "0xa1", workspace = { id = 4 }, class = "Dofus.x64" })
-    drain(stub, function() end)
+  t.it("converges a block that split into two groups", function()
+    local stub, world = fresh()
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    local b = win(world, { address = "0x2", class = "Dofus.x64", x = 300 })
+    local c = win(world, { address = "0x3", class = "Dofus.x64", x = 600 })
+    local major, minor = world.group("major"), world.group("minor")
+    major:add(a)
+    major:add(b)
+    minor:add(c)
+    require("hypr.events.scene")
+    emit(stub, "window.open", c)
+    t.ok(drain(stub))
+    t.eq(3, #a.group.members, "the minority group folded into the majority")
+  end)
 
-    t.eq(2, #a1.group.members, "the user's own grouping survives the engine")
+  t.it("ejects a window auto_group swallowed", function()
+    local stub, world = fresh()
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    local b = win(world, { address = "0x2", class = "Dofus.x64", x = 300 })
+    local foreign = win(world, { address = "0x9", class = "zen-gaming-media", x = 600 })
+    local g = world.group("g")
+    g:add(a)
+    g:add(b)
+    g:add(foreign)
+    require("hypr.events.scene")
+    emit(stub, "window.open", foreign)
+    t.ok(drain(stub))
+    t.eq(nil, foreign.group, "the browser is a tile of its own again")
+    t.eq(2, #a.group.members)
   end)
 end)
 
-t.describe("scene engine share and order", function()
-  t.it("resizes a block to its share", function()
-    local stub, live = fresh(SCENE_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local b = media("0xb1", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-    live[2] = b
-    emit(stub, "window.open", b)
-    drain(stub, function()
-      a1.size.x = 2144 -- 0.67 of 3200
-      b.at.x = 2144
-      b.size.x = 1056
-    end)
-
-    local resizes = dispatches_named(stub, "dsp.window.resize")
-    t.eq(1, #resizes, "one absolute resize moves the group to its share")
-    t.eq(2144, resizes[1].args[1].x)
-    t.eq(1000, resizes[1].args[1].y)
-  end)
-
-  t.it("does not resize a lone tile", function()
-    local stub, live = fresh(SCENE_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-
-    t.eq(0, count_dispatches(stub, "dsp.window.resize"), "one tile has nothing to share against")
-  end)
-
-  t.it("moves a block back into its order position", function()
-    local stub, live = fresh(ORDER_CONFIG)
-    local a1 = dofus("0xa1", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    local b = media("0xb1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    drain(stub)
-    live[2] = b
-    emit(stub, "window.open", b)
-    drain(stub, function()
-      a1.at.x = 0
-      b.at.x = 1600
-    end)
-
-    local moves = dispatches_named(stub, "dsp.window.move")
-    t.eq(1, #moves, "one movewindow restores the order")
-    t.eq("r", moves[1].args[1].direction, "the misplaced block moves right")
-  end)
-end)
-
-t.describe("scene engine atomicity", function()
-  t.it("a scene still changing underneath is never corrected", function()
-    -- Hypr animates corrections; geometry measured mid-flight is how the
-    -- engine wiggles windows. The gate: while the digest keeps changing
-    -- between reads, corrections hold off entirely (no moves, no resizes,
-    -- no focus dances), no matter how long the in-flight part lasts.
-    local stub, live = fresh(SCENE_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local b = media("0xb1", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    live[1], live[2] = a1, b
-
-    emit(stub, "window.open", a1)
-    -- A never-settling desktop: the tile's geometry keeps moving under the
-    -- engine's verify rounds — the loop is bounded, so the drain terminates;
-    -- the pin is that NOTHING is ever dispatched while it runs.
-    local rounds = 0
-    while rounds < 60 do
-      rounds = rounds + 1
-      a1.at.x = (a1.at.x + 1) % 32
-      b.at.x = a1.at.x + 1600
-      if #stub.timers > 0 then
-        stub.timers[#stub.timers].cb()
-      end
-    end
-
-    t.eq(0, count_dispatches(stub, "dsp.window.resize"), "no resize while the scene is in flight")
-    t.eq(0, count_dispatches(stub, "dsp.window.move"), "no merge while the scene is in flight")
-  end)
-
-  t.it("a correction that lands without effect is never re-issued", function()
-    -- A fix the compositor does not honour (the geometry reads the same
-    -- next turn) is commanded once; re-commanding it is the loop the engine
-    -- must never run. One attempt, then the pass ends.
-    local stub, live = fresh(SCENE_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local b = media("0xb1", { x = 1600, y = 0 }, { x = 1600, y = 1000 })
-    solo_group(a1)
-    live[1], live[2] = a1, b
-
-    emit(stub, "window.open", a1)
-    drain(stub, function() end) -- the compositor IGNORES the resize
-
-    t.eq(1, count_dispatches(stub, "dsp.window.resize"), "one attempt, no repeated push")
-  end)
-end)
-
-t.describe("scene engine scope", function()
-  t.it("ignores windows outside any scene block", function()
-    local stub, live = fresh(SCENE_CONFIG)
-    local stray = {
-      address = "0xc1",
-      class = "rustdesk",
-      workspace = { id = 4 },
-      at = { x = 0, y = 0 },
-      size = { x = 800, y = 600 },
-    }
-    live[1] = stray
-
+t.describe("collection", function()
+  t.it("moves a drifted member home without taking the user with it", function()
+    local stub, world = fresh()
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    local stray = win(world, { address = "0x7", class = "Dofus.x64", ws = "code", ws_id = 2 })
+    require("hypr.events.scene")
+    -- The stray was the scene's before it wandered: it opened there.
+    emit(stub, "window.open", a)
+    stray.workspace = { id = 4, name = "gaming" }
     emit(stub, "window.open", stray)
-    t.eq(0, #stub.timers, "no realize scheduled for a window no block owns")
+    stray.workspace = { id = 2, name = "code" }
+    drain(stub)
+    world.active = "gaming"
+    emit(stub, "workspace.active", nil)
+    drain(stub)
+
+    local moves = named(stub, "dsp.window.move")
+    t.ok(#moves > 0, "the stray was moved")
+    local args = moves[1].args[1]
+    t.eq("address:0x7", args.window)
+    t.eq("name:gaming", args.workspace)
+    t.eq(false, args.follow, "a following move drags the user to the destination")
   end)
 
-  t.it("ignores scene-class windows on a different workspace", function()
-    local stub, live = fresh(SCENE_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    a1.workspace = { id = 2 }
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
-    t.eq(0, #stub.timers, "the code workspace is not the gaming scene's business")
+  t.it("leaves a matching window the scene never received", function()
+    local stub, world = fresh()
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    win(world, { address = "0x7", class = "Dofus.x64", ws = "code", ws_id = 2 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
+    t.ok(drain(stub))
+    t.eq(0, #named(stub, "dsp.window.move"))
   end)
 
-  t.it("re-realizes when a scene window closes", function()
-    local stub, live = fresh(SCENE_CONFIG)
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 2144, y = 1000 })
-    local b = media("0xb1", { x = 2144, y = 0 }, { x = 1056, y = 1000 })
-    solo_group(a1)
-    live[1] = a1
-
-    emit(stub, "window.open", a1)
+  t.it("forgets a window that closed", function()
+    local stub, world = fresh()
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
     drain(stub)
-    live[2] = b
-    emit(stub, "window.open", b)
-    drain(stub)
-    t.eq(0, count_dispatches(stub, "dsp.window.move"), "scene settled -- no dispatches while it stays quiet")
-    local resized = count_dispatches(stub, "dsp.window.resize")
-    t.eq(0, resized, "exact shares -- nothing to resize")
-
-    emit(stub, "window.close", b)
-    t.ok(#stub.timers > 0, "closing a scene window schedules a re-realize")
-    drain(stub)
-
-    t.eq(0, count_dispatches(stub, "dsp.window.move"), "no correction after the close")
-    t.eq(resized, count_dispatches(stub, "dsp.window.resize"), "a lone group tile is not resized after the close")
+    emit(stub, "window.close", a)
+    table.remove(world.windows, 1)
+    win(world, { address = "0x1", class = "Dofus.x64", ws = "code", ws_id = 2 })
+    win(world, { address = "0x2", class = "Dofus.x64" })
+    emit(stub, "window.open", world.windows[2])
+    t.ok(drain(stub))
+    t.eq(0, #named(stub, "dsp.window.move"), "a closed address is not owned by its reuse")
   end)
 end)
 
-t.describe("scene engine api", function()
-  t.it("names the scene for a workspace, or nil", function()
-    fresh(SCENE_CONFIG)
+t.describe("termination", function()
+  t.it("settles instead of oscillating when a correction does not take", function()
+    -- A compositor that refuses a correction (a resize the layout will not
+    -- honor) must end the pass, not re-issue it forever.
+    local stub, world = fresh()
+    win(world, { address = "0x1", class = "Dofus.x64", x = 0, w = 500 })
+    local b = win(world, { address = "0x9", class = "zen-gaming-media", x = 500, w = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", b)
+    t.ok(drain(stub), "the engine settled rather than looping")
+    t.ok(#named(stub, "dsp.window.resize") <= 2, "the ignored resize was not retried forever")
+  end)
+end)
+
+t.describe("public surface", function()
+  t.it("names the scene on a workspace it owns", function()
+    local stub = fresh()
     local M = require("hypr.events.scene")
     t.eq("gaming", M.active({ id = 4, name = "gaming" }))
-    t.eq(nil, M.active({ id = 2, name = "logs" }))
+    t.eq(nil, M.active({ id = 2, name = "code" }))
+    t.eq(nil, M.active(nil))
+    t.ok(stub)
   end)
 
-  t.it("returns the live tile matching a class", function()
-    local _, live = fresh(SCENE_CONFIG)
+  t.it("returns a block's leftmost tile", function()
+    local stub, world = fresh()
+    win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    win(world, { address = "0x1", class = "Dofus.x64", x = 0 })
     local M = require("hypr.events.scene")
-    local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    live[1] = a1
-    local tile = M.tile("gaming", { class = "Dofus.x64" })
-    t.eq(a1.address, tile.address)
+    t.eq("0x1", M.tile("gaming", { class = "Dofus.x64" }).address)
+    t.eq("0x1", M.tile("gaming", "Dofus.x64").address)
+    t.eq(nil, M.tile("gaming", "org.kde.kdenlive"))
+    t.ok(stub)
+  end)
+end)
+
+t.describe("compiled rules", function()
+  t.it("declares grouping once, from the scene", function()
+    local stub = fresh()
+    require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
+    local by_class = {}
+    for _, rule in ipairs(stub.window_rules) do
+      by_class[rule.match.class] = rule.group
+    end
+    t.eq("set always", by_class["Dofus.x64"])
+    t.eq("deny", by_class["zen-gaming-media"], "the block's own guard, not the default bar")
+    t.eq("barred", by_class["steam_app_default"])
   end)
 end)

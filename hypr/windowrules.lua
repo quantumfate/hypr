@@ -157,19 +157,18 @@ windowrule.tag_set_effects("media-browser", {
 })
 
 -- The gaming scene's own zen instance (apps.media_scene, LEO-230): pinned to
--- name:gaming so it lands beside the Dofus group wherever it is spawned, and
--- `group = "deny"` so it can never be toggled into a group. The Dofus group is
--- locked already (its rule rejects non-Dofus classes), but deny makes the
--- reservation explicit for this window too. The browser opens automatically
--- with the first Dofus window and closes with the last — see
--- hypr/events/gaming.lua, which is why there is no bar-side browser for this
--- scene.
+-- name:gaming so it lands beside the Dofus group wherever it is spawned. Its
+-- group guard is the scene block's (`guard = "deny"`), emitted by
+-- hypr/scene/compile.lua — the scene decides grouping once, for every class it
+-- names. The browser opens automatically with the first Dofus window and
+-- closes with the last — see hypr/events/gaming.lua, which is why there is no
+-- bar-side browser for this scene.
 windowrule.tag_props({
   { initial_class = "(" .. apps.media_scene.class .. ")" },
 }, "+gaming-media")
 
 windowrule.tag_set_effects("gaming-media", {
-  static = { workspace = "name:gaming", group = "deny" },
+  static = { workspace = "name:gaming" },
 })
 
 local not_eso_launcher = { class = "steam_app_default", title = "[^(Zenimax Online Studios Launcher)]" }
@@ -187,14 +186,13 @@ windowrule.tag_props({
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
-  -- `group = "barred"` is the other half of the Dofus group guard: auto_group
-  -- is on globally, so without it a game opening while the group is focused
-  -- would be swallowed into the Dofus tab strip.
+  -- These classes are in the gaming scene's `barred` list (hyprland.lua), so
+  -- the bar that keeps auto_group from swallowing a game into the Dofus tab
+  -- strip is emitted by hypr/scene/compile.lua rather than repeated here.
   static = {
     workspace = "name:gaming",
     suppress_event = "activate activatefocus",
     fullscreen_state = "2 3",
-    group = "barred",
   },
 })
 
@@ -244,7 +242,11 @@ windowrule.tag_set_effects("steam-toast", {
 
 -- Dofus / Ankama
 --
--- `group = "set always"`: every Dofus client joins one group, every time.
+-- The group itself is declared by the gaming scene, not here: the block
+-- carries `group = true`, and hypr/scene/compile.lua emits the `set always`
+-- that puts every Dofus client in one group every time. The runtime engine
+-- then holds that invariant against auto_group races — one decision, asserted
+-- at both ends, instead of two rules that could disagree.
 -- The guard against foreign windows is NOT `lock` here — `lock always invade`
 -- was tried (LEO-234) and live-regressed the group: the lock also rejects
 -- later Dofus clients, and `invade` did not reliably override it, so a third
@@ -263,7 +265,6 @@ windowrule.tag_set_effects("steam-toast", {
 hl.window_rule({
   match = { initial_class = "Dofus.x64" },
   workspace = "name:gaming",
-  group = "set always",
   center = true,
   content = "game",
   opacity = "1.0 override",
@@ -277,8 +278,8 @@ hl.window_rule({
 hl.window_rule({
   match = { class = "Ankama Launcher", title = "overlay" },
   workspace = "name:gaming",
-  -- Never let the launcher overlay be auto-grouped into the Dofus group.
-  group = "barred",
+  -- The bar that keeps this overlay out of the Dofus group is the gaming
+  -- scene's (`barred` in hyprland.lua), emitted by hypr/scene/compile.lua.
   float = true,
   center = true,
   tag = "+floating-window",
@@ -382,22 +383,15 @@ windowrule.tag_set_effects("music", { static = { workspace = "special:music" } }
 -- Grouped, they are one tile with a tab strip: the split stays two-way whatever
 -- the count, and the groupbar (styled in conf.lua) says which one is in front.
 --
--- `set always` rather than plain `set`, because the default only groups a window
--- the first time — the point here is that it holds for every project window,
--- every time. `barred` keeps the browser out of the focused group: without it
--- auto_group would swallow it into the tab strip on open.
-hl.window_rule({
-  name = "group-project-terminals",
-  match = { class = config.apps.project.class },
-  group = "set always",
-})
-
-hl.window_rule({
-  name = "group-terminals",
-  match = { class = config.apps.terminal.class },
-  group = "set always",
-})
-
+-- The grouping itself is the `code` scene's first block (hyprland.lua):
+-- `Kitty-Main` and `Proj-*` are its classes, and hypr/scene/compile.lua emits
+-- the `set always` for both. It is `set always` rather than plain `set`
+-- because the default only groups a window the first time, and the point here
+-- is that it holds for every project window, every time.
+--
+-- The bar below is wider than any one scene — it keeps a browser out of the
+-- focused group on every workspace, not only the coding one — so it stays
+-- here as global policy.
 for _, cls in ipairs({
   "([fF]irefox|zen|zen-twilight|zen-beta)",
   config.apps.dev_browser.class,
@@ -445,3 +439,9 @@ hl.window_rule({
   },
   suppress_event = "maximize",
 })
+
+-- The scene layer's rules come last: `group` is decided by the scene that
+-- names the class (hypr/scene/compile.lua), and a later rule is the one that
+-- stands. Emitting here — rather than where the scenes are read — keeps every
+-- window rule in the file that owns window rules.
+require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
