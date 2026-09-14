@@ -18,7 +18,7 @@ _G.config = {
     workspaces = {
       workspace_specs = {
         { workspace = "2", gaps_out = 40 },
-        { workspace = "3", solo_gaps = "none", gaps_out = 12 },
+        { workspace = "3", engine = { solo_gaps = "none" }, gaps_out = 12 },
         { workspace = "4", gaps_out = { top = 8, right = 40, bottom = 40, left = 40 } },
         { workspace = "5", gaps_out = 40 },
       },
@@ -141,7 +141,7 @@ t.describe("solo_gaps", function()
     t.eq({ workspace = "8", gaps_out = 192 }, last_rule())
   end)
 
-  t.it("solo_gaps = 'none' in the spec opts a workspace out", function()
+  t.it("engine.solo_gaps = 'none' opts a workspace out", function()
     reset()
     active_ws = { id = 3, tiled_layout = "dwindle" }
     windows = { { workspace = { id = 3 }, floating = false } }

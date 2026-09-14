@@ -4,21 +4,22 @@
 -- are globals. Workspace rules accept a layoutopt field, but Hyprland only
 -- ever implements layoutopt:orientation, so anything else there is parsed and
 -- dropped without a warning. This module emulates the missing feature: it
--- reads layout_opts off the host's workspace_specs and rewrites the matching
--- globals around the moments a layout reads them.
+-- reads layout_opts off the workspace specs' `engine` sub-table (see
+-- workspaces.lua for why engine fields never reach the rule) and rewrites the
+-- matching globals around the moments a layout reads them.
 --
 -- A spec declares options either flat, for its own layout:
 --
 --   { workspace = "1", layout = "dwindle",
---     layout_opts = { default_split_ratio = 1.25 } }
+--     engine = { layout_opts = { default_split_ratio = 1.25 } } }
 --
 -- or keyed by layout, for a workspace whose layout is cycled at runtime
 -- (SUPER+x -> e), so each layout gets its own settings on that workspace:
 --
---   { workspace = "1", layout = "dwindle", layout_opts = {
+--   { workspace = "1", layout = "dwindle", engine = { layout_opts = {
 --       dwindle = { default_split_ratio = 1.25 },
 --       master = { mfact = 0.6, orientation = "left" },
---   } }
+--   } } }
 --
 -- Options are only read by a layout when it (re)tiles, so these take effect on
 -- the next window open or resize; already-tiled windows keep their geometry.
@@ -55,7 +56,7 @@ local touched = {}
 
 ---@param spec table a host workspace_spec
 local function collect(spec)
-  local opts = spec.layout_opts
+  local opts = spec.engine and spec.engine.layout_opts
   if not opts or not next(opts) then
     return
   end

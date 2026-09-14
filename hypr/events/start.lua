@@ -1,4 +1,5 @@
 local Store = require("hypr.lib.store")
+local qs = require("hypr.lib.qs")
 
 -- Same desk every morning: whichever project carries `study` in projects.json
 -- gets opened (its own window template decides the nvim window). Purely a
@@ -40,5 +41,8 @@ hl.on("hyprland.start", function()
   -- `uwsm app` so it runs in its own systemd scope with the finalized session
   -- environment (uwsm manages this session). Replace any stale instance first.
   hl.exec_cmd("qs -c quantumfate kill >/dev/null 2>&1; uwsm app -- qs -c quantumfate >/dev/null 2>&1")
+  -- Never leave the which-key overlay orphaned across a restart: even if a
+  -- submap stack died with the old session, the new shell must start clear.
+  qs.call("whichkey", "dismiss")
   open_study_project()
 end)

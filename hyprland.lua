@@ -18,6 +18,16 @@ _G.config = {
   tertiary_mod = "ALT",
   apps = {
     media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },
+    -- The gaming scene's own zen instance (LEO-230): pinned to name:gaming by
+    -- windowrules, opened and closed with the Dofus group by
+    -- events/gaming.lua. It needs its OWN profile, not -P Media: zen is
+    -- single-instance per profile, so launching a second -P Media window only
+    -- opens a tab-strip window inside the running media browser's process —
+    -- --name is ignored there, the class stays zen-twilight-media, and the
+    -- +media-browser rule drags it to name:media. A distinct profile forces a
+    -- distinct process, which is what makes --name (and therefore the class
+    -- gate below) real.
+    media_scene = { cmd = "zen-twilight -P GamingMedia --name zen-gaming-media", class = "zen-gaming-media" },
     main_browser = { cmd = "zen-twilight", class = "zen-twilight" },
     dev_browser = { cmd = "firefox-developer-edition", class = "firefox-developer-edition" },
     terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },
@@ -82,8 +92,27 @@ _G.config = {
           {
             workspace = "5",
             persistent = true,
-            gaps_in = 0,
-            gaps_out = 0,
+            -- No hardcoded gaps (LEO-190): the profile fills them per monitor
+            -- like any other workspace, and solo_gaps frames the lone Dofus
+            -- group when nothing else is open (LEO-191). The old gaps_out = 0
+            -- meant edge-to-edge clients; the group rule already makes this a
+            -- single tile, so the workspace is shaped by the system, not by a
+            -- "zero means special" sentinel.
+            -- Engine-owned fields (see the workspaces.lua header): the scene's
+            -- geometry decisions stay out of the workspace rule.
+            engine = {
+              -- Two-tile ratio declaration; see docs/scenes.md. A resize loop
+              -- may correct drift internally; it is not this field.
+              layout_opts = {
+                dwindle = { default_split_ratio = 0.67 },
+              },
+              -- Opt out of solo framing (LEO-190/191): this scene is a fixed
+              -- capture region, not a lone window that wants breathing room.
+              -- With framing on, the gaps flipped between the base profile and
+              -- the +180 widen every time the tile count changed (group alone
+              -- vs group + scene browser), which moves the OBS crop under you.
+              solo_gaps = "none",
+            },
             border_size = 0,
             decorate = false,
             -- The Dofus clients are one Hyprland group (windowrules.lua), so
@@ -144,10 +173,11 @@ _G.config = {
       workspaces = {
         workspace_specs = {
           -- Hyprland drops layoutopt on workspace rules (only
-          -- layoutopt:orientation is implemented), so layout_opts is consumed
-          -- by hypr/events/layout_opts.lua, which rewrites the matching
-          -- globals on workspace focus. Options may also be keyed by layout
-          -- name to differ per layout on a workspace; see that file's header.
+          -- layoutopt:orientation is implemented), so engine.layout_opts is
+          -- consumed by hypr/events/layout_opts.lua, which rewrites the
+          -- matching globals on workspace focus. Options may also be keyed by
+          -- layout name to differ per layout on a workspace; see that file's
+          -- header. Anything under `engine` never reaches the workspace rule.
           -- Here: split ratio 1.25 on the widescreen primary, 1.0 on
           -- normal-aspect monitors.
           {
@@ -159,12 +189,15 @@ _G.config = {
             -- Dwindle, with the terminals stacked into one group rather than
             -- spread across the panel (see windowrules.lua). That leaves two
             -- tiles however many project windows are open: the group on the
-            -- left at roughly two thirds, the browser on the right at one, and
-            -- the groupbar saying which terminal you are looking at.
+            -- left, the browser on the right, and the groupbar saying which
+            -- terminal you are looking at. See docs/scenes.md.
             layout = "dwindle",
-            layout_opts = {
-              dwindle = { default_split_ratio = 2.0 },
-              scrolling = { column_width = 0.67 },
+            engine = {
+              -- Two-tile ratio declaration; see docs/scenes.md.
+              layout_opts = {
+                dwindle = { default_split_ratio = 0.67 },
+                scrolling = { column_width = 0.67 },
+              },
             },
           },
           {
@@ -173,8 +206,10 @@ _G.config = {
             default_name = "creative",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = {
-              dwindle = { default_split_ratio = 1.0 },
+            engine = {
+              layout_opts = {
+                dwindle = { default_split_ratio = 1.0 },
+              },
             },
           },
           {
@@ -183,15 +218,33 @@ _G.config = {
             default_name = "proton",
             monitor = "primary",
             layout = "dwindle",
-            layout_opts = {
-              dwindle = { default_split_ratio = 1.0 },
+            engine = {
+              layout_opts = {
+                dwindle = { default_split_ratio = 1.0 },
+              },
             },
           },
           {
             workspace = "4",
             persistent = true,
-            gaps_in = 0,
-            gaps_out = 0,
+            -- No hardcoded gaps (LEO-190): the profile fills them per monitor
+            -- like any other workspace, and solo_gaps frames the lone Dofus
+            -- group when nothing else is open (LEO-191).
+            -- Engine-owned fields (see the workspaces.lua header): the scene's
+            -- geometry decisions stay out of the workspace rule.
+            engine = {
+              -- Two-tile ratio declaration; see docs/scenes.md. A resize loop
+              -- may correct drift internally; it is not this field.
+              layout_opts = {
+                dwindle = { default_split_ratio = 0.67 },
+              },
+              -- Opt out of solo framing (LEO-190/191): this scene is a fixed
+              -- capture region, not a lone window that wants breathing room.
+              -- With framing on, the gaps flipped between the base profile and
+              -- the +180 widen every time the tile count changed (group alone
+              -- vs group + scene browser), which moves the OBS crop under you.
+              solo_gaps = "none",
+            },
             border_size = 0,
             decorate = false,
             -- Dwindle, not monocle: the Dofus clients are one Hyprland group
@@ -208,7 +261,9 @@ _G.config = {
             default_name = "media",
             monitor = "secondary",
             layout = "dwindle",
-            layout_opts = { default_split_ratio = 1.0 },
+            engine = {
+              layout_opts = { default_split_ratio = 1.0 },
+            },
           },
           {
             workspace = "6",
@@ -224,7 +279,9 @@ _G.config = {
             default_name = "misc",
             monitor = "secondary",
             layout = "dwindle",
-            layout_opts = { default_split_ratio = 1.25, special_scale_factor = 1 },
+            engine = {
+              layout_opts = { default_split_ratio = 1.25, special_scale_factor = 1 },
+            },
           },
           {
             workspace = "special:comms",
@@ -256,6 +313,24 @@ _G.config = {
           "braceright",
           "bracketright",
           "asterisk",
+        },
+        -- Temporary host fork of the scene document until Lua consumes the
+        -- $XDG_STATE_HOME scenes store. See docs/scenes.md.
+        scenes = {
+          {
+            default_name = "gaming",
+            blocks = {
+              { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67 },
+              { classes = { "zen-gaming-media" }, order = 2, share = 0.33 },
+            },
+          },
+          {
+            default_name = "code",
+            blocks = {
+              { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 },
+              { classes = { "zen-twilight", "firefox-developer-edition" }, order = 2, share = 0.33 },
+            },
+          },
         },
       },
     },

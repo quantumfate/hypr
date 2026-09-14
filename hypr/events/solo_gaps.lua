@@ -16,7 +16,7 @@
 -- so this rewrites the rule rather than the global: a workspace keeps whatever
 -- it was given the moment a second tile arrives.
 --
--- A workspace opts out of the framing in its spec (`solo_gaps = "none"`).
+-- A workspace opts out of the framing in its spec (engine.solo_gaps = "none").
 -- Earlier this was inferred from `gaps_out == 0`, but a sentinel that happens
 -- to equal "asked for no gaps" is not policy — LEO-190/191 made the decision
 -- part of the spec.
@@ -33,12 +33,13 @@ local SOLO_EXTRA = 180
 ---@type table<integer, integer|table>
 local original = {}
 
--- The declared opt-out: `solo_gaps = "none"` in a workspace spec means the
--- workspace's gaps are never rewritten. Everything else participates.
+-- The declared opt-out: `engine.solo_gaps = "none"` in a workspace spec means
+-- the workspace's gaps are never rewritten. Everything else participates.
 ---@param spec table|nil
 ---@return boolean
 local function opts_out(spec)
-  return spec ~= nil and spec.solo_gaps == "none"
+  local engine = spec and spec.engine
+  return engine ~= nil and engine.solo_gaps == "none"
 end
 
 ---The spec a workspace was configured with, or nil for one the host never named
