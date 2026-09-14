@@ -61,14 +61,47 @@ function M.serialize()
   return nodes
 end
 
----Rewrite the on-disk tree. Called once at config load (see init.lua), so a
----boot or a reload lands a fresh copy for the shell to pick up via FileView.
-function M.dump()
+---The tree a node belongs to: the outermost submap above it. A mode admits or
+---withholds whole trees, so everything nested under `dofus` answers "dofus".
+---@param name string
+---@return string
+local function tree_of(name)
+  local seen = {}
+  local current = name
+  while true do
+    local node = nodes[current]
+    local parent = node and node.parent
+    if not parent or parent == "" or seen[parent] then
+      return current
+    end
+    seen[current] = true
+    current = parent
+  end
+end
+
+---Rewrite the on-disk tree. Called at config load, and again whenever the set
+---of loaded binding trees changes.
+---
+---`admitted`, when given, names the trees whose binds are enabled; everything
+---else is omitted. That is what makes the cheatsheet accurate by construction
+---rather than by filtering: the tree it renders IS the set of keys that work,
+---so it cannot list an entry that would do nothing when pressed.
+---@param admitted table<string, true>? nil means everything is loaded
+function M.dump(admitted)
   local f = io.open(M.path, "w")
   if not f then
     return
   end
-  f:write(json.encode(nodes), "\n")
+  local out = nodes
+  if admitted then
+    out = {}
+    for name, node in pairs(nodes) do
+      if admitted[tree_of(name)] then
+        out[name] = node
+      end
+    end
+  end
+  f:write(json.encode(out), "\n")
   f:close()
 end
 

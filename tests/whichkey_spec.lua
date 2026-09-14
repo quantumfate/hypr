@@ -139,3 +139,57 @@ t.describe("whichkey dismiss on submap exit (LEO-222)", function()
     t.ok(cmd and cmd:find("whichkey dismiss", 1, true) ~= nil, "dismiss raised on pop to base")
   end)
 end)
+
+t.describe("dumping only what is loaded", function()
+  --- A mode withholds whole binding trees, so the cheatsheet must render the
+  --- set of keys that work rather than every key that was ever defined. A
+  --- filtered list can disagree with what the keys do; a list derived from the
+  --- enabled set cannot.
+  local function registered()
+    package.loaded["hypr.lib.whichkey"] = nil
+    local wk = require("hypr.lib.whichkey")
+    wk.register("dofus", nil, {})
+    wk.register("dofus-team", "dofus", {})
+    wk.register("llm", nil, {})
+    return wk
+  end
+
+  local function dumped(wk, admitted)
+    local path = os.tmpname()
+    wk.path = path
+    wk.dump(admitted)
+    local f = assert(io.open(path, "r"))
+    local raw = f:read("a")
+    f:close()
+    os.remove(path)
+    return raw
+  end
+
+  t.it("keeps everything when nothing narrows it", function()
+    local wk = registered()
+    local raw = dumped(wk, nil)
+    t.ok(raw:match("dofus"), raw)
+    t.ok(raw:match("llm"), raw)
+  end)
+
+  t.it("omits a tree that is not loaded", function()
+    local wk = registered()
+    local raw = dumped(wk, { dofus = true })
+    t.ok(raw:match("dofus"), raw)
+    t.ok(not raw:match("llm"), "a withheld tree was still listed")
+  end)
+
+  t.it("keeps a nested submap with the tree it belongs to", function()
+    -- Otherwise a mode would have to name every nesting depth to admit one
+    -- feature, and the cheatsheet would lose the tree's interior.
+    local wk = registered()
+    local raw = dumped(wk, { dofus = true })
+    t.ok(raw:match("dofus%-team"), "the nested submap was dropped with its parent loaded")
+  end)
+
+  t.it("drops a nested submap when its tree is withheld", function()
+    local wk = registered()
+    local raw = dumped(wk, { llm = true })
+    t.ok(not raw:match("dofus"), "a withheld tree's interior was still listed")
+  end)
+end)

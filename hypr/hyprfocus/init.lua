@@ -16,6 +16,7 @@ local plan = require("hypr.hyprfocus.plan")
 local binds = require("hypr.hyprfocus.binds")
 local workspaces = require("hypr.hyprfocus.workspaces")
 local hold = require("hypr.hyprfocus.hold")
+local whichkey = require("hypr.lib.whichkey")
 
 local M = {}
 
@@ -100,6 +101,15 @@ function M.apply(mode)
   end
 
   local disabled = binds.admit(desk.bindings)
+
+  -- Re-dump the cheatsheet against what is now loaded. A filtered list can
+  -- disagree with what the keys actually do; a list derived from the enabled
+  -- set cannot.
+  local loaded = { root = true }
+  for _, name in ipairs(desk.bindings) do
+    loaded[name] = true
+  end
+  pcall(whichkey.dump, loaded)
 
   local admitted = {}
   for _, name in ipairs(desk.workspaces) do
