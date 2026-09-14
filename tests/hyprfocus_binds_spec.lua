@@ -92,7 +92,7 @@ t.describe("admission", function()
   local function loaded()
     local stub, binds = fresh()
     stub.bind("SUPER, t")
-    for _, name in ipairs({ "dofus", "llm", "screencapture" }) do
+    for _, name in ipairs({ "dofus", "llm", "screencapture", "modes" }) do
       stub.define_submap(name, function()
         stub.bind("a")
       end)
@@ -100,19 +100,35 @@ t.describe("admission", function()
     return stub, binds
   end
 
-  t.it("enables what is admitted and disables the rest", function()
+  t.it("withholds exactly what it is asked to", function()
     local _, binds = loaded()
-    local disabled = binds.admit({ "dofus" })
-    t.eq("llm,screencapture", table.concat(disabled, ","))
+    t.eq("llm", table.concat(binds.admit({ "llm" }), ","))
   end)
 
-  t.it("never withholds root, whatever is asked", function()
-    -- A desk with no leader key has no way back, including no way to reach the
-    -- surface that would undo the mode that did it.
+  t.it("leaves a tree the declaration never mentions alone", function()
+    -- The mistake that trapped a desk: a tree missing from the declaration was
+    -- read as one to remove, so every tree not hand-listed vanished — the
+    -- terminal and the way back among them. A gap must cost less than that.
     local _, binds = loaded()
-    local disabled = binds.admit({})
+    binds.admit({ "llm" })
+    t.eq(0, #binds.admit({}), "admitting nothing withheld something")
+  end)
+
+  t.it("never withholds root", function()
+    local _, binds = loaded()
+    local disabled = binds.admit({ "root", "llm" })
     for _, name in ipairs(disabled) do
       t.ok(name ~= "root", "root was disabled")
+    end
+  end)
+
+  t.it("never withholds the modes tree", function()
+    -- Withholding it leaves the exit behind the door it just locked: the only
+    -- way out of a mode would be the key that mode removed.
+    local _, binds = loaded()
+    local disabled = binds.admit({ "modes", "llm" })
+    for _, name in ipairs(disabled) do
+      t.ok(name ~= "modes", "the way back out of a mode was removed")
     end
   end)
 
@@ -125,26 +141,24 @@ t.describe("admission", function()
     stub.define_submap("llm", function()
       dropped = stub.bind("2")
     end)
-    binds.admit({ "dofus" })
+    binds.admit({ "llm" })
     t.eq(true, kept.enabled)
     t.eq(false, dropped.enabled)
   end)
 
-  t.it("re-enables a tree a later mode admits", function()
+  t.it("re-enables a tree a later mode keeps", function()
     local stub, binds = fresh()
     local handle
     stub.define_submap("dofus", function()
       handle = stub.bind("1")
     end)
-    binds.admit({})
-    t.eq(false, handle.enabled)
     binds.admit({ "dofus" })
+    t.eq(false, handle.enabled)
+    binds.admit({})
     t.eq(true, handle.enabled, "withholding is not permanent")
   end)
 
   t.it("survives a handle whose bind is already gone", function()
-    -- One dead handle must not abort a transition and leave the rest of the
-    -- desk half-applied.
     local stub, binds = fresh()
     stub.define_submap("dofus", function()
       local handle = stub.bind("1")
@@ -155,12 +169,12 @@ t.describe("admission", function()
     stub.define_submap("llm", function()
       stub.bind("2")
     end)
-    local ok = pcall(binds.admit, { "llm" })
+    local ok = pcall(binds.admit, { "dofus" })
     t.ok(ok, "a dead handle aborted the whole admission")
   end)
 
   t.it("names every tree that holds a bind", function()
     local _, binds = loaded()
-    t.eq("dofus,llm,root,screencapture", table.concat(binds.names(), ","))
+    t.eq("dofus,llm,modes,root,screencapture", table.concat(binds.names(), ","))
   end)
 end)

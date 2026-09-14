@@ -105,14 +105,32 @@ function M.apply(mode)
     return nil, tostring(desk)
   end
 
-  local disabled = binds.admit(desk.bindings)
+  -- What this mode takes away, not what it keeps. The base's `bindings` list
+  -- names the trees that are UNDER MODE CONTROL; a tree outside that list is
+  -- always available, so a gap in the declaration cannot silently remove the
+  -- terminal or the way back to another mode.
+  local conditional = (declaration.base or {}).bindings or {}
+  local keeps = {}
+  for _, name in ipairs(desk.bindings) do
+    keeps[name] = true
+  end
+  local withheld = {}
+  for _, name in ipairs(conditional) do
+    if not keeps[name] then
+      withheld[#withheld + 1] = name
+    end
+  end
+  local disabled = binds.admit(withheld)
 
   -- Re-dump the cheatsheet against what is now loaded. A filtered list can
   -- disagree with what the keys actually do; a list derived from the enabled
   -- set cannot.
-  local loaded = { root = true }
-  for _, name in ipairs(desk.bindings) do
+  local loaded = {}
+  for _, name in ipairs(binds.names()) do
     loaded[name] = true
+  end
+  for _, name in ipairs(disabled) do
+    loaded[name] = nil
   end
   pcall(whichkey.dump, loaded)
 

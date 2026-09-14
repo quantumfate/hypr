@@ -561,6 +561,22 @@ local function mode_entries()
   return entries
 end
 
+-- The way out, at root and with no submap in front of it.
+--
+-- A mode withholds things, so the failure that matters is a desk you cannot
+-- get back from: if the keys that would undo it are among the ones it took,
+-- the only exit is a reboot. This bind is not in any tree, so nothing can
+-- withhold it, and it goes straight to the resting mode rather than opening a
+-- picker that might itself be gone.
+--
+-- Deliberately awkward to press. It is an escape hatch, not a shortcut.
+hl.bind(bind.parse_mods({ config.main_mod, config.primary_mod, config.secondary_mod }) .. ", escape", function()
+  local _, err = hyprfocus.enter("neutral")
+  if err then
+    notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
+  end
+end, { description = "Modes: return to neutral", submap_universal = true })
+
 submap.tree({
   mods = { config.main_mod, "f" },
   name = "modes",

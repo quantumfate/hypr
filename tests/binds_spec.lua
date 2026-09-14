@@ -142,3 +142,30 @@ t.describe("the modes tree", function()
     t.ok(found, "no root-level entry into the modes tree")
   end)
 end)
+
+t.describe("the way out of a mode", function()
+  --- A mode withholds things, so the failure that matters is a desk you cannot
+  --- get back from. This bind exists because that failure once cost a reboot.
+  t.it("is bound at root, where no mode can withhold it", function()
+    local found
+    for _, b in ipairs(hl.binds) do
+      if b.opts and b.opts.description == "Modes: return to neutral" then
+        found = b
+      end
+    end
+    t.ok(found, "no escape back to neutral")
+    t.eq("", found.submap, "the escape is inside a submap something could remove")
+  end)
+
+  t.it("works from inside any submap", function()
+    -- Being half-way through a key sequence when you realise you are stuck
+    -- should not be the thing that stops you getting out.
+    local found
+    for _, b in ipairs(hl.binds) do
+      if b.opts and b.opts.description == "Modes: return to neutral" then
+        found = b
+      end
+    end
+    t.eq(true, found.opts.submap_universal)
+  end)
+end)

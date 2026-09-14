@@ -28,8 +28,12 @@ local stack = { "root" }
 
 -- Binds outside any submap. Never withheld: they carry the leader key and the
 -- way out of a submap, so a mode that dropped them would leave a desk with no
--- way to reach anything, including the mode panel that would undo it.
+-- way to reach anything.
 local ROOT = "root"
+
+-- The tree that enters other modes. Withholding it is a trap with no exit:
+-- the only way back out of a mode would be the key that mode just removed.
+local MODES = "modes"
 
 local captured = false
 
@@ -89,30 +93,41 @@ function M.size(name)
   return #(trees[name] or {})
 end
 
----Enable exactly the named trees and disable the rest.
+---Withhold exactly the named trees, and enable everything else.
 ---
----`root` is always enabled whatever is asked, because the alternative is a
----desk with no leader key and no way back — including no way to reach the
----surface that would put it right.
----@param admitted string[]
----@return string[] the trees that ended up disabled
-function M.admit(admitted)
-  local wanted = { [ROOT] = true }
-  for _, name in ipairs(admitted or {}) do
-    wanted[name] = true
+---The default is on, and that is the load-bearing part. A tree the
+---declaration never mentions is far more likely to be a gap in the
+---declaration than an intention to remove it — and the cost of the two
+---mistakes is not remotely symmetric. Leaving an unnamed tree enabled means a
+---mode does not take away as much as it meant to. Disabling it means a desk
+---with no terminal and no way back, which is a reboot.
+---
+---So a mode names what it takes. It does not enumerate what it keeps.
+---
+---`root` and the modes tree are refused whatever is asked. Root carries the
+---leader key; the modes tree is the only way into another mode, so withholding
+---it leaves the exit behind the door it just locked.
+---@param withheld string[] trees this mode takes away
+---@return string[] the trees actually disabled
+function M.admit(withheld)
+  local drop = {}
+  for _, name in ipairs(withheld or {}) do
+    if name ~= ROOT and name ~= MODES then
+      drop[name] = true
+    end
   end
 
   local disabled = {}
   for _, name in ipairs(M.names()) do
-    local on = wanted[name] == true
-    if not on then
+    local off = drop[name] == true
+    if off then
       disabled[#disabled + 1] = name
     end
     for _, handle in ipairs(trees[name]) do
       -- A handle whose bind was already removed is not an error worth failing
       -- a whole transition over; the rest of the tree still has to be applied.
       pcall(function()
-        handle:set_enabled(on)
+        handle:set_enabled(not off)
       end)
     end
   end
