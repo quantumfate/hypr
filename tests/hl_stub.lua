@@ -130,11 +130,29 @@ function M.new()
     return hl.monitors
   end
 
+  -- Rule constructors return a handle carrying `set_enabled`, the way the real
+  -- API does: a mode admits and withholds resources through those handles, so
+  -- a stub that returned nothing would make that untestable.
+  local function rule_handle(spec)
+    local handle = { spec = spec, enabled = true }
+    function handle:set_enabled(value)
+      self.enabled = value
+    end
+    function handle:is_enabled()
+      return self.enabled
+    end
+    return handle
+  end
+
   function hl.window_rule(spec)
+    local handle = rule_handle(spec)
     hl.window_rules[#hl.window_rules + 1] = spec
+    return handle
   end
   function hl.workspace_rule(spec)
+    local handle = rule_handle(spec)
     hl.workspace_rules[#hl.workspace_rules + 1] = spec
+    return handle
   end
   function hl.config(spec)
     hl.last_config = spec

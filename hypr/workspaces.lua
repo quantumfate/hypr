@@ -7,6 +7,11 @@
 --     the nested per-layout tables outright.
 --   engine.solo_gaps   -- consumed by hypr/events/solo_gaps.lua as the framing
 --     opt-out.
+-- The handle is kept, not discarded: it carries `set_enabled`, which is how a
+-- mode withdraws a workspace and brings it back without a reload. This is the
+-- only place workspace rules are created, so recording here needs no wrapper.
+local registry = require("hypr.hyprfocus.workspaces")
+
 for _, workspace_spec in ipairs(config.host.workspaces.workspace_specs) do
   local rule = {}
   for field, value in pairs(workspace_spec) do
@@ -14,5 +19,5 @@ for _, workspace_spec in ipairs(config.host.workspaces.workspace_specs) do
       rule[field] = value
     end
   end
-  hl.workspace_rule(rule)
+  registry.record(workspace_spec.default_name, hl.workspace_rule(rule))
 end
