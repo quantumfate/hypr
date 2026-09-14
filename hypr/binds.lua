@@ -4,46 +4,29 @@ local submap = require("hypr.lib.submap")
 local layout_lib = require("hypr.lib.layout")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
+local focus_gate = require("hypr.lib.focus_gate")
 local diag = require("hypr.services.diag")
 local hyprfocus_binds = require("hypr.hyprfocus.binds")
 
--- Focus mode is data + an oracle (Focus.qml); nothing enforces it until a
--- launcher checks in. Checked here at DISPATCH time (inside the bind action,
--- not while binds.lua builds the tree) so toggling focus needs no Hyprland
--- reload — the next press just sees the new mode. Fails open (nil) if the
--- shell isn't reachable: a broken IPC socket should not lock the desk down.
+-- Focus mode is data + an oracle (Focus.qml on the shell side,
+-- hypr/lib/focus_gate.lua here): the store is the truth both read, so the
+-- check runs at DISPATCH time without a subprocess — a store read on the
+-- mtime cache instead of a spawned `qs ipc` per press (LEO-267). Toggling
+-- focus still needs no reload: the next press reads the new pointer.
+-- Fails open: no policy, no pointer, a lapsed expiry all mean "proceed".
 ---@param kind "media"|"game"
 ---@return string? reason non-nil when focus mode blocks this kind
 local function focus_block_reason(kind)
-  local h = io.popen("qs -c quantumfate ipc call -- focus canLaunch " .. kind .. " 2>/dev/null")
-  if not h then
-    return nil
-  end
-  local out = (h:read("*a") or ""):gsub("%s+$", "")
-  h:close()
-  if out == "" or out == "yes" then
-    return nil
-  end
-  return (out:gsub("^no: ", ""))
+  return focus_gate.block_reason(kind)
 end
 
 -- Scene reachability: the mood can name a workspace scene "blocked", which
 -- prevents ENTERING it (a session already running is never torn down — same
--- firm semantics the launcher gate uses). Checked the same way: dispatch time,
--- fails open.
+-- firm semantics the launcher gate uses). Same store read, fails open.
 ---@param scene string
 ---@return string? reason non-nil when the scene is blocked
 local function scene_block_reason(scene)
-  local h = io.popen("qs -c quantumfate ipc call -- focus scene " .. scene .. " 2>/dev/null")
-  if not h then
-    return nil
-  end
-  local out = (h:read("*a") or ""):gsub("%s+$", "")
-  h:close()
-  if out == "blocked" then
-    return "the " .. scene .. " scene is blocked while this mood runs"
-  end
-  return nil
+  return focus_gate.blocked_scene(scene)
 end
 
 -- === Audio controls ===
