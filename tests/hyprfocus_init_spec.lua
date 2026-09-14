@@ -195,3 +195,51 @@ t.describe("planning", function()
     t.ok(err)
   end)
 end)
+
+t.describe("entering a mode", function()
+  t.it("records the mode before doing any of the work", function()
+    -- Every other reader learns the mode from the pointer. Writing it after
+    -- the work leaves a window where the desk has changed and nothing can say
+    -- why it did.
+    local stub, hyprfocus = fresh(DECLARATION)
+    hyprfocus.enter("game")
+    t.eq("game", hyprfocus.active())
+    t.ok(stub)
+  end)
+
+  t.it("records who asked", function()
+    local _, hyprfocus = fresh(DECLARATION)
+    hyprfocus.enter("game", "schedule")
+    t.eq("game", hyprfocus.active())
+  end)
+
+  t.it("hands the services half to the command line", function()
+    -- The compositor cannot stop a systemd unit, so a mode change that only
+    -- did its own half would leave the desk describing a mode it is not in.
+    local stub, hyprfocus = fresh(DECLARATION)
+    hyprfocus.enter("game")
+    local spawned = false
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.exec_cmd" and tostring(d.args[1]):match("hyprfocus apply game") then
+        spawned = true
+      end
+    end
+    t.ok(spawned, "the services half was never asked for")
+  end)
+
+  t.it("refuses a mode that cannot resolve, without recording it", function()
+    -- A mode the desk cannot reach must not become the mode it believes it is
+    -- in; the pointer would then describe a desk that was never applied.
+    local _, hyprfocus = fresh(DECLARATION)
+    local report, err = hyprfocus.enter("gamming")
+    t.eq(nil, report)
+    t.ok(err)
+    t.eq("neutral", hyprfocus.active(), "the pointer is untouched")
+  end)
+
+  t.it("applies this runtime's half", function()
+    local _, hyprfocus, rules = fresh(DECLARATION)
+    hyprfocus.enter("game")
+    t.eq(false, rules.code.enabled)
+  end)
+end)

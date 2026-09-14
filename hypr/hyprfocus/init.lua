@@ -28,6 +28,11 @@ local DECLARATION = "hyprfocus"
 -- changes by the minute, the other by configuration.
 local POINTER = "focus"
 
+-- The half of a transition this runtime does not own. Named rather than
+-- resolved to a path: it is on PATH precisely so it works from a terminal with
+-- no compositor, and hardcoding a location here would undo that.
+local CLI = ",hyprfocus"
+
 ---@return table? declaration, string? error
 function M.declaration()
   local ok, handle = pcall(store.define, DECLARATION)
@@ -160,6 +165,54 @@ function M.apply(mode)
     workspaces_refused = refused,
   },
     nil
+end
+
+---Enter a mode: record it, apply this runtime's half, and hand the rest to the
+---command line.
+---
+---One action drives both halves because the desk is one thing. The compositor
+---cannot stop a systemd unit and the CLI cannot disable a keybind, so a mode
+---change that only did one of them would leave the desk describing a mode it
+---is not in.
+---
+---The pointer is written FIRST. Every other reader — the shell's pill, the
+---notification routing, a later schedule deciding whether it may act — learns
+---the mode from it, and writing it after the work would mean a window where
+---the desk has changed and nothing can say why.
+---
+---The services half is spawned rather than waited on. It talks to systemd,
+---which can take seconds on a unit that stops slowly, and a compositor that
+---blocked on that would drop every keypress meanwhile.
+---@param mode string
+---@param source string? who is asking: "manual" (default), "timer", "schedule"
+---@return table? report, string? error
+function M.enter(mode, source)
+  local declaration, err = M.declaration()
+  if not declaration then
+    return nil, err
+  end
+  -- Resolve before recording. A mode that cannot resolve must not become the
+  -- mode the desk believes it is in.
+  local ok, desk = pcall(resolve.resolve, declaration, mode)
+  if not ok then
+    return nil, tostring(desk)
+  end
+  local _ = desk
+
+  local wrote, handle = pcall(store.define, POINTER)
+  if wrote then
+    pcall(function()
+      handle:set({
+        mode = mode,
+        source = source or "manual",
+        set_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+      })
+    end)
+  end
+
+  local report, apply_err = M.apply(mode)
+  hl.dispatch(hl.dsp.exec_cmd(("%s apply %s"):format(CLI, mode)))
+  return report, apply_err
 end
 
 ---What `apply` would do, without doing it.

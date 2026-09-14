@@ -196,7 +196,7 @@ _G.config = {
             -- tiles however many project windows are open: the group on the
             -- left, the browser on the right, and the groupbar saying which
             -- terminal you are looking at. See docs/scenes.md.
-            layout = "dwindle",
+            layout = "scene",
             engine = {
               -- Two-tile ratio declaration; see docs/scenes.md.
               layout_opts = {

@@ -502,6 +502,72 @@ bind.exec("slash", "qs -c quantumfate ipc call cheatsheet toggle", {
 -- surface (theme, cheatsheet, team panel, store queries). Actions that take an
 -- argument are reached elsewhere: `dofus select` via the team submap, and
 -- `theme set <palette>` is covered here by `cycle`.
+-- Modes (SUPER+f): entering one is a single action that drives both halves of
+-- the desk — this runtime's workspaces and binding trees, and the command
+-- line's background work.
+--
+-- The entries are built from the declaration rather than listed here, so
+-- adding a mode to the store puts it on the key tree without touching this
+-- file. Keys are the first free letter of the mode's id, which keeps them
+-- predictable without a second table to maintain.
+local hyprfocus = require("hypr.hyprfocus")
+
+local function mode_entries()
+  local declaration = hyprfocus.declaration()
+  if not declaration then
+    -- A desk with no declaration yet. Saying so beats an empty submap that
+    -- looks like the feature is broken rather than unseeded.
+    return {
+      {
+        key = "s",
+        desc = "No declaration — run ,hyprfocus seed",
+        action = function()
+          notify:notify("hyprfocus: no declaration; run ,hyprfocus seed", 5000, notify.level.WARNING)
+        end,
+      },
+    }
+  end
+
+  local ids = {}
+  for id in pairs(declaration.modes or {}) do
+    ids[#ids + 1] = id
+  end
+  table.sort(ids)
+
+  local entries, taken = {}, {}
+  for _, id in ipairs(ids) do
+    local key
+    for i = 1, #id do
+      local candidate = id:sub(i, i)
+      if candidate:match("%a") and not taken[candidate] then
+        key, taken[candidate] = candidate, true
+        break
+      end
+    end
+    if key then
+      local spec = declaration.modes[id]
+      entries[#entries + 1] = {
+        key = key,
+        desc = "Enter " .. (spec.name or id),
+        action = function()
+          local _, err = hyprfocus.enter(id)
+          if err then
+            notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
+          end
+        end,
+      }
+    end
+  end
+  return entries
+end
+
+submap.tree({
+  mods = { config.main_mod, "f" },
+  name = "modes",
+  desc = "Modes",
+  entries = mode_entries(),
+})
+
 submap.tree({
   mods = { config.main_mod, "q" },
   name = "shell",
@@ -600,18 +666,27 @@ submap.tree({
         -- bind below is the deliberate way out — firm semantics, no silent
         -- timeout. The mood centre is the primary picker; this is the
         -- keyboard's quick entry into the deep-work mood.
+        -- Both go through hyprfocus.enter, not the shell. Setting the
+        -- pointer alone leaves the compositor's half unapplied, so the desk
+        -- would describe a mode it is not actually in.
         {
           key = "f",
           desc = "Start deep work",
           action = function()
-            qs.call("focus", "set", "deep", "0")
+            local _, err = hyprfocus.enter("deep")
+            if err then
+              notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
+            end
           end,
         },
         {
           key = "s",
-          desc = "Stop focus mode",
+          desc = "Back to neutral",
           action = function()
-            qs.call("focus", "stop")
+            local _, err = hyprfocus.enter("neutral")
+            if err then
+              notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
+            end
           end,
         },
         {

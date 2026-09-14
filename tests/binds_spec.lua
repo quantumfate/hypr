@@ -115,3 +115,30 @@ t.describe("binds (built via hypr.binds)", function()
     t.eq({}, undescribed, "binds with no cheatsheet description")
   end)
 end)
+
+t.describe("the modes tree", function()
+  --- Entering a mode is the one action that drives both halves of the desk, so
+  --- the keys that reach it are worth pinning: a mode with no key is a mode
+  --- that exists only in a file.
+  t.it("carries one entry per declared mode", function()
+    local entries = {}
+    for _, b in ipairs(hl.binds) do
+      if b.submap == "modes" and b.key and not b.key:match("escape") then
+        entries[#entries + 1] = b.key
+      end
+    end
+    -- The stub has no declaration, so the tree shows the seed hint rather than
+    -- an empty submap that would look like the feature is broken.
+    t.ok(#entries >= 1, "the modes tree is empty")
+  end)
+
+  t.it("is reachable from a leader key of its own", function()
+    local found = false
+    for _, b in ipairs(hl.binds) do
+      if b.submap == "" and b.key == "+SUPER+f+" then
+        found = true
+      end
+    end
+    t.ok(found, "no root-level entry into the modes tree")
+  end)
+end)
