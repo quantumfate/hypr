@@ -55,6 +55,10 @@ function M.register(name, parent, entries)
       item.group = true
       item.child = e.name or (name .. "-" .. e.key)
       item.desc = e.desc or item.child
+    elseif e.opens then
+      -- A leaf that only enters another submap: the renderer needs to know
+      -- its destination so a withheld tree can take its leaf down too.
+      item.child = e.opens
     end
     node.items[#node.items + 1] = item
   end
@@ -98,6 +102,13 @@ end
 ---else is omitted. That is what makes the cheatsheet accurate by construction
 ---rather than by filtering: the tree it renders IS the set of keys that work,
 ---so it cannot list an entry that would do nothing when pressed.
+---
+---The overlay's own leaves are the special case that makes this a per-item
+---filter rather than a per-node one: they live in an always-enabled tree, but
+---a leaf whose destination is a withheld submap is a door the mode took away,
+---and the registry's `opens` marks exactly those. The registry itself is never
+---mutated — a dump narrows a copy, so re-admitting a tree brings its leaf
+---back on the next one.
 ---@param admitted table<string, true>? nil means everything is loaded
 function M.dump(admitted)
   local f = io.open(M.path, "w")
@@ -109,7 +120,15 @@ function M.dump(admitted)
     out = {}
     for name, node in pairs(nodes) do
       if admitted[tree_of(name)] then
-        out[name] = node
+        local rendered = { parent = node.parent, items = {} }
+        for _, item in ipairs(node.items) do
+          -- An `opens` leaf answers for its destination tree; a group's child
+          -- is its own nesting and trivially admitted with its tree.
+          if not item.child or admitted[tree_of(item.child)] then
+            rendered.items[#rendered.items + 1] = item
+          end
+        end
+        out[name] = rendered
       end
     end
   end

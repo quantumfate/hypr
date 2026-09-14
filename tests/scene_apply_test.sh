@@ -85,8 +85,8 @@ graceful_units() { jq -r --arg s "$1" '.scenes[$s].graceful[]?' "$CONTRACT"; }
 
 echo "gaming: the mood's reachable scene brings the contract's stop list under systemd"
 setup
-printf '{"mode":"game","until":null}' >"$XDG_STATE_HOME/focus.json"
-run game
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+run gaming
 for unit in $(scan_units gaming); do
     contains "gaming stops $unit" "--user stop $unit" "$(stopper)"
 done
@@ -96,14 +96,14 @@ done
 for unit in $(jq -r '.protected[]?' "$CONTRACT"); do
     not_contains "protected $unit is never touched" "--user stop $unit" "$(stopper)"
 done
-check "the applied state records the mood that stopped them" "game" \
+check "the applied state records the mood that stopped them" "gaming" \
     "$(jq -r '.mode' "$XDG_STATE_HOME/scene-policy/applied.json")"
 teardown
 
 echo "returning to neutral hands the stopped units back"
 setup
-printf '{"mode":"game","until":null}' >"$XDG_STATE_HOME/focus.json"
-run game
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+run gaming
 printf '{"mode":"neutral","until":null}' >"$XDG_STATE_HOME/focus.json"
 run neutral
 for unit in $(scan_units gaming); do
@@ -115,13 +115,13 @@ teardown
 
 echo "a lapsed timed mood reads as neutral and applies nothing"
 setup
-printf '{"mode":"deep","until":"2000-01-01T00:00:00.000Z"}' >"$XDG_STATE_HOME/focus.json"
+printf '{"mode":"work","until":"2000-01-01T00:00:00.000Z"}' >"$XDG_STATE_HOME/focus.json"
 contains "stale until resolves to neutral" "PLAN mood=neutral stop=<none>" "$(run --dry-run 2>&1)"
 teardown
 
 echo "moods with no reachable scene leave the desk's units alone"
 setup
-for mode in neutral chores deep reflect; do
+for mode in neutral work study; do
     printf '{"mode":"%s","until":null}' "$mode" >"$XDG_STATE_HOME/focus.json"
     run "$mode"
 done
@@ -129,21 +129,13 @@ not_contains "units that only a reachable scene stops are not stopped" "--user s
 not_contains "and nothing is started during a no-op apply" "--user start" "$(stopper)"
 teardown
 
-echo "media mood stops exactly its scene's list, nothing more"
-setup
-printf '{"mode":"media","until":null}' >"$XDG_STATE_HOME/focus.json"
-run media
-for unit in $(scan_units media); do
-    contains "media stops $unit" "--user stop $unit" "$(stopper)"
-done
-not_contains "media does not stop the gaming-only unit" "--user stop tmux" "$(stopper)"
 teardown
 
 echo "a prevented background task maps to its contract units at apply time"
 setup
-jq '.moods.game.background.prevent = ["obsidian"]' "$FIXTURE" >"$XDG_STATE_HOME/mood-policy.json"
-printf '{"mode":"game","until":null}' >"$XDG_STATE_HOME/focus.json"
-plan=$(run game --dry-run)
+jq '.moods.gaming.background.prevent = ["obsidian"]' "$FIXTURE" >"$XDG_STATE_HOME/mood-policy.json"
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+plan=$(run gaming --dry-run)
 for unit in $(jq -r '.tasks.obsidian[]?' "$CONTRACT"); do
     contains "prevented task plans $unit" "would-stop: $unit" "$plan"
 done

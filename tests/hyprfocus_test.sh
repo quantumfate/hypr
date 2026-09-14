@@ -35,23 +35,18 @@ run() { "$cli" --declaration "$declaration" "$@"; }
 
 # Game mode is the sharpest case: it is the only one using `only`, and the one
 # whose whole point is giving things up.
-check "game admits only its four workspaces" \
+check "gaming admits only its four workspaces" \
     "gaming, comms, ankama, logs" \
-    "$(run resolve game | awk '/^workspaces/ {sub(/^workspaces */, ""); print}')"
+    "$(run resolve gaming | awk '/^workspaces/ {sub(/^workspaces */, ""); print}')"
 
-check "game stops the Obsidian suite" \
+check "gaming stops the Obsidian suite" \
     "theme-auto, state-backup, chezmoi, audio-notify" \
-    "$(run resolve game | awk '/^services/ {sub(/^services */, ""); print}')"
-
-# The soft-edge case: media keeps the window and drops the background work.
-check "media keeps Obsidian but not its indexer or sync" \
-    "theme-auto, obsidian, state-backup, chezmoi, audio-notify" \
-    "$(run resolve media | awk '/^services/ {sub(/^services */, ""); print}')"
+    "$(run resolve gaming | awk '/^services/ {sub(/^services */, ""); print}')"
 
 # A scene is geometry for a workspace; one whose workspace is gone must go too.
-check "game carries only the gaming scene" \
+check "gaming carries only the gaming scene" \
     "gaming" \
-    "$(run resolve game | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
+    "$(run resolve gaming | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
 check "neutral carries both scenes" \
     "code, gaming" \
@@ -63,7 +58,7 @@ check "neutral pulls in Obsidian's companions without naming them" \
     "$(run resolve neutral | awk '/^services/ {sub(/^services */, ""); print}')"
 
 check "every declared mode is listed" \
-    "chores deep game llm media neutral reflect" \
+    "gaming neutral study work" \
     "$(run modes | sed 's/^[* ] *//' | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
 
 # A typo must fail loudly rather than resolving to a desk missing a workspace.
@@ -79,7 +74,7 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
 check "seeding installs the declaration" \
-    "seeded $scratch/hyprfocus.json (7 modes)" \
+    "seeded $scratch/hyprfocus.json (4 modes)" \
     "$(XDG_STATE_HOME=$scratch "$cli" seed "$declaration")"
 
 # The store is edited at runtime, so a seed that clobbered it would throw away
@@ -101,7 +96,7 @@ fi
 # A declaration that cannot resolve is one the desk would fail on at the next
 # mode change; failing at seed time is the cheaper place to find out.
 broken=$scratch/broken.json
-sed 's/"gaming", "comms"/"gamming", "comms"/' "$declaration" >"$broken"
+jq '.modes.gaming.workspaces.only[1] = "commms"' "$declaration" >"$broken"
 if XDG_STATE_HOME=$scratch "$cli" seed "$broken" --force >/dev/null 2>&1; then
     echo "  FAIL seeding an unresolvable declaration should refuse"
     fail=1
@@ -147,7 +142,7 @@ baseline="theme-auto.service theme-auto.timer state-backup.service state-backup.
 
 check "entering game stops the Obsidian suite" \
     "stop obsidian-index-normalize.service stop obsidian-linear-sync.service stop obsidian-linear-sync.timer stop obsidian.service" \
-    "$(apply_with "$full_suite $baseline" game)"
+    "$(apply_with "$full_suite $baseline" gaming)"
 
 check "leaving game starts them again" \
     "start obsidian-index-normalize.service start obsidian-linear-sync.service start obsidian-linear-sync.timer start obsidian.service" \
@@ -225,7 +220,7 @@ else
 fi
 
 # Stopping one is still meaningful: it cancels a run in flight.
-oneshot_stop=$(ONESHOT="obsidian-linear-sync.service" apply_with "obsidian-linear-sync.service" game)
+oneshot_stop=$(ONESHOT="obsidian-linear-sync.service" apply_with "obsidian-linear-sync.service" gaming)
 if [[ $oneshot_stop == *"stop obsidian-linear-sync.service"* ]]; then
     echo "  ok   a oneshot in flight is still cancelled"
 else

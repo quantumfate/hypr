@@ -19,3 +19,6 @@ result-*
 
 # Ansible
 .ansible
+
+# Session handoffs stay local
+HANDOFF.md

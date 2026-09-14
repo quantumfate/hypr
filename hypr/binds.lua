@@ -412,6 +412,7 @@ submap.tree({
     {
       key = "t",
       desc = "Terminal",
+      opens = "terminal",
       action = function()
         submap.enter("terminal")
       end,
@@ -419,6 +420,7 @@ submap.tree({
     {
       key = "a",
       desc = "Applications",
+      opens = "applications",
       action = function()
         submap.enter("applications")
       end,
@@ -426,6 +428,7 @@ submap.tree({
     {
       key = "p",
       desc = "Projects",
+      opens = "project",
       action = function()
         submap.enter("project")
       end,
@@ -433,6 +436,7 @@ submap.tree({
     {
       key = "c",
       desc = "Configuration",
+      opens = "configuration",
       action = function()
         submap.enter("configuration")
       end,
@@ -440,6 +444,7 @@ submap.tree({
     {
       key = "m",
       desc = "Layout",
+      opens = "layout",
       action = function()
         submap.enter("layout")
       end,
@@ -447,6 +452,7 @@ submap.tree({
     {
       key = "r",
       desc = "Window management",
+      opens = "window-management",
       action = function()
         submap.enter("window-management")
       end,
@@ -454,6 +460,7 @@ submap.tree({
     {
       key = "s",
       desc = "Screen capture",
+      opens = "screencapture",
       action = function()
         submap.enter("screencapture")
       end,
@@ -461,6 +468,7 @@ submap.tree({
     {
       key = "q",
       desc = "Shell / Quickshell",
+      opens = "shell",
       action = function()
         submap.enter("shell")
       end,
@@ -468,6 +476,7 @@ submap.tree({
     {
       key = "w",
       desc = "Special workspaces",
+      opens = "special-ws",
       action = function()
         submap.enter("special-ws")
       end,
@@ -475,6 +484,7 @@ submap.tree({
     {
       key = "d",
       desc = "Dofus",
+      opens = "dofus",
       action = function()
         submap.enter("dofus")
       end,
@@ -701,18 +711,18 @@ submap.tree({
       name = "focus",
       desc = "Focus mode",
       entries = {
-        -- Open-ended deep work (Focus.qml `set deep 0`). The explicit "stop"
+        -- Open-ended work mood (Focus.qml `set work 0`). The explicit "stop"
         -- bind below is the deliberate way out — firm semantics, no silent
         -- timeout. The mood centre is the primary picker; this is the
-        -- keyboard's quick entry into the deep-work mood.
+        -- keyboard's quick entry into the work mood.
         -- Both go through hyprfocus.enter, not the shell. Setting the
         -- pointer alone leaves the compositor's half unapplied, so the desk
         -- would describe a mode it is not actually in.
         {
           key = "f",
-          desc = "Start deep work",
+          desc = "Start work",
           action = function()
-            local _, err = hyprfocus.enter("deep")
+            local _, err = hyprfocus.enter("work")
             if err then
               notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
             end

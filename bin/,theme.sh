@@ -39,10 +39,11 @@ PALETTES=(latte frappe macchiato mocha)
 # setting from the theme name and is what applications actually branch on.
 LIGHT=(latte)
 
-# The six focus modes (spec: focus-modes.json). Mood is set elsewhere (the
+# The declared focus modes (see quickshell's hyprfocus.default.json — the
+# shipped declaration is what enumerates them). Mood is set elsewhere (the
 # shell's focus switcher writes `mood` into theme.json); this script only
 # reads it, to pick a wallpaper — it never sets one itself.
-MOODS=(neutral deep chores reflect game media)
+MOODS=(neutral work study gaming)
 
 die() {
     printf '%s: %s\n' "${0##*/}" "$1" >&2

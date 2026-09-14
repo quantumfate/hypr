@@ -173,6 +173,9 @@
 ---@field action? HL.Dispatcher|fun() Leaf: runs on press. Group: runs before entering.
 ---@field entries? SubmapEntry[] Present => a navigable group (nested submap).
 ---@field name? string Group submap name; defaults to "<parent>-<key>".
+---@field opens? string Leaf that only enters another submap; the which-key
+---omits it while that submap's tree is withheld, so the menu never advertises
+---a door that leads into a tree this mode took away.
 ---@field stay? boolean Leaf: stay in the submap after running instead of exiting. Overrides `sticky`.
 ---@field sticky? boolean Group: default `stay` for descendant leaves (modal submap). Inherited by children.
 ---@field repeating? boolean Leaf: allow key repeat while held.

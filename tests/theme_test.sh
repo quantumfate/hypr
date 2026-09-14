@@ -291,8 +291,8 @@ contains "no binding falls back to the single wallpaper" "single.png" "$(cat "$A
 contains "a palette binding outranks the bare fallback" "palette.png" "$(cat "$AWWW_LOG")"
 
 # A mood binding outranks the palette binding, even though both are set.
-"$THEME" mood-wallpaper "$ROOT/mood.png" deep >/dev/null
-jq '.mood = "deep"' "$STORE" >"$STORE.tmp" && mv "$STORE.tmp" "$STORE"
+"$THEME" mood-wallpaper "$ROOT/mood.png" work >/dev/null
+jq '.mood = "work"' "$STORE" >"$STORE.tmp" && mv "$STORE.tmp" "$STORE"
 : >"$AWWW_LOG"
 "$THEME" apply >/dev/null
 contains "mood wins over the bound palette" "mood.png" "$(cat "$AWWW_LOG")"

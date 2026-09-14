@@ -156,6 +156,12 @@ t.describe("dumping only what is loaded", function()
     wk.register("dofus", nil, {})
     wk.register("dofus-team", "dofus", {})
     wk.register("llm", nil, {})
+    -- The which-key overlay itself lives in an always-enabled tree; its
+    -- leaves reach other trees through `opens`.
+    wk.register("flex", nil, {
+      { key = "d", desc = "Dofus", opens = "dofus" },
+      { key = "t", desc = "Has no destination", action = function() end },
+    })
     return wk
   end
 
@@ -196,5 +202,24 @@ t.describe("dumping only what is loaded", function()
     local wk = registered()
     local raw = dumped(wk, { llm = true })
     t.ok(not raw:match("dofus"), "a withheld tree's interior was still listed")
+  end)
+
+  t.it("drops an opens leaf whose destination tree is withheld", function()
+    -- The overlay always answers admitted, so without the leaf-level gate its
+    -- Dofus entry would be listed while every bind inside the submap is away.
+    local wk = registered()
+    local raw = dumped(wk, { llm = true, flex = true })
+    t.ok(raw:match("Has no destination"), "a plain leaf of the same tree survives")
+    t.ok(not raw:match('"dofus"'), "the door into a withheld tree was still rendered")
+  end)
+
+  t.it("restores an opens leaf when its tree is admitted again", function()
+    -- The narrow is a copy's, never the registry's: a dump is run on every
+    -- mode change, and a drop that ate the entry would lose it forever.
+    local wk = registered()
+    local withheld = dumped(wk, { llm = true, flex = true })
+    local admitted = dumped(wk, { llm = true, flex = true, dofus = true })
+    t.ok(not withheld:match('"dofus"'), "the leaf is gone while the tree is withheld")
+    t.ok(admitted:match("Dofus"), "the leaf returns when the mode brings the tree back")
   end)
 end)

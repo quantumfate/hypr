@@ -2,6 +2,29 @@
 
 This repo is a Hyprland environment. Compositor logic lives in `hypr/**.lua`; the helpers the desk spawns live in `bin/` (see [bin/Readme.md](bin/Readme.md)). Delivery is dual (Nix + Ansible) — see `ARCHITECTURE.md`.
 
+## Read order
+
+New to the repo, read in this order — each layer points at the next:
+
+1. [README.md](README.md) — what this is, how to install it.
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — the packaging model: dual delivery (Nix + Ansible), repo scope, ecosystem coupling, release channels.
+3. [docs/scenes.md](docs/scenes.md) — the scene contract (below is the enforcement; this is the reasoning).
+4. [bin/Readme.md](bin/Readme.md) — the shell helpers the desktop spawns, and the state/IPC seams to the quickshell sibling repo.
+5. Cross-repo: `system-config/docs/hyprfocus.md` (the full `hyprfocus` engine) and quickshell `ARCHITECTURE.md` (shared state + IPC). This repo is one executor of declarations those repos also execute.
+
+## Repo map
+
+| Path                     | Owns                                                                 |
+| ------------------------ | -------------------------------------------------------------------- |
+| `hypr/`                  | the running compositor logic (Lua); scene engine under `hypr/scene/` |
+| `*.conf`                 | hypr\* daemon configs (hypridle, hyprlock, hyprpaper, …)             |
+| `bin/`                   | the `,name.sh` helpers binds and quickshell spawn                    |
+| `conf/`                  | host-specific data (`workspace_specs`, temporary `scenes` fork)      |
+| `etc/`                   | generated/contract data (`scene-managed.json`, systemd targets)      |
+| `session/`               | uwsm env, systemd user units, greeter fragment                       |
+| `flake.nix` / `ansible/` | the two delivery paths (kept in sync, both first-class)              |
+| `tests/`                 | Lua specs (`tests/run.lua` + `hl_stub.lua`) and shell-helper tests   |
+
 ## Contract
 
 Scenes are a **document**. Engines execute it. Do not add per-feature merge, `barred`, or spawn code.
