@@ -4,9 +4,10 @@
 # ACTIVE mood's background policy decides the verdict and the exit code tells
 # the caller whether to run now, wait, or not run at all:
 #
-#   allow / unset   0   run it (unlisted tasks pass under an allow gate)
+#   allow / unset   0   run it (anything not listed runs; LEO-252 retired
+#                       the wildcard/policy vocabulary from the store)
 #   defer           2   wait for a friendlier mood
-#   prevent/blocked 3   off while the current mood runs
+#   prevent         3   off while the current mood runs
 #
 # Same philosophy as ,focus-guard.sh: the verdict is read at dispatch time via
 # the focus IPC, never compiled in, so switching moods needs no reload — the
@@ -23,8 +24,8 @@ defer)
     echo "deferred: $task waits for a friendlier mood" >&2
     exit 2
     ;;
-prevent | blocked)
-    echo "$verdict: $task is off while the current mood runs" >&2
+prevent)
+    echo "prevented: $task is off while the current mood runs" >&2
     exit 3
     ;;
 *) exit 0 ;; # unknown verdict — treat as open
