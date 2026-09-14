@@ -24,7 +24,9 @@ end
 
 --- New stub `hl`. Each spec gets its own so binds/dispatches from one spec
 --- never leak into the next.
-function M.new()
+---@param stub_opts { readonly: boolean? }? `readonly` refuses assignment to
+--- `hl` the way the runtime does; for specs that load a real config.
+function M.new(stub_opts)
   local hl = {}
 
   hl.binds = {} ---@type { submap: string, key: string, action: any, opts: table }[]
@@ -59,7 +61,39 @@ function M.new()
     return hl.config_values[key]
   end
 
+  --- Reject a key string Hyprland would reject.
+  ---
+  --- Without this the stub accepts anything and the config-smoke spec is
+  --- theatre: the real runtime raises on an unparseable bind and takes down
+  --- every module required after it, so a permissive stub means the suite
+  --- passes on a config that cannot start a desk.
+  ---
+  --- Deliberately narrow. It checks that a key is actually named, not that the
+  --- name is a real keysym — the stub cannot know the keymap, and guessing
+  --- would reject valid binds.
+  ---@param key string
+  local function validate_key(key)
+    if type(key) ~= "string" or key == "" then
+      error("hl.bind: failed to create bind: missing key", 0)
+    end
+    -- Modifiers are "+"-delimited and the list may close with a trailing "+"
+    -- ("+SUPER+d+"), so drop that before taking the last segment as the key.
+    local trimmed = key:gsub("%+%s*$", "")
+    local named = trimmed:match("([^%+]*)$") or ""
+    named = named:gsub("^%s+", ""):gsub("%s+$", "")
+    if named == "" then
+      error(("hl.bind: failed to create bind: no key in %q"):format(key), 0)
+    end
+    -- A comma inside the key is the shape of a modifier list joined to its key
+    -- with ", " instead of nesting the key in the list. Hyprland reports it as
+    -- an unknown key.
+    if named:find(",") then
+      error(("hl.bind: failed to create bind: Unknown key: %s"):format(named), 0)
+    end
+  end
+
   function hl.bind(key, action, opts)
+    validate_key(key)
     hl.binds[#hl.binds + 1] = {
       submap = submap_stack[#submap_stack],
       key = key,
@@ -158,6 +192,82 @@ function M.new()
     hl.last_config = spec
   end
 
+  -- The rest of the runtime surface, recorded rather than implemented. The
+  -- config calls these at load, so a stub missing one fails the whole tree —
+  -- which is the point: the smoke spec loads the real config through here, and
+  -- a module-level error is the failure that takes a desk down with no binds
+  -- and no workspace rules.
+  hl.calls = {}
+  for _, name in ipairs({
+    "animation",
+    "curve",
+    "device",
+    "env",
+    "gesture",
+    "layer_rule",
+    "monitor",
+    "permission",
+  }) do
+    hl[name] = function(spec)
+      hl.calls[name] = hl.calls[name] or {}
+      table.insert(hl.calls[name], spec)
+      return {
+        set_enabled = function() end,
+        is_enabled = function()
+          return true
+        end,
+      }
+    end
+  end
+
+  hl.notification = {
+    create = function()
+      return { close = function() end }
+    end,
+    get = function()
+      return {}
+    end,
+  }
+  hl.plugin = { load = function() end }
+
+  function hl.version()
+    return "0.0.0-stub"
+  end
+  function hl.get_cursor_pos()
+    return { x = 0, y = 0 }
+  end
+  function hl.get_workspace()
+    return nil
+  end
+  function hl.get_workspace_windows()
+    return {}
+  end
+  function hl.get_window()
+    return nil
+  end
+  function hl.get_layers()
+    return {}
+  end
+  function hl.get_active_monitor()
+    return nil
+  end
+  function hl.get_last_window()
+    return nil
+  end
+
+  -- The runtime's `hl` is read-only: assigning to it raises at config load and
+  -- takes down every module required after, which is how that failure reached
+  -- a desk twice. Enforcing it is opt-in because every other spec stubs `hl`
+  -- methods deliberately — only the spec that simulates a real config load
+  -- wants the runtime's own strictness.
+  if stub_opts and stub_opts.readonly then
+    return setmetatable({}, {
+      __index = hl,
+      __newindex = function(_, key)
+        error(("hl.%s is read-only"):format(tostring(key)), 2)
+      end,
+    })
+  end
   return hl
 end
 
