@@ -339,8 +339,50 @@ apply_zen() {
     record_pending zen next-launch "user.js is read once at launch"
 }
 
-# The cursor is the one thing that used to need a re-login.
+# Obsidian reads its vault's appearance.json at launch, so this lands on the
+# next restart — the same tier zen lives on. The mapping is the palette's
+# accent and light-ness: the CSS theme stays Catppuccin (already chosen in the
+# vault), which is what makes a manual retheme afterwards an error worth
+# avoiding.
 #
+# The vault is nameable rather than discovered: a single declared vault keeps
+# the adapter one edit behind the truth instead of guessing which of several
+# looks themed. `bin/,obsidian-cli-wrapper.sh` names the same Main vault, so
+# the two paths already agree on the source.
+apply_obsidian() {
+    local palette=$1 vault="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian/Main}" base appearance
+    appearance="$vault/.obsidian/appearance.json"
+    [ -f "$appearance" ] || {
+        echo "obsidian: $appearance not found"
+        record_failed obsidian "vault appearance.json not found"
+        return 0
+    }
+    # `theme` is Obsidian's base-look key: moonstone wants a light palette,
+    # obsidian a dark one — the same question is_light answers everywhere else.
+    base=$(is_light "$palette" && echo moonstone || echo obsidian)
+    if ! jq --arg base "$base" --arg accent "$(accent_hex "$palette")" \
+        '.theme = $base | .accentColor = $accent' "$appearance" >"$appearance.tmp" ||
+        ! mv -f "$appearance.tmp" "$appearance"; then
+        record_failed obsidian "appearance.json is not writable"
+        return 0
+    fi
+    echo "obsidian: $base + accent (applies on next launch)"
+    record_pending obsidian next-launch "appearance.json is read at launch"
+}
+
+# Linear has no config file this adapter can write: it follows the system
+# colour scheme, which apply_gtk's gsettings call already moved. Recording it
+# is what keeps the tier summary able to say so, instead of nothing appearing
+# and a reader assuming "themed". A scheme change reaches an Electron surface
+# when it restarts, hence the tier.
+apply_linear() {
+    local palette=$1 scheme
+    scheme=$(is_light "$palette" && echo light || echo dark)
+    echo "linear: follows the system colour scheme ($scheme) (applies on next launch)"
+    record_pending linear next-launch "follows the system colour scheme"
+}
+
+# The cursor is the one thing that used to need a re-login.#
 # XCURSOR_THEME lived in ~/.config/environment.d, which systemd --user reads at
 # login and never again — so a palette switch could not move it. Three writes
 # replace that, covering three different audiences:
@@ -570,6 +612,8 @@ cmd_apply() {
     apply_rofi "$palette"
     apply_wlogout "$palette"
     apply_zen "$palette"
+    apply_obsidian "$palette"
+    apply_linear "$palette"
     apply_wallpaper "$palette"
 
     # Last, so it reflects every applier above it. A sandboxed run records
