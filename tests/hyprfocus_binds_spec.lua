@@ -11,38 +11,33 @@ local function fresh()
   local binds = require("hypr.hyprfocus.binds")
   binds.reset()
 
-  -- The stub's `bind` records but returns nothing, so give it a handle the way
-  -- the real API does.
-  local created = {}
+  -- The stub records but returns nothing, so give it a handle the way the real
+  -- API does.
   stub.bind = function(key)
     local handle = { key = key, enabled = true }
     function handle:set_enabled(value)
       self.enabled = value
     end
-    created[#created + 1] = handle
     return handle
   end
-  stub.define_submap = function(name, fn)
-    local _ = name
+  stub.define_submap = function(_, fn)
     fn()
   end
-
-  binds.capture()
-  return stub, binds, created
+  return stub, binds
 end
 
-t.describe("capture", function()
+t.describe("recording", function()
   t.it("files a bare bind under root", function()
-    local stub, binds = fresh()
-    stub.bind("SUPER, t")
+    local _, binds = fresh()
+    binds.bind("SUPER, t")
     t.eq(1, binds.size("root"))
   end)
 
   t.it("files a submap's binds under the submap", function()
-    local stub, binds = fresh()
-    stub.define_submap("dofus", function()
-      stub.bind("1")
-      stub.bind("2")
+    local _, binds = fresh()
+    binds.submap("dofus", function()
+      binds.bind("1")
+      binds.bind("2")
     end)
     t.eq(2, binds.size("dofus"))
     t.eq(0, binds.size("root"))
@@ -51,50 +46,53 @@ t.describe("capture", function()
   t.it("attributes a nested submap to the tree it belongs to", function()
     -- Everything under `dofus` is the Dofus tree, not a tree per nesting level.
     -- Otherwise a mode would have to name every depth to admit one feature.
-    local stub, binds = fresh()
-    stub.define_submap("dofus", function()
-      stub.bind("1")
-      stub.define_submap("dofus-team", function()
-        stub.bind("t")
+    local _, binds = fresh()
+    binds.submap("dofus", function()
+      binds.bind("1")
+      binds.submap("dofus-team", function()
+        binds.bind("t")
       end)
     end)
     t.eq(2, binds.size("dofus"))
     t.eq(0, binds.size("dofus-team"))
   end)
 
-  t.it("still returns the handle to its caller", function()
-    -- The wrap must be invisible: callers keep whatever the real API gave them.
-    local stub, _ = fresh()
-    local handle = stub.bind("SUPER, k")
+  t.it("returns the handle to its caller", function()
+    -- Recording must be invisible: callers keep whatever the real API gave.
+    local _, binds = fresh()
+    local handle = binds.bind("SUPER, k")
     t.ok(handle and handle.set_enabled, "the caller lost its handle")
   end)
 
-  t.it("restores the submap stack when a submap body fails", function()
+  t.it("restores the nesting when a submap body fails", function()
     -- A config error inside one submap must not silently reparent every bind
     -- defined after it.
-    local stub, binds = fresh()
-    pcall(stub.define_submap, "broken", function()
+    local _, binds = fresh()
+    pcall(binds.submap, "broken", function()
       error("boom")
     end)
-    stub.bind("SUPER, t")
+    binds.bind("SUPER, t")
     t.eq(1, binds.size("root"), "a later bind still belongs to root")
   end)
 
-  t.it("is idempotent, so a second call does not double-record", function()
+  t.it("never assigns to the runtime's own table", function()
+    -- `hl` is read-only in Hyprland: assigning to it raises at config load and
+    -- takes down every module required after. Wrapping it was tried and cost a
+    -- desk that would not start.
     local stub, binds = fresh()
-    binds.capture()
-    stub.bind("SUPER, t")
-    t.eq(1, binds.size("root"))
+    local original = stub.bind
+    binds.bind("SUPER, t")
+    t.eq(original, stub.bind, "the runtime's bind function was replaced")
   end)
 end)
 
 t.describe("admission", function()
   local function loaded()
     local stub, binds = fresh()
-    stub.bind("SUPER, t")
+    binds.bind("SUPER, t")
     for _, name in ipairs({ "dofus", "llm", "screencapture", "modes" }) do
-      stub.define_submap(name, function()
-        stub.bind("a")
+      binds.submap(name, function()
+        binds.bind("a")
       end)
     end
     return stub, binds
@@ -133,13 +131,13 @@ t.describe("admission", function()
   end)
 
   t.it("actually flips the handles", function()
-    local stub, binds = fresh()
+    local _, binds = fresh()
     local kept, dropped
-    stub.define_submap("dofus", function()
-      kept = stub.bind("1")
+    binds.submap("dofus", function()
+      kept = binds.bind("1")
     end)
-    stub.define_submap("llm", function()
-      dropped = stub.bind("2")
+    binds.submap("llm", function()
+      dropped = binds.bind("2")
     end)
     binds.admit({ "llm" })
     t.eq(true, kept.enabled)
@@ -147,10 +145,10 @@ t.describe("admission", function()
   end)
 
   t.it("re-enables a tree a later mode keeps", function()
-    local stub, binds = fresh()
+    local _, binds = fresh()
     local handle
-    stub.define_submap("dofus", function()
-      handle = stub.bind("1")
+    binds.submap("dofus", function()
+      handle = binds.bind("1")
     end)
     binds.admit({ "dofus" })
     t.eq(false, handle.enabled)
@@ -159,15 +157,15 @@ t.describe("admission", function()
   end)
 
   t.it("survives a handle whose bind is already gone", function()
-    local stub, binds = fresh()
-    stub.define_submap("dofus", function()
-      local handle = stub.bind("1")
+    local _, binds = fresh()
+    binds.submap("dofus", function()
+      local handle = binds.bind("1")
       handle.set_enabled = function()
         error("removed")
       end
     end)
-    stub.define_submap("llm", function()
-      stub.bind("2")
+    binds.submap("llm", function()
+      binds.bind("2")
     end)
     local ok = pcall(binds.admit, { "dofus" })
     t.ok(ok, "a dead handle aborted the whole admission")

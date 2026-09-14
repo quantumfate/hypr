@@ -1,3 +1,4 @@
+local hyprfocus_binds = require("hypr.hyprfocus.binds")
 local M = {}
 
 ---@param mods string[]?
@@ -36,7 +37,7 @@ end
 ---@param mods string[]?
 function M.move_focused_to_workspace(key, workspace, mods)
   local direction, ws_selector = get_workspace_direction(workspace)
-  hl.bind(
+  hyprfocus_binds.bind(
     config.main_mod .. M.parse_mods(mods) .. key,
     hl.dsp.window.move({ workspace = ws_selector, follow = true }),
     {
@@ -50,7 +51,7 @@ end
 ---@param mods string[]?
 function M.focus_workspace(key, workspace, mods)
   local direction, ws_selector = get_workspace_direction(workspace)
-  hl.bind(
+  hyprfocus_binds.bind(
     config.main_mod .. M.parse_mods(mods) .. key,
     hl.dispatch(function()
       if hl.get_active_workspace() and hl.get_active_workspace().special then
@@ -69,7 +70,7 @@ end
 ---@param action string action name, e.g. "focus_left" | "swap_right"
 ---@param description string
 function M.layout_action(mods, action, description)
-  hl.bind(M.parse_mods(mods), function()
+  hyprfocus_binds.bind(M.parse_mods(mods), function()
     require("hypr.lib.layout").dispatch(action)
   end, { description = description, submap_universal = true })
 end
@@ -102,7 +103,7 @@ function M.exec(key, cmd, opts)
   end
   local action = type(cmd) == "string" and hl.dsp.exec_cmd(cmd) or cmd
   ---@cast action HL.Dispatcher|function
-  hl.bind(prefix .. key, action, {
+  hyprfocus_binds.bind(prefix .. key, action, {
     description = opts.description,
     submap_universal = opts.submap_universal,
     locked = opts.locked,
@@ -114,7 +115,7 @@ end
 ---@param direction "Up"|"Down"
 ---@param cmd string shell command
 function M.brightness(direction, cmd)
-  hl.bind(
+  hyprfocus_binds.bind(
     "XF86MonBrightness" .. direction,
     hl.dsp.exec_cmd(cmd),
     { locked = true, repeating = true, description = "Brightness " .. direction:lower() }
@@ -131,7 +132,7 @@ end
 function M.audio(key, cmd, description, mods, repeating, callback)
   local full_key = key:find("XF86") and key or ("XF86Audio" .. key)
   local prefix = mods and (table.concat(mods, "+") .. "+") or ""
-  hl.bind(prefix .. full_key, function()
+  hyprfocus_binds.bind(prefix .. full_key, function()
     hl.dispatch(hl.dsp.exec_cmd(cmd))
     if callback then
       callback()

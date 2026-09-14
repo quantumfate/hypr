@@ -35,45 +35,36 @@ local ROOT = "root"
 -- the only way back out of a mode would be the key that mode just removed.
 local MODES = "modes"
 
-local captured = false
+---Record a keybind under the tree currently being defined, and return the
+---handle to the caller untouched.
+---
+---Callers route through here rather than calling `hl.bind` directly. Wrapping
+---the global instead would be far less invasive and does not work: `hl` is
+---read-only in the Hyprland runtime, and assigning to it raises at config
+---load — taking every module required after it down with it.
+---@return HL.Keybind
+function M.bind(...)
+  local handle = hl.bind(...)
+  -- The outermost submap is the tree: everything nested under `dofus` belongs
+  -- to the Dofus tree, not to a tree of its own.
+  local name = stack[2] or ROOT
+  trees[name] = trees[name] or {}
+  table.insert(trees[name], handle)
+  return handle
+end
 
----Wrap `hl.bind` and `hl.define_submap` so every handle is filed under the tree
----being defined. Call once, before the binds are built.
-function M.capture()
-  if captured then
-    return
+---Define a submap, tracking the nesting so binds inside it are attributed to
+---the tree they belong to.
+---@param name string
+---@param reset_or_fn string|function
+---@param fn function?
+function M.submap(name, reset_or_fn, fn)
+  stack[#stack + 1] = name
+  local ok, err = pcall(hl.define_submap, name, reset_or_fn, fn)
+  stack[#stack] = nil
+  if not ok then
+    error(err, 0)
   end
-  captured = true
-
-  local real_bind = hl.bind
-  local real_submap = hl.define_submap
-
-  -- `hl` is read-only everywhere else in this tree, deliberately. These two
-  -- assignments are the exception, scoped to config load and to the two
-  -- functions whose return values have to be grouped. The alternative is a
-  -- tree name threaded through ten call sites and every helper signature
-  -- between them, which couples the whole bind layer to one feature.
-  -- luacheck: push globals hl
-
-  hl.bind = function(...)
-    local handle = real_bind(...)
-    -- The outermost submap is the tree: everything nested under `dofus`
-    -- belongs to the Dofus tree, not to a tree of its own.
-    local name = stack[2] or ROOT
-    trees[name] = trees[name] or {}
-    table.insert(trees[name], handle)
-    return handle
-  end
-
-  hl.define_submap = function(name, reset_or_fn, fn)
-    stack[#stack + 1] = name
-    local ok, err = pcall(real_submap, name, reset_or_fn, fn)
-    stack[#stack] = nil
-    if not ok then
-      error(err, 0)
-    end
-  end
-  -- luacheck: pop
 end
 
 ---Every tree that has at least one bind.
@@ -134,12 +125,11 @@ function M.admit(withheld)
   return disabled
 end
 
----Drop the captured state. For tests; a config reload rebuilds the tree from
+---Drop the recorded state. For tests; a config reload rebuilds the trees from
 ---scratch by re-evaluating, so nothing calls this at runtime.
 function M.reset()
   trees = {}
-  stack = { "root" }
-  captured = false
+  stack = { ROOT }
 end
 
 return M

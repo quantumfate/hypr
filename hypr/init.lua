@@ -1,8 +1,3 @@
--- Before any bind is built: the registry wraps hl.bind so every handle is
--- filed under the tree it belongs to. There is no API to enumerate binds
--- afterwards, so this is the only moment they can be grouped at all.
-require("hypr.hyprfocus.binds").capture()
-
 require("hypr.conf")
 require("hypr.workspaces")
 require("hypr.events")

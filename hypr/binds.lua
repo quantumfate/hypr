@@ -4,6 +4,7 @@ local submap = require("hypr.lib.submap")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
 local diag = require("hypr.services.diag")
+local hyprfocus_binds = require("hypr.hyprfocus.binds")
 
 -- Focus mode is data + an oracle (Focus.qml); nothing enforces it until a
 -- launcher checks in. Checked here at DISPATCH time (inside the bind action,
@@ -66,17 +67,17 @@ bind.brightness("Down", ',brightness.sh --dec ""')
 -- cheatsheet, because none of the three carried a description. Maximize moves to
 -- SUPER+ALT+X; the tests assert no root chord is claimed twice and that every
 -- bind says what it does.
-hl.bind(
+hyprfocus_binds.bind(
   bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + X",
   hl.dsp.window.fullscreen({ mode = "maximized" }),
   { description = "Maximize window", submap_universal = true }
 )
-hl.bind(
+hyprfocus_binds.bind(
   bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + F",
   hl.dsp.window.fullscreen({ mode = "fullscreen" }),
   { description = "Fullscreen window", submap_universal = true }
 )
-hl.bind(
+hyprfocus_binds.bind(
   bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T",
   hl.dsp.window.float(),
   { description = "Toggle floating", submap_universal = true }
@@ -86,7 +87,7 @@ hl.bind(
 -- pointing at it, so `,proj.sh close-window` offers to take the project down
 -- with the window (picker prompt; declining just closes the window). Any other
 -- window closes straight away, exactly as `closewindow` did.
-hl.bind(
+hyprfocus_binds.bind(
   config.main_mod .. " + semicolon",
   hl.dsp.exec_cmd(",proj.sh close-window"),
   { description = "Close focused window (offers to kill its project)", submap_universal = true }
@@ -248,7 +249,7 @@ do
   end
   if media_idx and keys[media_idx] then
     local ws = specs[media_idx].workspace
-    hl.bind(config.main_mod .. "+" .. keys[media_idx], function()
+    hyprfocus_binds.bind(config.main_mod .. "+" .. keys[media_idx], function()
       local reason = focus_block_reason("media") or scene_block_reason("media")
       if reason then
         notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
@@ -319,7 +320,7 @@ end
 
 -- Repeatable on purpose: cycling layouts is a "try it and see" action, and
 -- reopening a menu between tries is what made it feel like work.
-hl.bind(config.main_mod .. " + x", cycle_workspace_layout, {
+hyprfocus_binds.bind(config.main_mod .. " + x", cycle_workspace_layout, {
   description = "Cycle the workspace layout",
   submap_universal = true,
 })
@@ -343,12 +344,12 @@ submap.tree({
 
 -- === Mouse bindings ===
 
-hl.bind(
+hyprfocus_binds.bind(
   config.main_mod .. " + " .. config.tertiary_mod .. " + mouse:272",
   hl.dsp.window.drag(),
   { description = "Move a window with left click", submap_universal = true, mouse = true }
 )
-hl.bind(config.main_mod .. " + " .. config.tertiary_mod .. " + m", function()
+hyprfocus_binds.bind(config.main_mod .. " + " .. config.tertiary_mod .. " + m", function()
   toggle_minimize:toggle_minimize()
 end, { description = "Minimize Window", submap_universal = true })
 
@@ -570,12 +571,16 @@ end
 -- picker that might itself be gone.
 --
 -- Deliberately awkward to press. It is an escape hatch, not a shortcut.
-hl.bind(bind.parse_mods({ config.main_mod, config.primary_mod, config.secondary_mod }) .. ", escape", function()
-  local _, err = hyprfocus.enter("neutral")
-  if err then
-    notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
-  end
-end, { description = "Modes: return to neutral", submap_universal = true })
+hyprfocus_binds.bind(
+  bind.parse_mods({ config.main_mod, config.primary_mod, config.secondary_mod }) .. ", escape",
+  function()
+    local _, err = hyprfocus.enter("neutral")
+    if err then
+      notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
+    end
+  end,
+  { description = "Modes: return to neutral", submap_universal = true }
+)
 
 submap.tree({
   mods = { config.main_mod, "f" },

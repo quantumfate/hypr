@@ -66,23 +66,20 @@ local function fresh(declaration, pointer)
 
   local binds = require("hypr.hyprfocus.binds")
   binds.reset()
-  local handles = {}
   stub.bind = function(key)
     local handle = { key = key, enabled = true }
     function handle:set_enabled(value)
       self.enabled = value
     end
-    handles[#handles + 1] = handle
     return handle
   end
   stub.define_submap = function(_, fn)
     fn()
   end
-  binds.capture()
-  stub.bind("SUPER, t")
+  binds.bind("SUPER, t")
   for _, name in ipairs({ "dofus", "llm" }) do
-    stub.define_submap(name, function()
-      stub.bind("a")
+    binds.submap(name, function()
+      binds.bind("a")
     end)
   end
 

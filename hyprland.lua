@@ -65,7 +65,13 @@ _G.config = {
             persistent = true,
             default = true,
             default_name = "code",
-            layout = "monocle",
+            -- The scene layout, matching the laptop: the two-tile split is
+            -- declared rather than corrected. Monocle showed one window at a
+            -- time and could not express it at all.
+            --
+            -- To fall back, set this to "dwindle" and reload; the layout is
+            -- registered either way and nothing else depends on it.
+            layout = "scene",
             monitor = "primary",
           },
           {
@@ -191,11 +197,12 @@ _G.config = {
             default = true,
             default_name = "code",
             monitor = "primary",
-            -- Dwindle, with the terminals stacked into one group rather than
-            -- spread across the panel (see windowrules.lua). That leaves two
-            -- tiles however many project windows are open: the group on the
-            -- left, the browser on the right, and the groupbar saying which
-            -- terminal you are looking at. See docs/scenes.md.
+            -- The scene layout: this workspace's arrangement is declared
+            -- (hyprfocus scenes, see docs/scenes.md) rather than corrected
+            -- after the fact. The terminals are one group, so there are two
+            -- tiles however many project windows are open — the group left,
+            -- the browser right, and the groupbar saying which terminal you
+            -- are looking at.
             layout = "scene",
             engine = {
               -- Two-tile ratio declaration; see docs/scenes.md.

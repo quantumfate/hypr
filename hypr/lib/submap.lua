@@ -1,5 +1,6 @@
 local whichkey = require("hypr.lib.whichkey")
 local qs = require("hypr.lib.qs")
+local hyprfocus_binds = require("hypr.hyprfocus.binds")
 
 local M = {}
 
@@ -117,7 +118,7 @@ end
 ---@param entries SubmapEntry[]
 ---@param sticky boolean whether leaves stay in the submap by default (modal)
 local function define(name, entries, sticky)
-  hl.define_submap(name, function()
+  hyprfocus_binds.submap(name, function()
     for _, e in ipairs(entries) do
       if e.entries then
         local child = e.name or (name .. "-" .. e.key)
@@ -127,7 +128,7 @@ local function define(name, entries, sticky)
         end
         hooks[child] = { enter = e.on_enter, leave = e.on_leave }
         whichkey.register(child, name, e.entries)
-        hl.bind(combo(e), function()
+        hyprfocus_binds.bind(combo(e), function()
           if e.action then
             run(e.action)
           end
@@ -145,7 +146,7 @@ local function define(name, entries, sticky)
         end
         opts.description = opts.description or e.desc
         opts.repeating = e.repeating
-        hl.bind(combo(e), function()
+        hyprfocus_binds.bind(combo(e), function()
           run(e.action)
           if not stay then
             M.exit()
@@ -153,10 +154,10 @@ local function define(name, entries, sticky)
         end, opts)
       end
     end
-    hl.bind(keystr({ "escape" }), function()
+    hyprfocus_binds.bind(keystr({ "escape" }), function()
       M.back()
     end)
-    hl.bind(keystr({ "SHIFT", "escape" }), function()
+    hyprfocus_binds.bind(keystr({ "SHIFT", "escape" }), function()
       M.reset()
     end)
   end)
@@ -169,7 +170,7 @@ end
 function M.tree(spec)
   hooks[spec.name] = { enter = spec.on_enter, leave = spec.on_leave }
   whichkey.register(spec.name, nil, spec.entries)
-  hl.bind(keystr(spec.mods), function()
+  hyprfocus_binds.bind(keystr(spec.mods), function()
     M.enter(spec.name)
   end, { description = (spec.desc or spec.name) .. "…" })
   define(spec.name, spec.entries, spec.sticky or false)
