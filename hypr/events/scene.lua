@@ -80,6 +80,17 @@ end
 for _, w in ipairs(hl.get_windows() or {}) do
   schedule.arm(scene_for(w))
 end
+-- Companions get the same treatment: a desk that reloads between "member
+-- opened" and "companion opened" still owes the lifecycle — presence is
+-- derived, so converging once here converges structs already on the desk.
+for scene_name, spec in pairs(specs) do
+  for _, block in ipairs(spec.blocks) do
+    if block.spawn then
+      converge_companions(scene_name)
+      break
+    end
+  end
+end
 
 hl.on("window.open", function(w)
   registry.claim(specs, w)
