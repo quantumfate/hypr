@@ -4,9 +4,9 @@
 -- instead of an error.
 --
 -- Spec terms conf/host.lua fills so a host file never repeats them: `layout`
--- ("scene") and, for plain workspaces, `persistent`. A file spells a field
--- only to deviate: an engine block, a non-primary monitor, a non-default
--- layout.
+-- ("scene"), `persistent`, and `monitor` ("primary") for plain workspaces. A
+-- file spells a field only to deviate: an engine block, a non-primary
+-- monitor, a non-default layout.
 --
 -- This is also the model for a real host file: data first, comments only
 -- where a number would otherwise justify itself.

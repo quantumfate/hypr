@@ -56,7 +56,7 @@ function M.read()
       }
     end
   end
-  return { active = active and active.name or nil, windows = windows }
+  return { active = active and active.name or nil, layout = active and active.tiled_layout or nil, windows = windows }
 end
 
 return M

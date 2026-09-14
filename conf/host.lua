@@ -35,7 +35,9 @@ end
 
 ---Fill the defaults a workspace spec leaves unset. A special's lifetime is
 ---its own — opening it and leaving is what toggling gives — so `persistent`
----belongs only to plain workspaces.
+---belongs only to plain workspaces. A plain spec with no `monitor` sits on
+---the primary: "primary" is spelled as a sentinel here so geometry.resolve()
+---below rewrites it to the host's real output name.
 ---@param specs HL.WorkspaceRuleSpec[]
 local function fill_spec_defaults(specs)
   for _, spec in ipairs(specs) do
@@ -43,8 +45,13 @@ local function fill_spec_defaults(specs)
     if spec.layout == nil then
       spec.layout = "scene"
     end
-    if plain and spec.persistent == nil then
-      spec.persistent = true
+    if plain then
+      if spec.persistent == nil then
+        spec.persistent = true
+      end
+      if spec.monitor == nil then
+        spec.monitor = "primary"
+      end
     end
   end
 end

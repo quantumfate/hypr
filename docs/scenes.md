@@ -97,6 +97,12 @@ same function.
 Grouping stays separate and declarative: a group is a compositor concept and
 arrives at the layout as one target.
 
+The engine's corrections are gated on the workspace running the scene layout:
+the same declaration on dwindle or master — where another layout owns the
+geometry — asks for nothing (`model.intent` checks `tiled_layout`; cycling
+back re-realizes through the layout-cycle bind). The compiled group rules stay
+layout-independent; the gate is the engine's, not the rules'.
+
 ## Engine layers
 
 | File                      | Owns                                               |

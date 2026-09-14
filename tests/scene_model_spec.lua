@@ -44,8 +44,8 @@ local function win(over)
   return w
 end
 
-local function snap(windows, active)
-  return { active = active or "gaming", windows = windows }
+local function snap(windows, active, layout)
+  return { active = active or "gaming", layout = layout or "lua:scene", windows = windows }
 end
 
 local GROUPED = { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true }
@@ -79,6 +79,24 @@ t.describe("visibility", function()
     local spec = scene({ GROUPED, BROWSER })
     local intent = model.intent(spec, snap({ dofus("0x1"), dofus("0x2") }), {})
     t.ok(intent, "expected a correction")
+    t.eq("join", intent.op)
+  end)
+
+  t.it("asks for nothing on a workspace that stopped running the scene layout", function()
+    -- The scene is the layout: dwindle owns its tree, and corrections aimed
+    -- at its output are the fight the layout inversion retired. The user
+    -- cycling the workspace to another layout is what the engine answers
+    -- with silence.
+    local spec = scene({ GROUPED, BROWSER })
+    for _, layout in ipairs({ "dwindle", "master", "lua:scene-unrelated" }) do
+      local s = snap({ dofus("0x1"), dofus("0x2"), browser("0x9", { x = 500, w = 300 }) }, "gaming", layout)
+      t.eq(nil, model.intent(spec, s, {}), "nothing owed while on " .. layout)
+    end
+  end)
+
+  t.it("takes the compositor's unprefixed form as the scene layout too", function()
+    local spec = scene({ GROUPED, BROWSER })
+    local intent = model.intent(spec, snap({ dofus("0x1"), dofus("0x2") }, "gaming", "scene"), {})
     t.eq("join", intent.op)
   end)
 end)

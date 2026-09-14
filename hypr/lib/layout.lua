@@ -19,6 +19,18 @@ function M.rule_layout(name)
   return "lua:" .. name
 end
 
+---The inverse: the bare config name a compositor-reported tiled_layout
+---spells (it matches "scene" as "lua:scene"), so comparisons run against
+---the form the config speaks.
+---@param name string?
+---@return string?
+function M.bare_layout(name)
+  if name == nil then
+    return nil
+  end
+  return (name:gsub("^lua:", ""))
+end
+
 ---Context handed to every layout action handler.
 ---@class LayoutContext
 ---@field ws HL.Workspace The active (special or normal) workspace.

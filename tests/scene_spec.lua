@@ -69,12 +69,12 @@ local function fresh(active)
     package.loaded[mod] = nil
   end
 
-  local world = { windows = {}, groups = {}, active = active or "gaming", focused = nil }
+  local world = { windows = {}, groups = {}, active = active or "gaming", layout = "lua:scene", focused = nil }
   stub.get_windows = function()
     return world.windows
   end
   stub.get_active_workspace = function()
-    return { id = 4, name = world.active }
+    return { id = 4, name = world.active, tiled_layout = world.layout }
   end
   stub.get_active_window = function()
     return world.focused
@@ -200,6 +200,37 @@ t.describe("visibility", function()
     world.active = "code"
     t.ok(drain(stub), "the engine settled")
     t.eq(0, #stub.dispatched)
+  end)
+
+  t.it("asks for nothing on a workspace running another layout", function()
+    -- The scene is the layout. A workspace the user cycled to master keeps
+    -- its groups' static rules (compile.lua emits those for any layout) but
+    -- the engine no longer rearranges anything: corrections aimed at
+    -- another layout's output are the fight that was retired.
+    local stub, world = fresh()
+    world.layout = "master"
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
+    t.ok(drain(stub), "the engine settled")
+    t.eq(0, #stub.dispatched, "no join was ever dispatched onto master")
+  end)
+
+  t.it("resumes arrange on a workspace cycled back to the scene layout", function()
+    local stub, world = fresh()
+    world.layout = "dwindle"
+    local a = win(world, { address = "0x1", class = "Dofus.x64" })
+    local b = win(world, { address = "0x2", class = "Dofus.x64", x = 500 })
+    require("hypr.events.scene")
+    emit(stub, "window.open", a)
+    t.ok(drain(stub))
+    t.eq(nil, a.group, "the engine did not group under dwindle")
+
+    world.layout = "lua:scene"
+    emit(stub, "workspace.active", nil)
+    t.ok(drain(stub), "the engine settled")
+    t.ok(a.group and a.group == b.group, "the block was grouped again on the scene layout")
   end)
 end)
 

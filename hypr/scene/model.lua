@@ -10,6 +10,7 @@
 -- a layout that no longer exists by the second step. The scheduler applies
 -- one, waits for the compositor to settle, and asks again.
 local spec_lib = require("hypr.scene.spec")
+local layout_lib = require("hypr.lib.layout")
 
 local M = {}
 
@@ -31,6 +32,7 @@ local SHARE_TOL = 0.02
 
 ---@class Scene.Snapshot
 ---@field active string? name of the workspace the user is looking at
+---@field layout string? compositor-reported tiled_layout of that workspace
 ---@field windows Scene.Win[]
 
 ---@class Scene.Intent
@@ -341,6 +343,14 @@ function M.intent(spec, snap, owned)
   -- next scene, which focuses again. That loop is what made a workspace
   -- switch send the desk into a fit.
   if snap.active ~= spec.name then
+    return nil
+  end
+  -- And only at a workspace running the scene layout. Dwindle and master own
+  -- their workspace's geometry, and dispatch-driven corrections aimed at
+  -- their output — order and share measured against a tree somebody else
+  -- shapes — are the fight the layout inversion retired. Cycling back to a
+  -- scene layout re-arms through cycle_workspace_layout's realize call.
+  if layout_lib.bare_layout(snap.layout) ~= "scene" then
     return nil
   end
 

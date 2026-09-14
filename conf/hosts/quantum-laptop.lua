@@ -1,6 +1,7 @@
 -- quantum-laptop: one internal panel, an external slot. Workspaces live on
--- the primary; the spec defaults (persistent, scene layout) are filled by
--- conf/host.lua — a file spells a field only to deviate.
+-- the primary; the spec defaults (persistent, the scene layout, primary
+-- monitor) are filled by conf/host.lua — a file spells a field only to
+-- deviate.
 -- Hosts shape (hypr/types.lua); workspace_specs entries are HL.WorkspaceRuleSpec.
 ---@type Hosts
 return {
@@ -45,9 +46,8 @@ return {
           solo_gaps = "none",
         },
       },
-      -- Same workspace arrangement as the desktop (no monitor override
-      -- needed while the lid is the desk): every named workspace sits on
-      -- primary.
+      -- Same workspace arrangement as the desktop: every named workspace
+      -- sits on primary (the fill default), no override spelled.
       { workspace = "6", default_name = "logs" },
       { workspace = "special:comms" },
       { workspace = "special:music" },

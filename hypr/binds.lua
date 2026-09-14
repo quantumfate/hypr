@@ -308,8 +308,7 @@ local function cycle_workspace_layout()
 
   -- tiled_layout reports the compositor's match key ("scene" comes back as
   -- "lua:scene"), so comparisons run against the same normalized form.
-  local current = layout_lib.rule_layout(workspace.tiled_layout)
-  current = current and current:gsub("^lua:", "") or nil
+  local current = layout_lib.bare_layout(workspace.tiled_layout)
   local next_layout = "dwindle"
   for i = 1, #layouts do
     if layouts[i] == current then
@@ -323,6 +322,13 @@ local function cycle_workspace_layout()
     hl.workspace_rule({ workspace = tostring(workspace.name), layout = rule_layout })
   else
     hl.workspace_rule({ workspace = tostring(workspace.id), layout = rule_layout })
+  end
+
+  -- Cycling back is an engine event no compositor occurrence announces, so
+  -- the scene is realized here: it is owed the arrangement the moments it
+  -- was behind another layout let drift.
+  if next_layout == "scene" and workspace.name then
+    require("hypr.events.scene").realize(workspace.name)
   end
 end
 
