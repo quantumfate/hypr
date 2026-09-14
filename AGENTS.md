@@ -1,6 +1,6 @@
 # Agent notes
 
-This repo is a Hyprland environment. Compositor logic lives in `hypr/**.lua`. Delivery is dual (Nix + Ansible) — see `ARCHITECTURE.md`.
+This repo is a Hyprland environment. Compositor logic lives in `hypr/**.lua`; the helpers the desk spawns live in `bin/` (see [bin/Readme.md](bin/Readme.md)). Delivery is dual (Nix + Ansible) — see `ARCHITECTURE.md`.
 
 ## Contract
 
@@ -46,9 +46,10 @@ Only if none of the above fits:
 
 ```sh
 just check                         # fmt + tests + luacheck (the gate)
-just test                          # lua tests/run.lua
+just test                          # lua tests/run.lua + the shell helpers' tests
 TEST_SPECS='tests/scene_model_spec.lua tests/scene_spec.lua' lua tests/run.lua
 just fmt
+just units                         # regenerate etc/systemd targets the contract names
 ```
 
 Tests use `tests/hl_stub.lua`. `require` of event modules self-wires; specs `fresh()` the stub and drain timers. Do not assume a live compositor.

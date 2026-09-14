@@ -8,6 +8,11 @@
 luac.out
 *.luac
 
+# Python (bin/ helpers)
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
 # Nix
 result
 result-*

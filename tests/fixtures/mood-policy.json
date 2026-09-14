@@ -1,0 +1,28 @@
+{
+  "moods": {
+    "neutral": {
+      "scenes": {},
+      "background": { "policy": "allow", "allow": ["*"], "defer": [], "prevent": [] }
+    },
+    "deep": {
+      "scenes": { "gaming": "blocked", "media": "blocked" },
+      "background": { "policy": "allow", "allow": ["*"], "defer": [], "prevent": [] }
+    },
+    "chores": {
+      "scenes": {},
+      "background": { "policy": "allow", "allow": ["*"], "defer": [], "prevent": [] }
+    },
+    "reflect": {
+      "scenes": { "gaming": "blocked", "media": "blocked" },
+      "background": { "policy": "allow", "allow": ["*"], "defer": [], "prevent": [] }
+    },
+    "game": {
+      "scenes": { "gaming": "reachable" },
+      "background": { "policy": "allow", "allow": ["*"], "defer": [], "prevent": [] }
+    },
+    "media": {
+      "scenes": { "media": "reachable" },
+      "background": { "policy": "allow", "allow": ["*"], "defer": [], "prevent": [] }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# qfs — "quantumfate shell": thin wrapper around the Quickshell IPC surface.
+#
+#   qfs                       annotated IPC overview      (ipc call help all)
+#   qfs show                  raw target/function signatures (ipc show)
+#   qfs <target> <fn> [a..]   ipc call <target> <fn> [a..]
+#   qfs kill | log | list     passthrough to `qs -c <config> <sub>`
+#
+# Examples:
+#   qfs theme cycle
+#   qfs dofus team
+#   qfs window rename "Dofus Sayer"
+#   qfs cheatsheet toggle
+#
+# Config name via $QFS_CONFIG (default: quantumfate). Completion: _qfs (in the
+# quickshell repo's completions/).
+set -euo pipefail
+CONFIG="${QFS_CONFIG:-quantumfate}"
+
+case "${1:-help}" in
+    -h | --help | help)
+        exec qs -c "$CONFIG" ipc call help all
+        ;;
+    show)
+        exec qs -c "$CONFIG" ipc show
+        ;;
+    kill | log | list)
+        sub="$1"
+        shift
+        exec qs -c "$CONFIG" "$sub" "$@"
+        ;;
+    *)
+        exec qs -c "$CONFIG" ipc call "$@"
+        ;;
+esac

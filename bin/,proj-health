@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# ,proj-health — git status across every project, for the dashboard.
+#
+# Meant for a systemd user timer, not a keypress: it writes
+# $XDG_STATE_HOME/projects-health.json and exits. The widget only ever reads
+# that file — it must never invoke this script itself, so a slow repo never
+# shows up as a frozen UI thread.
+#
+# One of the tracked repos is a full Linux kernel tree. `git status` there
+# walks hundreds of thousands of files; run it plain, in a loop over every
+# project, and this becomes a multi-minute cron job that overlaps its own next
+# run. Two things keep it bounded:
+#
+#   - a per-repo `timeout`: a wedged or huge repo gets marked "timeout" and the
+#     loop moves on, instead of the whole collection hanging behind it
+#   - an incremental mode (the default): a repo whose .git/HEAD and .git/index
+#     haven't changed since the last successful collection is not touched at
+#     all — its previous entry is carried over as-is. `--full` (for the timer
+#     to run occasionally, or by hand) forces every repo to be re-checked.
+#
+# `,proj.sh list` is still the one place that knows what a project is; this
+# never re-scans on its own.
+#
+#   ,proj-health           incremental collection (skips untouched repos)
+#   ,proj-health --full    re-check every project regardless of mtimes
+set -euo pipefail
+
+PROJ_SH="${PROJ_SH:-,proj.sh}"
+OUT="${XDG_STATE_HOME:-$HOME/.local/state}/projects-health.json"
+# Generous but finite: a kernel-tree `git status` under load is slow, not
+# infinite — this is the ceiling that keeps one repo from starving the rest.
+PER_REPO_TIMEOUT="${PROJ_HEALTH_TIMEOUT:-10}"
+
+FULL=0
+[[ ${1-} == --full ]] && FULL=1
+
+die() {
+    printf '%s: %s\n' "${0##*/}" "$1" >&2
+    exit 1
+}
+
+command -v jq >/dev/null 2>&1 || die "jq is required"
+command -v "$PROJ_SH" >/dev/null 2>&1 || die "$PROJ_SH not on PATH"
+
+# mtime of whatever in .git tells us a repo changed since we last looked:
+# HEAD (checkout/commit), index (stage/commit), and the packed-refs / refs
+# tree (fetch, branch creation) all touch one of these.
+repo_fingerprint() { # $1 = path -> a single opaque string, "" if not a repo
+    local git_dir=$1/.git
+    [[ -e $git_dir ]] || {
+        echo ""
+        return
+    }
+    # Not every candidate exists in every repo (a fresh clone has no
+    # packed-refs) — `stat` exits nonzero when any argument is missing, and
+    # `pipefail` would otherwise take the whole script down with it.
+    { stat -c '%Y' "$git_dir/HEAD" "$git_dir/index" "$git_dir/refs" "$git_dir/packed-refs" 2>/dev/null || true; } |
+        paste -sd, -
+}
+
+# One repo's health as a JSON object. Bounded by $PER_REPO_TIMEOUT; a timeout
+# or any git failure still produces a row (state: "timeout"/"error") rather
+# than silently vanishing from the report — a missing row it is not, a
+# suspicious one it is.
+#
+# "plain" is separate from "error" on purpose. Several tracked projects are not
+# repositories at all — a log directory, an Obsidian vault, a config dir — and a
+# dashboard that paints those red is crying wolf about the one thing it exists
+# to make trustworthy.
+collect_one() { # $1 = path
+    local path=$1 out rc branch ahead behind dirty last_epoch
+    if [ ! -e "$path" ]; then
+        jq -n --arg state missing '{state: $state}'
+        return
+    fi
+    if ! git -C "$path" rev-parse --git-dir >/dev/null 2>&1; then
+        jq -n --arg state plain '{state: $state}'
+        return
+    fi
+    if ! out=$(timeout "$PER_REPO_TIMEOUT" git -C "$path" status --porcelain=v2 --branch 2>/dev/null); then
+        rc=$?
+        if ((rc == 124)); then
+            jq -n --arg state timeout '{state: $state}'
+        else
+            jq -n --arg state error '{state: $state}'
+        fi
+        return
+    fi
+    branch=$(printf '%s\n' "$out" | awk '/^# branch\.head /{print $3; exit}')
+    ahead=$(printf '%s\n' "$out" | awk '/^# branch\.ab /{gsub(/[+]/,"",$3); print $3; exit}')
+    behind=$(printf '%s\n' "$out" | awk '/^# branch\.ab /{gsub(/-/,"",$4); print $4; exit}')
+    dirty=$(printf '%s\n' "$out" | grep -vc '^#' || true)
+    last_epoch=$(timeout "$PER_REPO_TIMEOUT" git -C "$path" log -1 --format=%ct 2>/dev/null || echo "")
+    jq -n \
+        --arg state ok \
+        --arg branch "${branch:-detached}" \
+        --argjson ahead "${ahead:-0}" \
+        --argjson behind "${behind:-0}" \
+        --argjson dirty "${dirty:-0}" \
+        --argjson last_commit "${last_epoch:-null}" \
+        '{state: $state, branch: $branch, ahead: $ahead, behind: $behind,
+          dirty: $dirty, last_commit: $last_commit}'
+}
+
+# Previous entry for `name`, or "null" — used by incremental mode to carry a
+# skipped repo's row forward unchanged.
+previous_entry() { # $1 = name
+    [[ -f $OUT ]] || {
+        echo null
+        return
+    }
+    jq -c --arg n "$1" '.projects[$n] // null' "$OUT" 2>/dev/null || echo null
+}
+
+previous_fingerprint() { # $1 = name
+    [[ -f $OUT ]] || {
+        echo ""
+        return
+    }
+    jq -r --arg n "$1" '.projects[$n]._fingerprint // ""' "$OUT" 2>/dev/null || echo ""
+}
+
+# Which projects the dashboard is about.
+#
+# `,proj.sh list` knows every project tms can open, which is not the same
+# question: it includes an Obsidian vault, a home directory, a config dir and
+# every nvim plugin checkout. A dashboard listing those is noise around the few
+# repositories that actually hold the desk together.
+#
+# projects.json is that shorter list. It carries no paths on purpose — tms stays
+# the one place that knows where a project lives — so this intersects the two:
+# names from the store, paths from tms. With no store, everything tms knows is
+# still better than nothing.
+tracked_projects() {
+    local store="${XDG_STATE_HOME:-$HOME/.local/state}/projects.json"
+    if [ ! -f "$store" ]; then
+        "$PROJ_SH" list
+        return 0
+    fi
+    local wanted
+    wanted=$(jq -r '.projects | keys[]' "$store" 2>/dev/null) || {
+        "$PROJ_SH" list
+        return 0
+    }
+    [ -n "$wanted" ] || {
+        "$PROJ_SH" list
+        return 0
+    }
+    "$PROJ_SH" list | awk -v want="$wanted" '
+        BEGIN { n = split(want, a, "\n"); for (i = 1; i <= n; i++) keep[a[i]] = 1 }
+        keep[$1]
+    '
+}
+
+main() {
+    # Not `local`: the EXIT trap fires after main() has already returned (or
+    # unwound via `set -e`), by which point a local `tmp` is out of scope and
+    # `set -u` turns the cleanup itself into a crash.
+    tmp=$(mktemp)
+    trap 'rm -f "$tmp"' EXIT
+    local entries=() name path fp prev_fp entry
+
+    while IFS=$'\t' read -r name path; do
+        [[ -n $name && -d $path ]] || continue
+        fp=$(repo_fingerprint "$path")
+        if ((!FULL)); then
+            prev_fp=$(previous_fingerprint "$name")
+            if [[ -n $fp && $fp == "$prev_fp" ]]; then
+                entry=$(previous_entry "$name")
+                [[ $entry != null ]] && {
+                    entries+=("$(jq -n --arg n "$name" --argjson e "$entry" '{($n): $e}')")
+                    continue
+                }
+            fi
+        fi
+        entry=$(collect_one "$path")
+        entry=$(jq --arg fp "$fp" '. + {_fingerprint: $fp}' <<<"$entry")
+        entries+=("$(jq -n --arg n "$name" --argjson e "$entry" '{($n): $e}')")
+    done < <(tracked_projects)
+
+    local merged="{}"
+    for entry in "${entries[@]}"; do
+        merged=$(jq -c --argjson e "$entry" '. + $e' <<<"$merged")
+    done
+
+    jq -n \
+        --argjson projects "$merged" \
+        --arg collected_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        '{collected_at: $collected_at, projects: $projects}' >"$tmp"
+
+    mkdir -p "$(dirname "$OUT")"
+    mv "$tmp" "$OUT"
+    trap - EXIT
+}
+
+main

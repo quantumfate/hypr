@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Linear -> Obsidian sync. Called by the timer with --apply; run bare for a dry run.
+set -euo pipefail
+
+BIN="$(dirname "$(readlink -f "$0")")"
+export PATH="$HOME/.local/bin:$PATH"   # pass-cli installs here
+
+exec python3 "$BIN/obsidian_linear_sync.py" "$@"

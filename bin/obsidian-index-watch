@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Watch the vault and re-pin index-notes callouts after the plugin appends them.
+# Debounced: a burst of writes triggers a single normalize pass.
+set -euo pipefail
+
+VAULT="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian/Main}"
+BIN="$(dirname "$(readlink -f "$0")")"
+DEBOUNCE="${OBSIDIAN_INDEX_DEBOUNCE:-3}"
+
+inotifywait -m -r -q -e close_write --format '%f' \
+    --exclude '(/\.obsidian/|/\.git/|\.tmp$|~$)' \
+    "$VAULT" |
+    while true; do
+        # Block for the first event, then swallow the rest of the burst.
+        read -r _ || exit 0
+        while read -r -t "$DEBOUNCE" _; do :; done
+        python3 "$BIN/obsidian_index_normalize.py" --vault "$VAULT" --apply
+    done

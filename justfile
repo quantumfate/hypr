@@ -1,32 +1,50 @@
 # Task runner. Run `just` to list recipes.
 # Recipes are generated from the detected toolchain; edit freely.
 
+# The shell helpers (bin/), by shebang rather than by name: bin/ holds Python
+# too (,hyprfocus, dofus_swap.py) and shfmt cannot parse it.
+shell_files := "$(git ls-files '*.sh' 'bin/,*' 'tests/*.sh' | xargs -r grep -lE '^#!.*(ba)?sh' )"
+python_files := "$(git ls-files 'bin/*' '*.py' | xargs -r grep -lE '^#!.*python' )"
+
 default:
 	@just --list
 
 # Reformat the tree in place
 fmt:
 	stylua .
-	shfmt -w -i 4 .
+	shfmt -w -i 4 {{ shell_files }}
+	ruff format {{ python_files }}
 	prettier --write '**/*.md'
 	nixpkgs-fmt .
 
 # Verify formatting without writing
 fmt-check:
 	stylua --check .
-	shfmt -d -i 4 .
+	shfmt -d -i 4 {{ shell_files }}
+	ruff format --check {{ python_files }}
 	prettier --check '**/*.md'
 	nixpkgs-fmt --check .
 
 # Static analysis
 lint:
 	luacheck .
-	git ls-files '*.sh' '*.bash' | xargs -r shellcheck
+	shellcheck {{ shell_files }}
 	yamllint .
 
-# Unit tests for hypr/lib/ (pure Lua, no compositor needed)
+# Unit tests for hypr/lib/ (pure Lua, no compositor needed), then the shell
+# helpers' own tests, against scratch XDG trees — never this machine.
 test:
 	lua tests/run.lua
+	./tests/theme_test.sh
+	./tests/scene_apply_test.sh
+	./tests/hyprfocus_test.sh
+	./tests/hyprfocus_units_test.sh
+
+# Regenerate the capability targets (the systemd seam bin/,hyprfocus-units
+# writes). `just check` fails if the committed ones and the contract have
+# drifted, so this is what clears that.
+units:
+	./bin/,hyprfocus-units generate
 
 # CI/pre-commit gate: formatting + luacheck + tests (shellcheck/yamllint stay advisory via `lint`)
 check: fmt-check test

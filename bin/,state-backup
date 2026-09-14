@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Tars $XDG_STATE_HOME (theme.json, projects.json, focus.json, sound.json,
+# dofus team state, notifications — everything this desk relies on that is
+# deliberately not in git) and encrypts it to one age blob. Recipients are
+# public keys, safe to keep in this file's config; the matching identity (the
+# one keyfile to actually guard) lives elsewhere and never touches this script.
+set -euo pipefail
+
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}
+recipients_file=${STATE_BACKUP_RECIPIENTS_FILE:-$HOME/.config/state-backup/recipients.txt}
+dest_dir=${STATE_BACKUP_DEST:-$HOME/Backups/state}
+
+if [[ ! -f "$recipients_file" ]]; then
+    echo ",state-backup: no recipients file at $recipients_file" >&2
+    echo "  age-keygen -o ~/.config/state-backup/key.txt   # keep key.txt safe, elsewhere" >&2
+    echo "  grep '# public key:' ~/.config/state-backup/key.txt | cut -d' ' -f4 > $recipients_file" >&2
+    exit 1
+fi
+
+if [[ ! -d "$state_dir" ]]; then
+    echo ",state-backup: no state dir at $state_dir, nothing to back up" >&2
+    exit 1
+fi
+
+mkdir -p "$dest_dir"
+stamp=$(date +%Y%m%dT%H%M%S)
+out="$dest_dir/state-$stamp.tar.age"
+
+tar -C "$(dirname "$state_dir")" -cf - "$(basename "$state_dir")" |
+    age -R "$recipients_file" -o "$out"
+
+echo "$out"

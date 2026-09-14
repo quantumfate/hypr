@@ -1,0 +1,488 @@
+#!/usr/bin/env python3
+""",hyprfocus — inspect and explain the hyprfocus declaration.
+
+A mode declares a desk; the system converges on it. This is the command-line
+way in, and it is Python rather than shell because the declaration is JSON and
+resolving it is set arithmetic.
+
+It deliberately works with no compositor and no shell running: the declaration
+is a file, and answering "what does study mode mean" should not depend on the
+thing it configures being up. That is also why the read-only verbs are useful
+on their own — `plan` tells you what a transition would take away before you
+enter it.
+
+  ,hyprfocus resolve <mode>   the complete desk that mode means
+  ,hyprfocus plan <mode>      what would change from the mode running now
+  ,hyprfocus explain          which mode is on, who set it, and when
+  ,hyprfocus modes            every declared mode
+  ,hyprfocus seed <file>      install a declaration into the store
+  ,hyprfocus apply <mode>     bring background work in line with a mode
+
+`apply` covers background work only. Workspaces, binding trees and window
+geometry belong to the compositor, which acts on the same declaration from its
+own side; this half can run with no compositor at all, which is the point.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+KINDS = ("workspaces", "bindings", "services", "projects")
+REF_KIND = {
+    "workspace": "workspaces",
+    "binding": "bindings",
+    "service": "services",
+    "project": "projects",
+}
+KIND_REF = {plural: singular for singular, plural in REF_KIND.items()}
+
+
+def state_dir() -> Path:
+    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
+
+
+def load(path: Path | None) -> dict:
+    target = path or state_dir() / "hyprfocus.json"
+    try:
+        return json.loads(target.read_text())
+    except FileNotFoundError:
+        sys.exit(f"no declaration at {target}")
+    except json.JSONDecodeError as exc:
+        sys.exit(f"{target}: {exc}")
+
+
+def apply_delta(base: list[str], delta: dict | None, where: str) -> list[str]:
+    """One kind's delta against the base, preserving declaration order.
+
+    Deltas are a writing convenience with no runtime existence: everything acts
+    on the resolved desk, never on a delta, so a mode always means the same
+    thing however it was reached.
+    """
+    if not delta:
+        return list(base)
+    if "only" in delta and ("add" in delta or "remove" in delta):
+        sys.exit(f"{where}: `only` cannot be combined with `add` or `remove`")
+    if "only" in delta:
+        return list(delta["only"])
+
+    removed = set(delta.get("remove", []))
+    out = [name for name in base if name not in removed]
+    for name in delta.get("add", []):
+        if name not in out:
+            out.append(name)
+    return out
+
+
+def close_deps(desk: dict, base: dict, mode: str, removed: dict[str, set[str]]) -> None:
+    """Pull in what the admitted resources imply, transitively.
+
+    Two strengths, mirroring systemd rather than inventing a vocabulary:
+    `requires` cannot function without it, so a mode that removes one is a
+    conflict; `wants` merely uses it, so a mode that removes one wins silently.
+    """
+    graphs = {"requires": base.get("requires", {}), "wants": base.get("wants", {})}
+    present = {kind: set(desk[kind]) for kind in KINDS}
+    queue = [f"{KIND_REF[kind]}:{name}" for kind in KINDS for name in desk[kind]]
+    seen: set[str] = set()
+
+    while queue:
+        key = queue.pop(0)
+        if key in seen:
+            continue
+        seen.add(key)
+        for strength, graph in graphs.items():
+            for ref in graph.get(key, []):
+                singular, _, name = ref.partition(":")
+                kind = REF_KIND.get(singular)
+                if not kind:
+                    sys.exit(
+                        f"mode '{mode}': malformed {strength} reference '{ref}' on {key}"
+                    )
+                if name in removed[kind]:
+                    if strength == "requires":
+                        sys.exit(
+                            f"mode '{mode}': {kind} '{name}' is removed but required by {key}"
+                        )
+                    continue
+                if name not in present[kind]:
+                    present[kind].add(name)
+                    desk[kind].append(name)
+                    queue.append(ref)
+
+
+def resolve(declaration: dict, mode: str) -> dict:
+    base = declaration.get("base", {})
+    spec = declaration.get("modes", {}).get(mode)
+    if spec is None:
+        known = ", ".join(sorted(declaration.get("modes", {})))
+        sys.exit(f"unknown mode '{mode}' (known: {known})")
+
+    desk = {"mode": mode}
+    removed: dict[str, set[str]] = {}
+    for kind in KINDS:
+        desk[kind] = apply_delta(
+            base.get(kind, []), spec.get(kind), f"mode '{mode}', {kind}"
+        )
+        # Only `remove` is an explicit refusal. `only` says what to inherit, so
+        # the dependency closure may still widen it.
+        removed[kind] = set((spec.get(kind) or {}).get("remove", []))
+
+    close_deps(desk, base, mode, removed)
+
+    for kind in KINDS:
+        unknown = set(desk[kind]) - set(base.get(kind, []))
+        if unknown:
+            sys.exit(
+                f"mode '{mode}': unknown {kind} {sorted(unknown)} — not declared in base"
+            )
+
+    admitted = set(desk["workspaces"])
+    desk["scenes"] = {
+        ws: s for ws, s in base.get("scenes", {}).items() if ws in admitted
+    }
+    desk["notify"] = {**base.get("notify", {}), **spec.get("notify", {})}
+    desk["revoke"] = {**base.get("revoke", {}), **spec.get("revoke", {})}
+    return desk
+
+
+def revocation(desk: dict, kind: str, name: str) -> str:
+    """How a resource is given up. Windows hold, background work retires.
+
+    The two differ in how a resource is given up, not in whether it returns:
+    what comes back is decided by the next desk.
+    """
+    declared = desk.get("revoke", {}).get(name)
+    if declared:
+        return declared
+    return "hold" if kind in ("workspaces", "projects") else "retire"
+
+
+def plan(desk: dict, running: dict) -> list[tuple[str, str, str]]:
+    """Steps from the running desk to the desired one.
+
+    Give up before taking on, so a transition never briefly runs both desks —
+    on a machine being asked to reclaim resources that is the opposite of what
+    was wanted. Revoke dependents first, admit dependencies first.
+    """
+    steps = []
+    for kind in ("projects", "bindings", "services", "workspaces"):
+        for name in running.get(kind, []):
+            if name not in desk[kind]:
+                steps.append((revocation(desk, kind, name), kind, name))
+    for kind in ("workspaces", "services", "bindings", "projects"):
+        for name in desk[kind]:
+            if name not in running.get(kind, []):
+                steps.append(("admit", kind, name))
+    return steps
+
+
+def seed(source: Path, force: bool) -> None:
+    """Install a declaration into the store.
+
+    The shell seeds its own stores from QML literals when a file is missing,
+    but the declaration is read by the compositor too, and a desk that comes up
+    before the shell does should not be waiting on it. This puts the file in
+    place from either side.
+
+    It refuses to overwrite by default: the store is edited at runtime, so a
+    seed that clobbered it would throw away whatever was tuned by hand.
+    """
+    target = state_dir() / "hyprfocus.json"
+    if target.exists() and not force:
+        sys.exit(f"{target} already exists; pass --force to replace it")
+
+    try:
+        declaration = json.loads(source.read_text())
+    except FileNotFoundError:
+        sys.exit(f"no declaration at {source}")
+    except json.JSONDecodeError as exc:
+        sys.exit(f"{source}: {exc}")
+
+    # Resolving every mode before writing: a declaration that cannot resolve is
+    # one the desk would fail on at the next mode change, and failing here is
+    # the cheaper place to find out.
+    for mode in declaration.get("modes", {}):
+        resolve(declaration, mode)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(declaration, indent=2) + "\n")
+    print(f"seeded {target} ({len(declaration.get('modes', {}))} modes)")
+
+
+CONTRACT = Path(__file__).resolve().parent.parent / "etc" / "scene-managed.json"
+
+
+def contract() -> dict:
+    """The task-to-units map and the protected rail.
+
+    The declaration names *tasks*; this says which units implement them. The
+    split is deliberate: which services a mode runs is a preference edited
+    live, what a task consists of is a system fact edited in unit files.
+    """
+    try:
+        return json.loads(CONTRACT.read_text())
+    except FileNotFoundError:
+        sys.exit(f"no contract at {CONTRACT}")
+    except json.JSONDecodeError as exc:
+        sys.exit(f"{CONTRACT}: {exc}")
+
+
+def units_for(tasks: dict, names: list[str]) -> tuple[set[str], list[str]]:
+    """Units implementing these tasks, and any task nothing implements.
+
+    An unmapped task is reported rather than ignored: it means the declaration
+    and the unit files have drifted, and silently doing nothing is how that
+    goes unnoticed until a mode stops working.
+    """
+    units: set[str] = set()
+    unmapped = []
+    for name in names:
+        mapped = tasks.get(name)
+        if mapped is None:
+            unmapped.append(name)
+        else:
+            units.update(mapped)
+    return units, unmapped
+
+
+def systemctl(*args: str, check: bool = False) -> subprocess.CompletedProcess:
+    binary = os.environ.get("SYSTEMCTL", "systemctl")
+    return subprocess.run(
+        [binary, "--user", *args], capture_output=True, text=True, check=check
+    )
+
+
+def unit_state(unit: str) -> tuple[str, str, str]:
+    """(load, active, type) for a unit, in one query.
+
+    Read rather than assumed, because the three cases behave differently and
+    conflating them is how a transition reports noise instead of a problem.
+    """
+    result = systemctl(
+        "show", "-p", "LoadState", "-p", "ActiveState", "-p", "Type", "--value", unit
+    )
+    lines = (result.stdout or "").splitlines()
+    while len(lines) < 3:
+        lines.append("")
+    return lines[0].strip(), lines[1].strip(), lines[2].strip()
+
+
+def is_active(state: str) -> bool:
+    # `activating` counts: a oneshot part-way through its run is not something
+    # to start again, and a service still coming up does not want restarting.
+    return state in ("active", "activating", "reloading")
+
+
+def log(entry: dict) -> None:
+    """Append a decision. With a schedule able to change the mode on its own,
+    "why did my desk do that" stops being a debugging question."""
+    directory = state_dir() / "hyprfocus"
+    directory.mkdir(parents=True, exist_ok=True)
+    entry["at"] = datetime.now(timezone.utc).isoformat()
+    with (directory / "log.jsonl").open("a") as handle:
+        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+
+
+def active(declaration: dict) -> dict:
+    """The mode pointer, with whatever provenance it carries."""
+    try:
+        return json.loads((state_dir() / "focus.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"mode": "neutral"}
+
+
+def print_desk(desk: dict) -> None:
+    print(f"{'mode':<12}{desk['mode']}")
+    for kind in KINDS:
+        print(f"{kind:<12}{', '.join(desk[kind]) or '—'}")
+    scenes = ", ".join(sorted(desk["scenes"])) or "—"
+    print(f"{'scenes':<12}{scenes}")
+    routes = desk.get("notify", {})
+    if routes:
+        print(f"{'notify':<12}{json.dumps(routes, sort_keys=True)}")
+
+
+def apply(declaration: dict, mode: str, dry_run: bool) -> int:
+    """Bring background work in line with a mode.
+
+    Three kinds of unit, which behave differently enough that conflating them
+    reports noise instead of a problem:
+
+    * **missing** — nothing installed it. Retrying will never succeed, so it is
+      named once and skipped rather than attempted on every transition.
+    * **oneshot** — an action, not a state. `systemctl start` on one means "run
+      it now", which is its timer's job; admitting the task means making sure
+      the timer runs. Stopping one is still meaningful: it cancels a run in
+      flight.
+    * **everything else** — started if the mode wants it and it is not already
+      up, stopped if it does not.
+
+    Stops go through systemctl, which is SIGTERM plus the unit's own
+    TimeoutStopSec — never SIGKILL, and never a hand-rolled timeout racing
+    systemd's own.
+    """
+    desk = resolve(declaration, mode)
+    spec = contract()
+    tasks = spec.get("tasks", {})
+    protected = set(spec.get("protected", []))
+
+    wanted, unmapped = units_for(tasks, desk["services"])
+    known, _ = units_for(tasks, list(tasks))
+
+    # The protected rail wins over any declaration. A store edited by hand
+    # should not be able to stop the audio stack or the idle daemon.
+    candidates = sorted((known | wanted) - protected)
+    states = {unit: unit_state(unit) for unit in candidates}
+
+    stop, start, missing, timers = [], [], [], []
+    for unit in candidates:
+        load, active, kind = states[unit]
+        if load != "loaded":
+            missing.append(unit)
+        elif unit in wanted:
+            if kind == "oneshot":
+                timers.append(unit)
+            elif not is_active(active):
+                start.append(unit)
+        elif is_active(active):
+            stop.append(unit)
+
+    if unmapped:
+        print(
+            f"warning: no units for {', '.join(unmapped)} — declaration and contract have drifted",
+            file=sys.stderr,
+        )
+    if missing:
+        print(f"warning: not installed: {', '.join(missing)}", file=sys.stderr)
+
+    if dry_run:
+        for unit in stop:
+            print(f"  stop    {unit}")
+        for unit in start:
+            print(f"  start   {unit}")
+        for unit in timers:
+            print(f"  (timer) {unit}")
+        if not stop and not start:
+            print(f"already {mode}; nothing to do")
+        return 0
+
+    stopped, started, failed = [], [], []
+    for unit in stop:
+        result = systemctl("stop", unit)
+        (stopped if result.returncode == 0 else failed).append(unit)
+    for unit in start:
+        result = systemctl("start", unit)
+        (started if result.returncode == 0 else failed).append(unit)
+
+    log(
+        {
+            "mode": mode,
+            "stopped": stopped,
+            "started": started,
+            "failed": failed,
+            "missing": missing,
+            "unmapped": unmapped,
+        }
+    )
+
+    for unit in stopped:
+        print(f"  stopped {unit}")
+    for unit in started:
+        print(f"  started {unit}")
+    for unit in failed:
+        print(f"  FAILED  {unit}", file=sys.stderr)
+    if not stopped and not started and not failed:
+        print(f"already {mode}; nothing to do")
+
+    # A unit that would not move is reported, not fatal: one stubborn service
+    # must not leave the desk wedged between two modes. Missing units are not a
+    # failure of this run either — they are a packaging problem, and saying so
+    # once is more useful than failing every transition until it is fixed.
+    return 1 if failed else 0
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        prog=",hyprfocus", description=__doc__.split("\n")[0]
+    )
+    parser.add_argument(
+        "--declaration", type=Path, help="declaration to read (default: the store)"
+    )
+    sub = parser.add_subparsers(dest="verb", required=True)
+    sub.add_parser("modes", help="list every declared mode")
+    seed_parser = sub.add_parser("seed", help="install a declaration into the store")
+    seed_parser.add_argument("source", type=Path)
+    seed_parser.add_argument(
+        "--force", action="store_true", help="replace an existing store"
+    )
+    sub.add_parser("explain", help="which mode is on, who set it, and when")
+    for verb, help_text in (
+        ("resolve", "the desk a mode means"),
+        ("plan", "what would change"),
+    ):
+        p = sub.add_parser(verb, help=help_text)
+        p.add_argument("mode")
+    apply_parser = sub.add_parser(
+        "apply", help="bring background work in line with a mode"
+    )
+    apply_parser.add_argument("mode")
+    apply_parser.add_argument(
+        "--dry-run", action="store_true", help="print the plan without acting"
+    )
+
+    args = parser.parse_args()
+
+    # Seeding is the one verb that does not need a declaration already in place
+    # — it is how one gets there.
+    if args.verb == "seed":
+        seed(args.source, args.force)
+        return
+
+    declaration = load(args.declaration)
+
+    if args.verb == "modes":
+        current = active(declaration).get("mode")
+        for name, spec in sorted(declaration.get("modes", {}).items()):
+            marker = "*" if name == current else " "
+            print(f"{marker} {name:<10}{spec.get('name', '')}")
+        return
+
+    if args.verb == "explain":
+        pointer = active(declaration)
+        mode = pointer.get("mode", "neutral")
+        print(f"{'mode':<10}{mode}")
+        # Provenance matters once a schedule can change the mode on its own:
+        # "why did my desk just change" needs an answer that is not guesswork.
+        print(f"{'set by':<10}{pointer.get('source', 'unknown')}")
+        if pointer.get("set_at"):
+            print(f"{'at':<10}{pointer['set_at']}")
+        print(f"{'until':<10}{pointer.get('until') or 'open-ended'}")
+        return
+
+    if args.verb == "resolve":
+        print_desk(resolve(declaration, args.mode))
+        return
+
+    if args.verb == "apply":
+        sys.exit(apply(declaration, args.mode, args.dry_run))
+
+    desired = resolve(declaration, args.mode)
+    running = resolve(declaration, active(declaration).get("mode", "neutral"))
+    steps = plan(desired, running)
+    if not steps:
+        print(f"already {args.mode}; nothing to do")
+        return
+    takes = [s for s in steps if s[0] in ("hold", "retire")]
+    print(f"{len(steps)} steps, {len(takes)} take something away")
+    for action, kind, name in steps:
+        print(f"  {action:<7}{kind:<11}{name}")
+
+
+if __name__ == "__main__":
+    main()
