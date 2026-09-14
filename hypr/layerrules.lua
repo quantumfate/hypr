@@ -5,11 +5,13 @@
 
 hl.layer_rule({ match = { namespace = "notifications" }, animation = "slide" })
 
--- Dofus team HUD: small panel anchored top-right. Slide+fade in from its edge,
--- and blur behind it (the panel is translucent; low ignore_alpha blurs it).
+-- Dofus group widget: the tab strip + context menu tracked to the group tile
+-- (LEO-234/LEO-244). Pure fade — the surface is geometry-tracked, so a slide
+-- would fly it across the screen on every position change — and blur behind it
+-- when translucent (low ignore_alpha blurs translucent cards).
 hl.layer_rule({
   match = { namespace = "quickshell-dofus" },
-  animation = "slidefade 20%",
+  animation = "fade 2%",
   blur = true,
   ignore_alpha = 0.1,
 })
