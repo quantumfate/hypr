@@ -9,35 +9,35 @@ PIONEERS=("Reminiscer" "Sayer" "Rejecter" "Draintouch" "Traumafactory" "Memoryfr
 # Resolve --pioneer flag
 args=()
 for arg in "$@"; do
-  if [[ "$arg" == "--pioneer" ]]; then
-    args+=("${PIONEERS[@]}")
-  else
-    args+=("$arg")
-  fi
+    if [[ "$arg" == "--pioneer" ]]; then
+        args+=("${PIONEERS[@]}")
+    else
+        args+=("$arg")
+    fi
 done
 set -- "${args[@]}"
 
 if [ "$(hyprctl activewindow -j | jq -r ".class")" = "Dofus.x64" ]; then
-  case "$1" in
-  --up)
-    shift
-    "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/iterate_windows.sh" --reversed --characters "$@"
-    ;;
-  --down)
-    shift
-    "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/iterate_windows.sh" --characters "$@"
-    ;;
-  --press)
-    shift
-    "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/do.sh" --main Miserymaker --characters "$@"
-    ;;
-  --activate)
-    shift
-    "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/processFn.sh" "${PIONEERS[$1]}"
-    ;;
+    case "$1" in
+    --up)
+        shift
+        "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/iterate_windows.sh" --reversed --characters "$@"
+        ;;
+    --down)
+        shift
+        "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/iterate_windows.sh" --characters "$@"
+        ;;
+    --press)
+        shift
+        "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/do.sh" --main Miserymaker --characters "$@"
+        ;;
+    --activate)
+        shift
+        "$SCRIPT_DIR/codeberg/quantumfate/dofus-scripts/processFn.sh" "${PIONEERS[$1]}"
+        ;;
 
-  esac
+    esac
 else
-  addr=$(hyprctl activewindow -j | jq -r ".address")
-  hyprctl dispatch "hl.dsp.pass({ window = [[address:$addr]] })"
+    addr=$(hyprctl activewindow -j | jq -r ".address")
+    hyprctl dispatch "hl.dsp.pass({ window = [[address:$addr]] })"
 fi

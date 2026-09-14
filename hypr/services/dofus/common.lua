@@ -6,7 +6,7 @@
 ---@field title_prefix string
 ---
 --- Single source of truth for the Dofus team is a shared JSON store, also read
---- and written by the Quickshell UI (~/Projects/codeberg/quantumfate/quickshell)
+--- and written by the Quickshell UI (~/Projects/github/quantumfate/quickshell)
 --- and fed to dofus_swap.py:
 ---
 ---   $XDG_STATE_HOME/dofus/team.json  <->  hypr/lib/store  <->  Quickshell UI
