@@ -169,3 +169,32 @@ t.describe("the way out of a mode", function()
     t.eq(true, found.opts.submap_universal)
   end)
 end)
+
+t.describe("key strings", function()
+  --- A bind Hyprland cannot parse does not fail quietly: it raises at config
+  --- load and takes down every module required after it, so the desk comes up
+  --- with no binds and no workspace rules. That has happened twice.
+  t.it("never use a comma to separate the key from its modifiers", function()
+    -- `parse_mods` returns "+SUPER+CTRL+" and the key belongs inside that
+    -- list. Appending ", escape" produced "+SUPER+CTRL+SHIFT+, escape", which
+    -- Hyprland rejects as an unknown key.
+    local bad = {}
+    for _, b in ipairs(hl.binds) do
+      if type(b.key) == "string" and b.key:find(", ") then
+        bad[#bad + 1] = b.key
+      end
+    end
+    t.eq({}, bad, "a key string separates its key with a comma")
+  end)
+
+  t.it("never end with a dangling separator", function()
+    -- "+SUPER+ALT+ + " would bind no key at all.
+    local bad = {}
+    for _, b in ipairs(hl.binds) do
+      if type(b.key) == "string" and (b.key:match("%+%s*$") and b.key:match("%+%s*%+%s*$")) then
+        bad[#bad + 1] = b.key
+      end
+    end
+    t.eq({}, bad, "a key string ends without naming a key")
+  end)
+end)

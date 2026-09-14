@@ -572,7 +572,11 @@ end
 --
 -- Deliberately awkward to press. It is an escape hatch, not a shortcut.
 hyprfocus_binds.bind(
-  bind.parse_mods({ config.main_mod, config.primary_mod, config.secondary_mod }) .. ", escape",
+  -- The key goes inside the modifier list, not appended after it: that is how
+  -- every named key in this config is bound (see submap.lua's escape binds).
+  -- Appending produced "+SUPER+CTRL+SHIFT+, escape", which Hyprland rejects as
+  -- an unknown key — and a bind that fails to create takes the config down.
+  bind.parse_mods({ config.main_mod, config.primary_mod, config.secondary_mod, "escape" }),
   function()
     local _, err = hyprfocus.enter("neutral")
     if err then
