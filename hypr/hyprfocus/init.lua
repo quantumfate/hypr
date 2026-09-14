@@ -6,10 +6,11 @@
 -- says what would change — so the only judgement here is which registries to
 -- hand the answer to, and in what order.
 --
--- Deliberately NOT wired to any event yet. `apply` is a function that has to
--- be called; nothing calls it. Making a mode change actually move the desk is
--- the step where a mistake is felt, and it should land when someone is
--- watching a reload rather than as a side effect of a config load.
+-- Nothing wires itself to a reload: config load is application-time, not
+-- desk-time. `apply` is called by `enter` (keyboard entry) and by the watcher
+-- (`hypr/hyprfocus/watch.lua`, armed at start), which converges on whatever
+-- the pointer names; a reload then converges on the pointer's mode within a
+-- tick rather than as a side effect of loading config.
 local store = require("hypr.lib.store")
 local resolve = require("hypr.hyprfocus.resolve")
 local plan = require("hypr.hyprfocus.plan")
@@ -19,6 +20,12 @@ local hold = require("hypr.hyprfocus.hold")
 local whichkey = require("hypr.lib.whichkey")
 
 local M = {}
+
+--- The mode this runtime last applied successfully, and nil before the first
+--- apply. Readers of "what is running" (the watcher) compare against this
+--- rather than against what the pointer says, which can drift deliberately
+--- (the shell edits it without the compositor running).
+local applied = nil
 
 -- The declaration store, seeded from the shell repo on first run and editable
 -- at runtime. mtime-cached by the store handle, so reading it per mode change
@@ -170,6 +177,8 @@ function M.apply(mode)
 
   local withdrawn, refused = workspaces.admit(desk.workspaces, occupied)
 
+  applied = mode
+
   return {
     mode = mode,
     bindings_disabled = disabled,
@@ -228,6 +237,19 @@ function M.enter(mode, source)
     end)
   end
 
+  return M.converge(mode)
+end
+
+---Converge on a mode the pointer already names, without rewriting it.
+---
+---The difference from `enter` is exactly the pointer write: a writer outside
+---the compositor (the shell's mood centre, a schedule, `seed`) recorded the
+---mode already, and rewriting it here would clobber at least the `until`
+---expiry and who the pointer says set it. Both halves still run — the desk is
+---one thing regardless of who asked.
+---@param mode string
+---@return table? report, string? error
+function M.converge(mode)
   local report, apply_err = M.apply(mode)
   hl.dispatch(hl.dsp.exec_cmd(("%s apply %s"):format(CLI, mode)))
   return report, apply_err
@@ -246,6 +268,12 @@ function M.plan(mode)
     return nil, tostring(desk)
   end
   return plan.plan(desk, M.running()), nil
+end
+
+---The mode this runtime last applied, or nil. The watcher's comparison point.
+---@return string?
+function M.last_applied()
+  return applied
 end
 
 return M

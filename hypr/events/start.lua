@@ -1,5 +1,6 @@
 local Store = require("hypr.lib.store")
 local qs = require("hypr.lib.qs")
+local watch = require("hypr.hyprfocus.watch")
 
 -- Same desk every morning: whichever project carries `study` in projects.json
 -- gets opened (its own window template decides the nvim window). Purely a
@@ -44,5 +45,10 @@ hl.on("hyprland.start", function()
   -- Never leave the which-key overlay orphaned across a restart: even if a
   -- submap stack died with the old session, the new shell must start clear.
   qs.call("whichkey", "dismiss")
+  -- Converge on the pointer's mode and keep watching it: the shell (or a
+  -- later schedule) edits focus.json without the compositor, and a mode
+  -- change that reaches only the pointer would leave the desk describing a
+  -- mode it is not in.
+  watch.arm()
   open_study_project()
 end)
