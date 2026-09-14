@@ -97,6 +97,12 @@ Note: on CachyOS the official repos are already very fresh (often ahead of the
 AUR `.SRCINFO` snapshots), so `git` mainly buys _unreleased_ commits (e.g. the
 `hyprctl binds -j` serializer fix) at the cost of local rebuilds.
 
+## Declarative scenes
+
+Compositor logic executes scene documents; see [docs/scenes.md](docs/scenes.md).
+Host `workspace_specs` bind workspace ids and monitors. Geometry profiles stay
+fingerprint-based.
+
 ## Package classification (Arch/AUR)
 
 Most `hypr*` packages are in official CachyOS/Arch repos. Genuinely-AUR ones

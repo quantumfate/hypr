@@ -379,18 +379,102 @@ submap.tree({
   },
 })
 
--- === Utility ===
-
+-- === Which-key (LEO-222) ===
+--
+-- SUPER Space is the leader: it opens a root overlay listing the named
+-- submaps. Each entry enters the existing submap, so the overlay re-renders
+-- that submap's own entries in place, and escape unwinds exactly one level.
+-- The renderer is modules/whichkey in the quickshell repo, fed the tree that
+-- hypr/lib/whichkey.lua dumps at config load.
 local kb_layouts = { "Dvorak (custom)", "Programmer Dvorak" }
 local kb_idx = 1
-bind.exec("space", function()
-  hl.dispatch(hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
-  kb_idx = kb_idx % #kb_layouts + 1
-  notify:notify("Keyboard layout: " .. kb_layouts[kb_idx], 2000, notify.level.INFO)
-end, {
-  description = "Toggle keyboard layout (dvorak-custom / programmer dvorak)",
-  submap_universal = true,
-  locked = true,
+
+submap.tree({
+  mods = { config.main_mod, "space" },
+  name = "which",
+  desc = "Which-key",
+  entries = {
+    {
+      key = "t",
+      desc = "Terminal",
+      action = function()
+        submap.enter("terminal")
+      end,
+    },
+    {
+      key = "a",
+      desc = "Applications",
+      action = function()
+        submap.enter("applications")
+      end,
+    },
+    {
+      key = "p",
+      desc = "Projects",
+      action = function()
+        submap.enter("project")
+      end,
+    },
+    {
+      key = "c",
+      desc = "Configuration",
+      action = function()
+        submap.enter("configuration")
+      end,
+    },
+    {
+      key = "m",
+      desc = "Layout",
+      action = function()
+        submap.enter("layout")
+      end,
+    },
+    {
+      key = "r",
+      desc = "Window management",
+      action = function()
+        submap.enter("window-management")
+      end,
+    },
+    {
+      key = "s",
+      desc = "Screen capture",
+      action = function()
+        submap.enter("screencapture")
+      end,
+    },
+    {
+      key = "q",
+      desc = "Shell / Quickshell",
+      action = function()
+        submap.enter("shell")
+      end,
+    },
+    {
+      key = "w",
+      desc = "Special workspaces",
+      action = function()
+        submap.enter("special-ws")
+      end,
+    },
+    {
+      key = "d",
+      desc = "Dofus",
+      action = function()
+        submap.enter("dofus")
+      end,
+    },
+    {
+      key = "k",
+      desc = "Toggle keyboard layout",
+      stay = true,
+      action = function()
+        hl.dispatch(hl.dsp.exec_cmd("hyprctl switchxkblayout all next"))
+        kb_idx = kb_idx % #kb_layouts + 1
+        notify:notify("Keyboard layout: " .. kb_layouts[kb_idx], 2000, notify.level.INFO)
+      end,
+    },
+  },
 })
 
 bind.exec("p", "hyprpicker -a -n", {

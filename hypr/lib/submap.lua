@@ -1,3 +1,6 @@
+local whichkey = require("hypr.lib.whichkey")
+local qs = require("hypr.lib.qs")
+
 local M = {}
 
 -- Which-key style submap navigation.
@@ -66,6 +69,9 @@ function M.back()
   if leaving then
     fire(leaving, "leave")
   end
+  if #stack == 0 then
+    qs.call("whichkey", "dismiss")
+  end
   hl.dispatch(hl.dsp.submap(stack[#stack] or base))
 end
 
@@ -76,6 +82,10 @@ function M.exit()
     fire(stack[i], "leave")
   end
   stack = {}
+  -- Dismiss before dispatching the reset: the which-key overlay starts fading
+  -- out ahead of the submap event, so once the base map is live there is no
+  -- lingering surface to swallow a keystroke meant for a base binding.
+  qs.call("whichkey", "dismiss")
   hl.dispatch(hl.dsp.submap(base))
 end
 
@@ -85,6 +95,7 @@ function M.reset()
     fire(stack[i], "leave")
   end
   stack = {}
+  qs.call("whichkey", "dismiss")
   hl.dispatch(hl.dsp.submap("reset"))
 end
 
@@ -115,6 +126,7 @@ local function define(name, entries, sticky)
           child_sticky = sticky
         end
         hooks[child] = { enter = e.on_enter, leave = e.on_leave }
+        whichkey.register(child, name, e.entries)
         hl.bind(combo(e), function()
           if e.action then
             run(e.action)
@@ -156,6 +168,7 @@ end
 ---@param spec SubmapSpec
 function M.tree(spec)
   hooks[spec.name] = { enter = spec.on_enter, leave = spec.on_leave }
+  whichkey.register(spec.name, nil, spec.entries)
   hl.bind(keystr(spec.mods), function()
     M.enter(spec.name)
   end, { description = (spec.desc or spec.name) .. "…" })

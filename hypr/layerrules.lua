@@ -45,6 +45,16 @@ hl.layer_rule({
   ignore_alpha = 0.1,
 })
 
+-- Which-key overlay (LEO-222): the live SUPER-Space leader. Same feel as the
+-- cheatsheet — pop in, frost the card — but the QML owns the fade-out timing
+-- so dismissal can start before the submap reset lands.
+hl.layer_rule({
+  match = { namespace = "quickshell-whichkey" },
+  animation = "popin 92%",
+  blur = true,
+  ignore_alpha = 0.55,
+})
+
 -- Window rename widget: small centered modal, same feel as the cheatsheet.
 hl.layer_rule({
   match = { namespace = "quickshell-window-rename" },
