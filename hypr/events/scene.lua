@@ -17,16 +17,47 @@
 --   hypr/scene/model.lua     snapshot + spec -> the one correction wanted (pure)
 --   hypr/scene/actuator.lua  one correction -> compositor calls
 --   hypr/scene/schedule.lua  when acting is allowed at all
+--   hypr/scene/companion.lua the declared spawn/companion lifecycle
 --
 -- This file only connects them to Hyprland's events.
 local spec_lib = require("hypr.scene.spec")
 local registry = require("hypr.scene.registry")
 local schedule = require("hypr.scene.schedule")
+local companion = require("hypr.scene.companion")
+local oneshot = require("hypr.lib.hypr").oneshot
 
 local specs = spec_lib.load()
 
 schedule.init(specs)
 registry.seed(specs)
+
+-- In-flight spawns, keyed workspace:companion-class, so a scan racing the
+-- companion's own open event never asks twice. Cleared when the companion
+-- maps and expired short of that.
+local pending = {}
+
+---Run the companion lifecycle for the named scene against live windows.
+---Presence is derived, so this is safe at any time from any caller.
+---@param name string?
+local function converge_companions(name)
+  local spec = name and specs[name]
+  if not spec then
+    return
+  end
+  for _, decision in ipairs(companion.filter(companion.decisions(spec, name, hl.get_windows() or {}), pending)) do
+    if decision.action == "spawn" then
+      companion.expire(function(ms, cb)
+        oneshot(ms, cb)
+      end, decision.pending_key, pending)
+      hl.dispatch(hl.dsp.exec_cmd(("uwsm app -- %s"):format(decision.command)))
+    elseif decision.addresses then
+      for _, address in ipairs(decision.addresses) do
+        hl.dispatch(hl.dsp.window.close({ window = "address:" .. address }))
+      end
+      pending[decision.pending_key] = nil
+    end
+  end
+end
 
 ---The scene whose blocks `w` belongs to, or nil. Keyed by the workspace's
 ---`default_name`, never its id: ids are assigned by the compositor and are
@@ -52,12 +83,36 @@ end
 
 hl.on("window.open", function(w)
   registry.claim(specs, w)
+  -- A companion mapping settles its own in-flight spawn before the engine
+  -- pass runs, so the lifecycle the pass sees is derived, not assumed.
+  if w and w.workspace then
+    local spec = specs[w.workspace.name]
+    if spec then
+      for _, block in ipairs(spec.blocks) do
+        if block.spawn and spec_lib.class_matches(w.class, { block.spawn.class }) then
+          pending[companion.key(w.workspace.name, block.spawn.class)] = nil
+        end
+      end
+    end
+  end
+  converge_companions(scene_for(w))
   schedule.arm(scene_for(w))
 end)
 
 hl.on("window.close", function(w)
   local name = w and scene_for(w)
   registry.forget(w and w.address)
+  -- A close event's payload may not say where the window stood, but the
+  -- lifecycle is derived from live windows, so every spawn-carrying scene
+  -- re-derives for free — there is no remembered book to consult.
+  for scene_name, spec in pairs(specs) do
+    for _, block in ipairs(spec.blocks) do
+      if block.spawn then
+        converge_companions(scene_name)
+        break
+      end
+    end
+  end
   schedule.arm(name)
 end)
 
@@ -67,6 +122,18 @@ end)
 -- not re-arrange every other one.
 hl.on("window.move_to_workspace", function(w)
   registry.claim(specs, w)
+  -- A move flies two scenes: the destination gains a member and the origin
+  -- may have lost its last, and the event's payload cannot say where from.
+  -- The lifecycle re-derives from live windows like everything else here.
+  converge_companions(scene_for(w))
+  for scene_name, spec in pairs(specs) do
+    for _, block in ipairs(spec.blocks) do
+      if block.spawn then
+        converge_companions(scene_name)
+        break
+      end
+    end
+  end
   schedule.arm(scene_for(w))
 end)
 

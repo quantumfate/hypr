@@ -21,7 +21,17 @@ return {
         -- `collect`: a Dofus client dragged to another workspace mid-session
         -- comes back, because the group is the scene — a client left behind
         -- is one the roster and the OBS crop both stop seeing.
-        { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true },
+        -- The companion declines joining the group itself (`guard = "deny"`
+        -- below); it exists while the group does, to keep the capture's
+        -- geometry from being an empty half of the screen.
+        {
+          classes = { "Dofus.x64" },
+          group = true,
+          order = 1,
+          share = 0.67,
+          collect = true,
+          spawn = { class = "zen-gaming-media", command = "zen-twilight -P GamingMedia --name zen-gaming-media" },
+        },
         -- `deny`, not the default bar: this tile is a fixed region beside
         -- the group, and grouping it — even deliberately — would collapse
         -- the two-tile split the capture depends on.

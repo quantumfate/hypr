@@ -7,6 +7,10 @@
 -- arrays — none of them re-validates.
 local M = {}
 
+---@class Scene.Companion
+---@field class string the companion window's identity class
+---@field command string what opens it, run the first time in
+
 ---@class Scene.Block
 ---@field classes string[] literal class or Lua pattern, as windowrules.lua matches
 ---@field group boolean all matching windows live in one Hyprland group
@@ -14,6 +18,7 @@ local M = {}
 ---@field share number? fraction of the workspace's tiled span this block holds
 ---@field collect boolean pull members that drifted to another workspace back home
 ---@field guard "barred"|"deny" how a non-group block resists being grouped
+---@field spawn Scene.Companion? the companion window this block's presence keeps alive
 
 ---@class Scene.Spec
 ---@field name string workspace `default_name` — the scene's host-independent identity
@@ -43,6 +48,11 @@ local function normalize(name, raw)
       -- additionally refuses a deliberate group toggle, for a tile whose
       -- whole job is to be a fixed region beside a group.
       guard = block.guard == "deny" and "deny" or "barred",
+      -- A companion is declared whole or not at all: a block naming the
+      -- window it opens by humming is worse than one the user opens by hand.
+      spawn = (type(block.spawn) == "table" and block.spawn.class and block.spawn.command)
+          and { class = block.spawn.class, command = block.spawn.command }
+        or nil,
     }
   end
   table.sort(blocks, function(a, b)

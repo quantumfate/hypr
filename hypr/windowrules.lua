@@ -156,15 +156,16 @@ windowrule.tag_set_effects("media-browser", {
   static = { workspace = "name:media" },
 })
 
--- The gaming scene's own zen instance (apps.media_scene, LEO-230): pinned to
--- name:gaming so it lands beside the Dofus group wherever it is spawned. Its
--- group guard is the scene block's (`guard = "deny"`), emitted by
+-- The gaming scene's own zen instance (apps.scene_browser, LEO-230): pinned
+-- to name:gaming so it lands beside the Dofus group wherever it is spawned.
+-- Its group guard is the scene block's (`guard = "deny"`), emitted by
 -- hypr/scene/compile.lua — the scene decides grouping once, for every class it
 -- names. The browser opens automatically with the first Dofus window and
--- closes with the last — see hypr/events/gaming.lua, which is why there is no
--- bar-side browser for this scene.
+-- closes with the last: the scene document's declared companion
+-- (hypr/scene/companion.lua), which is why there is no bar-side browser or
+-- bespoke spawn code for this scene.
 windowrule.tag_props({
-  { initial_class = "(" .. apps.media_scene.class .. ")" },
+  { initial_class = "(" .. apps.scene_browser.class .. ")" },
 }, "+gaming-media")
 
 windowrule.tag_set_effects("gaming-media", {

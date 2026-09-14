@@ -44,15 +44,17 @@ return {
   apps = {
     media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },
     -- The gaming scene's own zen instance (LEO-230): pinned to name:gaming by
-    -- windowrules, opened and closed with the Dofus group by
-    -- events/gaming.lua. It needs its OWN profile, not -P Media: zen is
-    -- single-instance per profile, so launching a second -P Media window only
-    -- opens a tab-strip window inside the running media browser's process —
-    -- --name is ignored there, the class stays zen-twilight-media, and the
-    -- +media-browser rule drags it to name:media. A distinct profile forces a
-    -- distinct process, which is what makes --name (and therefore the class
-    -- gate below) real.
-    media_scene = { cmd = "zen-twilight -P GamingMedia --name zen-gaming-media", class = "zen-gaming-media" },
+    -- windowrules, opened and closed with the Dofus group by the scene's
+    -- declared companion (hypr/scene/companion.lua; the spawn lives in the
+    -- scene document now, so this entry names the same command for the binds
+    -- that still spawn it directly). It needs its OWN profile, not -P Media:
+    -- zen is single-instance per profile, so launching a second -P Media
+    -- window only opens a tab-strip window inside the running media browser's
+    -- process — --name is ignored there, the class stays zen-twilight-media,
+    -- and the +media-browser rule drags it to name:media. A distinct profile
+    -- forces a distinct process, which is what makes --name (and therefore
+    -- the class gate below) real.
+    scene_browser = { cmd = "zen-twilight -P GamingMedia --name zen-gaming-media", class = "zen-gaming-media" },
     main_browser = { cmd = "zen-twilight", class = "zen-twilight" },
     dev_browser = { cmd = "firefox-developer-edition", class = "firefox-developer-edition" },
     terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },
