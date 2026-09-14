@@ -5,15 +5,19 @@
 ---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
 local t = require("tests.harness")
 
--- store.lua reads XDG_STATE_HOME once at require-time (ROOT), so point it at
--- a scratch dir before requiring. Stock Lua has no os.setenv, so stub
--- os.getenv itself for the duration of this process (run.lua gives each spec
--- its own process-wide state anyway).
+-- store.lua reads its roots once at require-time, so point both at scratch
+-- dirs before requiring: QF_STORE is where the stores live now; the legacy
+-- XDG dir lies next to it empty, so the migration read has nothing to adopt.
+-- Stock Lua has no os.setenv, so stub os.getenv itself for the duration of
+-- this process (run.lua gives each spec its own process-wide state anyway).
 local dir = t.tempdir()
 local real_getenv = os.getenv
 os.getenv = function(k)
-  if k == "XDG_STATE_HOME" then
+  if k == "QF_STORE" then
     return dir
+  end
+  if k == "XDG_STATE_HOME" then
+    return dir .. "/legacy"
   end
   return real_getenv(k)
 end

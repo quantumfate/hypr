@@ -25,7 +25,17 @@ CFG = Path.home() / ".config/dofus-swap.json"
 # The roster (which characters to match/focus) is read from here by default, so
 # editing the team in the UI immediately changes what this detector watches.
 STATE_HOME = Path(os.environ.get("XDG_STATE_HOME") or (Path.home() / ".local/state"))
-TEAM_FILE = STATE_HOME / "dofus/team.json"
+# The shared quantum-store directory (QF_STORE); the team store lives with
+# the rest of the desk's state, with the legacy path as the read-back.
+TEAM_FILE = (
+    Path(os.environ["QF_STORE"]) / "dofus/team.json"
+    if os.environ.get("QF_STORE")
+    else (STATE_HOME / "quantum-store" / "dofus/team.json")
+)
+for _team_candidate in (TEAM_FILE, STATE_HOME / "dofus/team.json"):
+    if _team_candidate.exists():
+        TEAM_FILE = _team_candidate
+        break
 POLL = 0.5
 IDLE_POLL = 1.5  # slower tick when no Dofus window is focused
 DOFUS_CLASS = "Dofus.x64"

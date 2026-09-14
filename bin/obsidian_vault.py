@@ -65,12 +65,15 @@ class Config:
         self.recipient: str = os.environ.get(
             "OBSIDIAN_GPG_RECIPIENT", DEFAULT_RECIPIENT
         )
-        state_home = Path(
-            os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))
-        )
-        self.store_dir: Path = state_home / STORE_NAME
+        self.store_dir: Path = store_root() / STORE_NAME
         self.plain_store: Path = self.store_dir / "tags.json"
         self.enc_store: Path = self.store_dir / "tags.json.gpg"
+        # The one step back, for a store the desk has not migrated yet.
+        self.legacy_store: Path = (
+            Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state")))
+            / STORE_NAME
+            / "tags.json"
+        )
 
     @property
     def vault_root(self) -> Path:
@@ -436,12 +439,25 @@ def _decrypt(cfg: Config) -> dict:
     return json.loads(proc.stdout)
 
 
+# The shared quantum-store directory: QF_STORE names it, otherwise one dir
+# deeper than the pre-store-generation home. A legacy path is a migration
+# read only; writes always go forward.
+def store_root() -> Path:
+    if os.environ.get("QF_STORE"):
+        return Path(os.environ["QF_STORE"])
+    state = os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))
+    return Path(state) / "quantum-store"
+
+
 def load_store(cfg: Config) -> dict:
     """Load the store, preferring the plaintext mirror then the encrypted copy."""
     if cfg.plain_store.exists():
         return json.loads(cfg.plain_store.read_text(encoding="utf-8"))
     if cfg.enc_store.exists():
         return _decrypt(cfg)
+    legacy = cfg.legacy_store
+    if legacy.exists():
+        return json.loads(legacy.read_text(encoding="utf-8"))
     return scan_vault(cfg)
 
 

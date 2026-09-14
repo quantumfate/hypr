@@ -4,16 +4,21 @@
 --- so the renderer (Quickshell) gets the tree — parents, entries, keys, and
 --- which entry leads to which child submap — instead of having to reconstruct
 --- a hierarchy from a flat `hyprctl binds` dump. On config load the registry
---- is dumped as JSON to $XDG_STATE_HOME/whichkey.json, which the Quickshell
+--- is dumped as JSON to $QF_STORE/whichkey.json, which the Quickshell
 --- `Store { name: "whichkey" }` side mirrors reactively.
 local M = {}
 
 local json = require("hypr.lib.json")
 
-local ROOT = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
-
--- The store file the Quickshell `Store { name = "whichkey" }` side mirrors.
-M.path = ROOT .. "/whichkey.json"
+-- The store file the Quickshell `Store { name = "whichkey" }` side mirrors,
+-- under the shared quantum-store directory (QF_STORE). Located here rather
+-- than through the store handle because the dump never re-reads it — writes
+-- only — and specs stub the handle's module wholesale, so depending on it
+-- would make every stub carry more than it names.
+M.path = (
+  os.getenv("QF_STORE")
+  or ((os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/quantum-store")
+) .. "/whichkey.json"
 
 -- One registry node as the Quickshell side reads it.
 ---@class WhichKeyItem
@@ -111,6 +116,10 @@ end
 ---back on the next one.
 ---@param admitted table<string, true>? nil means everything is loaded
 function M.dump(admitted)
+  -- The store directory may not exist on a fresh machine; the write is part
+  -- of config load, which is the only thing that guarantees the caller runs
+  -- Lua, so it is fair to create it here rather than require a seed step.
+  os.execute(("mkdir -p %q"):format(M.path:match("^(.*)/[^/]+$")))
   local f = io.open(M.path, "w")
   if not f then
     return

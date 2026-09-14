@@ -74,19 +74,19 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
 check "seeding installs the declaration" \
-    "seeded $scratch/hyprfocus.json (4 modes)" \
-    "$(XDG_STATE_HOME=$scratch "$cli" seed "$declaration")"
+    "seeded $scratch/quantum-store/hyprfocus.json (4 modes)" \
+    "$(QF_STORE=$scratch/quantum-store "$cli" seed "$declaration")"
 
 # The store is edited at runtime, so a seed that clobbered it would throw away
 # whatever was tuned by hand.
-if XDG_STATE_HOME=$scratch "$cli" seed "$declaration" >/dev/null 2>&1; then
+if QF_STORE=$scratch/quantum-store "$cli" seed "$declaration" >/dev/null 2>&1; then
     echo "  FAIL seeding over an existing store should refuse"
     fail=1
 else
     echo "  ok   seeding over an existing store refuses"
 fi
 
-if XDG_STATE_HOME=$scratch "$cli" seed "$declaration" --force >/dev/null 2>&1; then
+if QF_STORE=$scratch/quantum-store "$cli" seed "$declaration" --force >/dev/null 2>&1; then
     echo "  ok   --force replaces it"
 else
     echo "  FAIL --force should replace it"
@@ -97,7 +97,7 @@ fi
 # mode change; failing at seed time is the cheaper place to find out.
 broken=$scratch/broken.json
 jq '.modes.gaming.workspaces.only[1] = "commms"' "$declaration" >"$broken"
-if XDG_STATE_HOME=$scratch "$cli" seed "$broken" --force >/dev/null 2>&1; then
+if QF_STORE=$scratch/quantum-store "$cli" seed "$broken" --force >/dev/null 2>&1; then
     echo "  FAIL seeding an unresolvable declaration should refuse"
     fail=1
 else
@@ -132,7 +132,7 @@ apply_with() {
     local active=$1 mode=$2 decl=${3:-$declaration}
     : >"$scratch/record"
     RECORD=$scratch/record ACTIVE=$active MISSING=${MISSING:-} ONESHOT=${ONESHOT:-} \
-        SYSTEMCTL=$recorder XDG_STATE_HOME=$scratch \
+        SYSTEMCTL=$recorder QF_STORE=$scratch/quantum-store \
         "$cli" --declaration "$decl" apply "$mode" >/dev/null 2>&1
     sort "$scratch/record" | tr '\n' ' ' | sed 's/ $//'
 }
@@ -179,7 +179,7 @@ json.dump(d, open(sys.argv[2], 'w'))
 # Captured rather than piped into grep: `grep -q` exits on the first match, the
 # writer takes SIGPIPE, and `pipefail` would turn a passing check into a
 # failing one.
-drift_output=$(RECORD=$scratch/record ACTIVE='' SYSTEMCTL=$recorder XDG_STATE_HOME=$scratch \
+drift_output=$(RECORD=$scratch/record ACTIVE='' SYSTEMCTL=$recorder QF_STORE=$scratch/quantum-store \
     "$cli" --declaration "$drifted" apply neutral 2>&1)
 if [[ $drift_output == *"have drifted"* ]]; then
     echo "  ok   an unimplemented task is reported, not ignored"
@@ -200,7 +200,7 @@ else
 fi
 
 missing_report=$(MISSING="theme-auto.service" RECORD=$scratch/record ACTIVE='' SYSTEMCTL=$recorder \
-    XDG_STATE_HOME=$scratch "$cli" --declaration "$declaration" apply neutral 2>&1)
+    QF_STORE=$scratch/quantum-store "$cli" --declaration "$declaration" apply neutral 2>&1)
 if [[ $missing_report == *"not installed: theme-auto.service"* ]]; then
     echo "  ok   a missing unit is named once"
 else
@@ -230,7 +230,7 @@ fi
 
 # Every decision is appended: with a schedule able to change the mode on its
 # own, "why did my desk do that" needs an answer.
-if [[ -s $scratch/hyprfocus/log.jsonl ]]; then
+if [[ -s $scratch/quantum-store/hyprfocus/log.jsonl ]]; then
     echo "  ok   decisions are logged"
 else
     echo "  FAIL decisions should be logged"

@@ -59,7 +59,9 @@ setup() {
     chmod +x "$ROOT/gsettings"
     export THEME_GSETTINGS="$ROOT/gsettings"
     : >"$GSETTINGS_LOG"
-    mkdir -p "$XDG_CONFIG_HOME"/{kitty/themes,qt5ct/colors,qt6ct/colors,Kvantum} "$XDG_STATE_HOME"
+    # The script keeps its store files in the shared quantum-store directory
+    # under the redirected state home — the same layout the real desk has.
+    mkdir -p "$XDG_CONFIG_HOME"/{kitty/themes,qt5ct/colors,qt6ct/colors,Kvantum} "$XDG_STATE_HOME/quantum-store"
 
     for flavour in latte frappe macchiato mocha; do
         touch "$XDG_CONFIG_HOME/kitty/themes/$flavour.conf"
@@ -75,7 +77,7 @@ setup() {
         "$XDG_CONFIG_HOME" >"$XDG_CONFIG_HOME/qt5ct/qt5ct.conf"
     printf '[General]\ntheme=catppuccin-macchiato-mauve\n' >"$XDG_CONFIG_HOME/Kvantum/kvantum.kvconfig"
 
-    STORE="$XDG_STATE_HOME/theme.json"
+    STORE="$XDG_STATE_HOME/quantum-store/theme.json"
 }
 
 teardown() {

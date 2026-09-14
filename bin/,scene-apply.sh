@@ -33,12 +33,16 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
+# The shared quantum-store directory; the legacy paths are reads.
+STATE_DIR="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
+LEGACY_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
 SYSTEMCTL=${SYSTEMCTL:-systemctl}
 
 contract="$SCRIPT_DIR/../etc/scene-managed.json"
 focus_file="$STATE_DIR/focus.json"
+[ -f "$focus_file" ] || focus_file="$LEGACY_STATE_DIR/focus.json"
 policy_file="$STATE_DIR/mood-policy.json"
+[ -f "$policy_file" ] || policy_file="$LEGACY_STATE_DIR/mood-policy.json"
 log_dir="$STATE_DIR/scene-policy"
 log_file="$log_dir/log.jsonl"
 applied_file="$log_dir/applied.json"

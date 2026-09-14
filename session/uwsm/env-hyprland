@@ -13,6 +13,12 @@ export XDG_SCREENSHOTS_DIR=$HOME/Pictures/screens
 export HYPRSHOT_DIR=$HOME/Pictures/screens
 export GSK_RENDERER=gl
 
+# The shared quantum-store directory: every runtime's state files (theme,
+# focus, sound, scenes, dofus, obsidian, notification history) live under one
+# root the environment names. The lua/QML/shell sides all fall back to the
+# same default, but the export is what makes `QF_STORE=` a one-place knob.
+export QF_STORE=${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store
+
 # --- host GPU (NVIDIA) — gated by delivery path on non-NVIDIA machines ---
 export GBM_BACKEND=nvidia-drm
 export __GLX_VENDOR_LIBRARY_NAME=nvidia

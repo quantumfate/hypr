@@ -1,14 +1,22 @@
 -- store.lua — generic reactive JSON state, shared between the Hyprland Lua
 -- config and the Quickshell UI.
 --
---   $XDG_STATE_HOME/<name>.json   <->   Store handle (this)   <->   Quickshell
+--   $QF_STORE/<name>.json          <->   Store handle (this)   <->   Quickshell
 --
--- The file is the single source of truth. A handle keeps a decoded copy in RAM
+-- QF_STORE is the shared quantum-store directory every runtime keeps its
+-- state in (default $XDG_STATE_HOME/quantum-store; env-hyprland exports it so
+-- every consumer answers the same). A handle keeps a decoded copy in RAM
 -- and refreshes it only when the file's mtime changes, so every read gets the
 -- newest on-disk state without a config reload and without re-parsing on every
--- access. Writes are atomic (tmp + rename), which bumps mtime so the Quickshell
--- side's FileView watch reacts. See hypr/lib/json.lua for the codec and
--- services/Store.qml in the quickshell repo for the mirror on the QML side.
+-- access. Writes are atomic (tmp + rename), which bumps mtime so the
+-- Quickshell side's FileView watch reacts. See hypr/lib/json.lua for the codec
+-- and services/Store.qml in the quickshell repo for the mirror on the QML side.
+--
+-- Migration reads one step back: a handle whose store does not exist yet at
+-- $QF_STORE but still exists at the pre-store-directory location
+-- ($XDG_STATE_HOME/<name>.json) adopts that document and writes forward —
+-- the first change to a store migrates it, and no session start clause is
+-- needed for the compositor's half.
 --
 -- Usage:
 --   local Store = require("hypr.lib.store")
@@ -23,7 +31,21 @@ local json = require("hypr.lib.json")
 
 local M = {}
 
-local ROOT = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
+---The shared store root. QF_STORE names it; the default is one dir deeper
+---than where the stores lived before it existed, which is also what the
+---fallback read below migrates from.
+---@return string
+local function ROOT()
+  return os.getenv("QF_STORE")
+    or ((os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/quantum-store")
+end
+
+---Where the store lived before quantum-store existed: the one step back a
+---handle's migration reads.
+---@return string
+local function LEGACY_ROOT()
+  return os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
+end
 
 -- One handle per resolved path, so all modules/bindings share a cache.
 ---@type table<string, Store.Handle>
@@ -116,10 +138,14 @@ end
 ---@class Store.Handle
 ---@field name string
 ---@field path string
+---@field legacy string? where the store lived before the store directory existed
 local Handle = {}
 Handle.__index = Handle
 
 -- Re-read from disk if the file changed (or force). Returns the cached table.
+-- A missing store whose legacy file still exists adopts it in place of an
+-- empty state: the document heads to the new location on the next write, and
+-- a hand-moved file is picked up without any special step.
 ---@param force boolean?
 ---@return table
 function Handle:reload(force)
@@ -128,6 +154,9 @@ function Handle:reload(force)
     return self._data
   end
   local raw = read_file(self.path)
+  if (not raw or raw == "") and self.legacy and file_mtime(self.legacy) ~= "" then
+    raw = read_file(self.legacy)
+  end
   if not raw or raw == "" then
     self._data = self._data or {}
     return self._data
@@ -182,20 +211,29 @@ function Handle:set(patch)
 end
 
 -- Define (or fetch the shared handle for) a named store. `name` may contain
--- slashes; it resolves to $XDG_STATE_HOME/<name>.json.
+-- slashes; it resolves to $QF_STORE/<name>.json, with the pre-store-directory
+-- location as the migration read.
 ---@param name string
 ---@return Store.Handle
 function M.define(name)
-  local path = ROOT .. "/" .. name .. ".json"
+  local path = ROOT() .. "/" .. name .. ".json"
   if not handles[path] then
     handles[path] = setmetatable({
       name = name,
       path = path,
+      legacy = LEGACY_ROOT() .. "/" .. name .. ".json",
       _data = nil,
       _mtime = nil,
     }, Handle)
   end
   return handles[path]
+end
+
+---The store path for a name, for the few callers that need the file itself.
+---@param name string
+---@return string
+function M.path(name)
+  return ROOT() .. "/" .. name .. ".json"
 end
 
 return M

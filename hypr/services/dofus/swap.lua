@@ -4,7 +4,10 @@ local notify = require("hypr.lib.notify")
 local M = {}
 
 local SWAP_SCRIPT = "dofus_swap.py"
-local LOG_DIR = os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")
+-- The shared quantum-store directory (QF_STORE); the log lives with the
+-- rest of the desk's state.
+local LOG_DIR = os.getenv("QF_STORE")
+  or ((os.getenv("XDG_STATE_HOME") or (os.getenv("HOME") .. "/.local/state")) .. "/quantum-store")
 local LOG_FILE = LOG_DIR .. "/dofus_swap.log"
 local PGREP_PATTERN = "dofus_swap\\.py run"
 

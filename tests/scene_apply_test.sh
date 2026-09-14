@@ -60,7 +60,8 @@ not_contains() {
 setup() {
     ROOT=$(mktemp -d)
     export XDG_STATE_HOME="$ROOT/state"
-    mkdir -p "$XDG_STATE_HOME"
+    export QF_STORE="$XDG_STATE_HOME/quantum-store"
+    mkdir -p "$XDG_STATE_HOME" "$QF_STORE"
 
     # The systemctl recorder. Appends its arguments and succeeds, so the script
     # takes the same path it would on a real desk without touching one.
@@ -97,7 +98,7 @@ for unit in $(jq -r '.protected[]?' "$CONTRACT"); do
     not_contains "protected $unit is never touched" "--user stop $unit" "$(stopper)"
 done
 check "the applied state records the mood that stopped them" "gaming" \
-    "$(jq -r '.mode' "$XDG_STATE_HOME/scene-policy/applied.json")"
+    "$(jq -r '.mode' "$QF_STORE/scene-policy/applied.json")"
 teardown
 
 echo "returning to neutral hands the stopped units back"
@@ -110,7 +111,7 @@ for unit in $(scan_units gaming); do
     contains "leaving gaming restarts $unit" "--user start $unit" "$(stopper)"
 done
 check "neutral's applied state stops nothing" "<none>" \
-    "$(jq -r '.stopped | if length == 0 then "<none>" else .[] end' "$XDG_STATE_HOME/scene-policy/applied.json" | tr '\n' ' ' | sed 's/ *$//')"
+    "$(jq -r '.stopped | if length == 0 then "<none>" else .[] end' "$QF_STORE/scene-policy/applied.json" | tr '\n' ' ' | sed 's/ *$//')"
 teardown
 
 echo "a lapsed timed mood reads as neutral and applies nothing"

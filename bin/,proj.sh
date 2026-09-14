@@ -75,7 +75,11 @@
 set -euo pipefail
 
 TMS_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/tms/config.toml"
-PROJECTS_JSON="${XDG_STATE_HOME:-$HOME/.local/state}/projects.json"
+# The shared quantum-store directory (QF_STORE), with the legacy read as the
+# migration step back.
+QF_ROOT="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
+LEGACY_STATE="${XDG_STATE_HOME:-$HOME/.local/state}"
+PROJECTS_JSON="$QF_ROOT/projects.json"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/proj-list"
 CACHE_TTL=300
 TEMPLATE_WINDOWS=(nvim zsh run)

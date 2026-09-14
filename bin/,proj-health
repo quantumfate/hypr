@@ -26,7 +26,10 @@
 set -euo pipefail
 
 PROJ_SH="${PROJ_SH:-,proj.sh}"
-OUT="${XDG_STATE_HOME:-$HOME/.local/state}/projects-health.json"
+# The shared quantum-store directory (QF_STORE), with the legacy read as the
+# migration step back.
+QF_ROOT="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
+OUT="$QF_ROOT/projects-health.json"
 # Generous but finite: a kernel-tree `git status` under load is slow, not
 # infinite — this is the ceiling that keeps one repo from starving the rest.
 PER_REPO_TIMEOUT="${PROJ_HEALTH_TIMEOUT:-10}"
@@ -132,7 +135,7 @@ previous_fingerprint() { # $1 = name
 # names from the store, paths from tms. With no store, everything tms knows is
 # still better than nothing.
 tracked_projects() {
-    local store="${XDG_STATE_HOME:-$HOME/.local/state}/projects.json"
+    local store="${QF_STORE:-$QF_ROOT/projects.json}"
     if [ ! -f "$store" ]; then
         "$PROJ_SH" list
         return 0

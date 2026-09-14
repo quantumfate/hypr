@@ -25,8 +25,13 @@
 
 set -euo pipefail
 
-STATE="${XDG_STATE_HOME:-$HOME/.local/state}/theme.json"
-RESULT="${XDG_STATE_HOME:-$HOME/.local/state}/theme.result.json"
+# The shared quantum-store directory: every state file this desk keeps lives
+# under one root the environment names (QF_STORE), so a runtime that migrates
+# or relocates its stores does not become a find across $XDG_STATE_HOME.
+ROOT="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
+LEGACY="${XDG_STATE_HOME:-$HOME/.local/state}/theme.json"
+STATE="$ROOT/theme.json"
+RESULT="$ROOT/theme.result.json"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wallpapers"
 
@@ -53,10 +58,13 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # --- the store ---------------------------------------------------------------
 
-# Reads one field. jq is a hard dependency of the shell already.
+# Reads one field. jq is a hard dependency of the shell already. The legacy
+# store is the one step back: a store not migrated yet still answers, and the
+# next put moves it.
 get() {
     local key=$1 fallback=${2-}
     [ -f "$STATE" ] || {
+        [ ! -f "$LEGACY" ] || jq -r --arg k "$key" --arg d "$fallback" '.[$k] // $d' "$LEGACY" 2>/dev/null && return
         printf '%s' "$fallback"
         return
     }
@@ -103,6 +111,7 @@ json_array() {
 write_result() {
     local ok=true tmp
     [ ${#RESULT_FAILED[@]} -eq 0 ] || ok=false
+    mkdir -p "$ROOT"
     tmp=$(mktemp "$RESULT.XXXXXX")
     jq -n \
         --argjson ok "$ok" \

@@ -44,17 +44,32 @@ KIND_REF = {plural: singular for singular, plural in REF_KIND.items()}
 
 
 def state_dir() -> Path:
+    """The shared quantum-store directory (QF_STORE), legacy as the read-back."""
+    if os.environ.get("QF_STORE"):
+        return Path(os.environ["QF_STORE"])
+    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state")) / "quantum-store"
+
+
+def legacy_state_dir() -> Path:
     return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
 
 
+def read_store(name: str) -> dict | None:
+    """Read a store file forward-first, legacy as the migration step back."""
+    for base in (state_dir(), legacy_state_dir()):
+        target = base / name
+        if target.exists():
+            return json.loads(target.read_text())
+    return None
+
+
 def load(path: Path | None) -> dict:
-    target = path or state_dir() / "hyprfocus.json"
-    try:
-        return json.loads(target.read_text())
-    except FileNotFoundError:
-        sys.exit(f"no declaration at {target}")
-    except json.JSONDecodeError as exc:
-        sys.exit(f"{target}: {exc}")
+    if path:
+        return json.loads(path.read_text())
+    existing = read_store("hyprfocus.json")
+    if existing is not None:
+        return existing
+    sys.exit(f"no declaration at {state_dir() / 'hyprfocus.json'}")
 
 
 def apply_delta(base: list[str], delta: dict | None, where: str) -> list[str]:
@@ -292,7 +307,7 @@ def log(entry: dict) -> None:
 def active(declaration: dict) -> dict:
     """The mode pointer, with whatever provenance it carries."""
     try:
-        return json.loads((state_dir() / "focus.json").read_text())
+        return read_store("focus.json")
     except (FileNotFoundError, json.JSONDecodeError):
         return {"mode": "neutral"}
 
