@@ -91,3 +91,37 @@ t.describe("submap.tree", function()
     t.ok(found, "expected the named child submap to be used verbatim")
   end)
 end)
+
+t.describe("binding arity of trees", function()
+  t.it("an enter-only leaf follows the tree it is a door into", function()
+    -- Withholding a tree must take the entering key with it: in work mode,
+    -- the Dofus key should not remain a live bind that only opens an
+    -- empty submap (LEO-303's first slice).
+    local binds = require("hypr.hyprfocus.binds")
+    local before = binds.size("opened-tree")
+    submap.tree({
+      mods = { "SUPER", "o" },
+      name = "acc-tree-1",
+      entries = {
+        { key = "d", desc = "Door", opens = "opened-tree", action = function() end },
+      },
+    })
+    t.eq(before, binds.size("opened-tree"), "the door counts as the destination tree's")
+  end)
+
+  t.it("escape stays at whatever tree the submap lives in, never the withheld one", function()
+    -- Not the architecture's final word (LEO-303 owns that): the checked
+    -- invariant is that the per-submap escape does not upholstery the submap
+    -- itself, since withholding that tree would take the exit with the room.
+    local binds = require("hypr.hyprfocus.binds") or {}
+    local before = binds.size("acc-tree-2")
+    submap.tree({
+      mods = { "SUPER", "p" },
+      name = "acc-tree-2",
+      entries = {
+        { key = "x", desc = "Leaf", action = function() end },
+      },
+    })
+    t.eq(before, binds.size("acc-tree-2"), "escape belongs to the tree the room evaluates out of")
+  end)
+end)

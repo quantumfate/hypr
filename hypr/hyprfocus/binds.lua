@@ -78,6 +78,28 @@ function M.names()
   return out
 end
 
+---Re-attribute a recorded bind to another tree.
+---
+---The entering leaf of a withheld submap is created while the PARENT is on
+---the def-stack (root, most of the time), but it belongs to the tree it is a
+---door to: in work mode the Dofus key must not exist at all — not remain a
+---live key that only opens an empty, disabled submap. Attribution at leaf
+---creation is how the door follows the room it opens into.
+---@param handle HL.Keybind
+---@param tree string the tree this bind takes its fate from
+function M.attribute(handle, tree)
+  for _, handles in pairs(trees) do
+    for i, h in ipairs(handles) do
+      if h == handle then
+        table.remove(handles, i)
+        break
+      end
+    end
+  end
+  trees[tree] = trees[tree] or {}
+  table.insert(trees[tree], handle)
+end
+
 ---@param name string
 ---@return integer how many binds the tree holds
 function M.size(name)

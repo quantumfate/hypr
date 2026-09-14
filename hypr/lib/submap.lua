@@ -146,14 +146,25 @@ local function define(name, entries, sticky)
         end
         opts.description = opts.description or e.desc
         opts.repeating = e.repeating
-        hyprfocus_binds.bind(combo(e), function()
-          run(e.action)
+        local handle = hyprfocus_binds.bind(combo(e), function()
+          if e.action then
+            run(e.action)
+          end
           if not stay then
             M.exit()
           end
         end, opts)
+        -- An enter-only leaf (`opens`) lives at the parent's def-time but
+        -- belongs to the tree it is a door into: withholding the tree takes
+        -- the leaf with it, so a mode removes the key and the room together.
+        if e.opens then
+          hyprfocus_binds.attribute(handle, e.opens)
+        end
       end
     end
+    -- The way out is a root fact: it lives in the tree every submap evaluates
+    -- out of. Attributing escape to the submap itself would let a mode that
+    -- withholds that tree take the exit with the room it just locked.
     hyprfocus_binds.bind(keystr({ "escape" }), function()
       M.back()
     end)
