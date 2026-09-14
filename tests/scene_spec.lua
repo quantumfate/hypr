@@ -243,52 +243,30 @@ t.describe("scene engine join", function()
   end)
 end)
 
-t.describe("scene engine eject", function()
-  t.it("ejects a foreign class from a Dofus group and leaves members", function()
+t.describe("scene engine arrangement is not a gatekeeper", function()
+  t.it("a group the user assembled by hand is never rearmed by the engine", function()
+    -- Purity is the compositor's contract (locked groups, `group.barred`,
+    -- `group.deny` in windowrules.lua); the engine arranges the scene's
+    -- blocks and never uses corrections to kick windows out of groups a
+    -- user built. This keeps the invariant visible even though the engine
+    -- no longer ejects.
     local stub, live = fresh(FOLD_CONFIG)
     local a1 = dofus("0xa1", { x = 0, y = 0 }, { x = 1600, y = 1000 })
-    local a2 = dofus("0xa2", { x = 0, y = 0 }, { x = 1600, y = 1000 })
     local foreign = {
       address = "0xc1",
       class = "rustdesk",
       workspace = { id = 4 },
       floating = false,
-      at = { x = 0, y = 0 },
+      at = { x = 1600, y = 0 },
       size = { x = 1600, y = 1000 },
     }
-    a1.group = { members = { a1, a2, foreign } }
-    a2.group = { members = { a1, a2, foreign } }
-    foreign.group = { members = { a1, a2, foreign } }
-    live[1], live[2], live[3] = a1, a2, foreign
+    a1.group = { members = { a1, foreign } }
+    live[1], live[2] = a1, foreign
 
-    emit(stub, "window.open", a1)
-    drain(stub, function()
-      a1.group = { members = { a1, a2 } }
-      a2.group = { members = { a1, a2 } }
-      foreign.group = { members = { foreign } }
-      foreign.at.x = 1600
-    end)
+    emit(stub, "window.move_to_workspace", { address = "0xa1", workspace = { id = 4 }, class = "Dofus.x64" })
+    drain(stub, function() end)
 
-    local eject
-    for _, d in ipairs(dispatches_named(stub, "dsp.window.move")) do
-      if d.args[1].direction and not d.args[1].into_group then
-        eject = d
-      end
-    end
-    t.ok(eject, "expected a move that is not into_group")
-    t.eq("r", eject.args[1].direction)
-    t.eq("address:0xc1", dispatches_named(stub, "dsp.focus")[1].args[1].window)
-
-    local merged = false
-    for _, d in ipairs(dispatches_named(stub, "dsp.window.move")) do
-      if d.args[1].into_group then
-        merged = true
-      end
-    end
-    t.ok(not merged, "Dofus members stay — no re-fold")
-    t.eq(2, #a1.group.members, "Dofus group still holds both members")
-    t.eq("Dofus.x64", a1.group.members[1].class)
-    t.eq("Dofus.x64", a1.group.members[2].class)
+    t.eq(2, #a1.group.members, "the user's own grouping survives the engine")
   end)
 end)
 

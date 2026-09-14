@@ -113,16 +113,13 @@ _G.config = {
               -- vs group + scene browser), which moves the OBS crop under you.
               solo_gaps = "none",
             },
-            border_size = 0,
-            -- Decorations stay ON (LEO-234): the compositor groupbar is the
-            -- one mechanism that genuinely attaches a bar to the tile — it
-            -- insets the client and takes the top edge out of the window —
-            -- and the group widget (GroupBar.qml) paints on exactly that
-            -- reserved slot, so the gaming workspace gets the standard
-            -- attached-bar geometry rather than an overlay floating over the
-            -- content. border_size stays 0 for a frameless OBS crop (LEO-232);
-            -- the bar's height is part of the crop's measured geometry.
-            decorate = true,
+            -- No decoration overrides: the workspace takes the same default
+            -- geometry as every other one, so the compositor groupbar makes
+            -- its standard reservation (it insets the client and takes the
+            -- top edge out of the window) and the group widget — which
+            -- follows in the quickshell repo — paints on exactly that slot.
+            -- With per-workspace exceptions the attached-bar geometry came
+            -- apart: gaming floated the widget, code inset its tabs.
             -- The Dofus clients are one Hyprland group (windowrules.lua), so
             -- the workspace holds a single tile whatever the layout — dwindle
             -- rather than monocle so it can host other gaming windows (or, per
@@ -253,9 +250,6 @@ _G.config = {
               -- vs group + scene browser), which moves the OBS crop under you.
               solo_gaps = "none",
             },
-            border_size = 0,
-            -- Same standard attached-bar geometry as the desk-dual spec above.
-            decorate = true,
             -- Dwindle, not monocle: the Dofus clients are one Hyprland group
             -- (windowrules.lua), so this holds a single tile either way — but
             -- dwindle leaves room to add other gaming windows and integrates

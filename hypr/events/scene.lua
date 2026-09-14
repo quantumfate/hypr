@@ -48,6 +48,7 @@ local SHARE_TOL = 0.02
 ---@field blocks SceneBlock[]
 ---@field members table<integer, table<string, true>> membership per block order
 ---@field busy boolean a realize is in flight for this scene
+---@field pending boolean a realize is armed but not yet started the loop
 ---@class SceneBlock
 ---@field classes string[]
 ---@field group boolean
@@ -96,6 +97,7 @@ local function build()
       blocks = blocks,
       members = members,
       busy = false,
+      pending = false,
     }
   end
 end
@@ -356,51 +358,11 @@ local function fold_stray(stray, members, cont)
   attempt(0)
 end
 
----A live window sharing a group-block's group whose class is not the block's.
----@param scene Scene
----@param live table<string, HL.Window>
----@return HL.Window?, SceneBlock?
-local function first_foreigner(scene, live)
-  for _, block in ipairs(scene.blocks) do
-    if block.group then
-      local seen = {}
-      for _, w in ipairs(hl.get_windows() or {}) do
-        if not w.floating and w.address and on_scene(scene, w) and block_for(scene, w) == block then
-          for _, member in ipairs(group_members(w.group)) do
-            local other = live[member.address]
-            if other and not seen[other.address] then
-              seen[other.address] = true
-              if not class_matches(other, block.classes) then
-                return other, block
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-  return nil, nil
-end
-
----Focus `foreign` and move it out of the group; drop it from membership.
----@param foreign HL.Window
----@param members table<string, true>?
-local function eject(foreign, members)
-  if members then
-    members[foreign.address] = nil
-  end
-  local prev = hl.get_active_window()
-  hl.dispatch(hl.dsp.focus({ window = "address:" .. foreign.address }))
-  hl.dispatch(hl.dsp.window.move({ direction = "r" }))
-  restore_focus(prev, foreign.address)
-end
-
 ---The first member of a scene block that drifted onto ANOTHER real
 ---(non-special, id >= 1) workspace, or nil.
 ---@param scene Scene
----@param live table<string, HL.Window>
 ---@return HL.Window?
-local function first_drifted(scene, live)
+local function first_drifted(scene)
   -- Collect only while the scene is occupied: a scene whose blocks hold no
   -- member on their workspace is dormant — drifting windows there are user
   -- workspace choice, not arrangement debt.
@@ -582,7 +544,7 @@ local function realize(scene)
     -- arrangement: no matter how a window moves between workspaces, a block
     -- member whose scene is occupied comes back, and the reorganization
     -- proceeds as if it had always been there (LEO-245's bare minimum).
-    local drift = first_drifted(scene, live)
+    local drift = first_drifted(scene)
     if drift then
       local prev = hl.get_active_window()
       if drift.floating then
@@ -597,13 +559,6 @@ local function realize(scene)
         window = "address:" .. drift.address,
       }))
       restore_focus(prev, drift.address)
-      hyg.oneshot(VERIFY_MS, step)
-      return
-    end
-
-    local foreign, foreign_block = first_foreigner(scene, live)
-    if foreign then
-      eject(foreign, foreign_block and scene.members[foreign_block.order])
       hyg.oneshot(VERIFY_MS, step)
       return
     end
@@ -654,10 +609,23 @@ local function scene_for(w)
   return nil
 end
 
+---Arm one realize pass for `key`. Scheduling is a GATE, not a queue: a burst
+---of events (workspace switches, a stream of cross-workspace moves) collapses
+---into one pass per SETTLE window, and a scene mid-realize coalesces into the
+---verify chain it is already running — corrections read the compositor's state
+---at dispatch time, so a pass that starts a beat later fixes the same reality.
+---Without the gate, a stream of user moves chains realize storm after realize
+---storm, and the desk dances.
 ---@param key string
 local function schedule_realize(key)
+  local scene = scenes[key]
+  if not scene or scene.busy or scene.pending then
+    return
+  end
+  scene.pending = true
   hyg.oneshot(SETTLE_MS, function()
-    realize(scenes[key])
+    scene.pending = false
+    realize(scene)
   end)
 end
 
@@ -686,12 +654,13 @@ hl.on("window.close", function(w)
   end
 end)
 
--- Cross-workspace moves are map/close events' equals in law: a window moving
--- into or out of a scene quarantine its arrangement either way (the moved-back
--- case is why this and the collect step exist). Every scene re-realizes; the
--- no-op guard makes an already-settled scene a cheap verify pass.
-hl.on("window.move_to_workspace", function()
-  for key in pairs(scenes) do
+-- Cross-workspace moves are map/close in law (LEO-245's bare minimum): the
+-- moved window's scene re-realizes where it arrived. Narrow on purpose — a
+-- move into one scene must not re-arrange every other scene — and the gate
+-- collapses a stream of moves into one pass each.
+hl.on("window.move_to_workspace", function(w)
+  local key = w and w.address and scene_for(w)
+  if key then
     schedule_realize(key)
   end
 end)
