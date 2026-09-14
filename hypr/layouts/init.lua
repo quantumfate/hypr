@@ -31,6 +31,10 @@ layout.register_fallback({
   end,
 })
 
+-- The scene layout: registered always, selected only by a workspace that asks
+-- for it. Workspaces on dwindle, master or scrolling are untouched.
+require("hypr.scene.provider").attach()
+
 require("hypr.layouts.scrolling")
 require("hypr.layouts.master")
 require("hypr.layouts.dwindle")

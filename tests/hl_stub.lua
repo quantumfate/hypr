@@ -43,6 +43,22 @@ function M.new()
 
   hl.dsp = dispatcher_proxy("dsp")
 
+  -- Registered layout providers, by name. Specs drive `recalculate` directly
+  -- with a context they build, the way the compositor would.
+  hl.layouts = {}
+  hl.layout = {
+    register = function(name, provider)
+      hl.layouts[name] = provider
+    end,
+  }
+
+  -- Live config values a module may read (gaps, layout options). Specs set
+  -- `hl.config_values` rather than stubbing the getter each time.
+  hl.config_values = {}
+  function hl.get_config(key)
+    return hl.config_values[key]
+  end
+
   function hl.bind(key, action, opts)
     hl.binds[#hl.binds + 1] = {
       submap = submap_stack[#submap_stack],
