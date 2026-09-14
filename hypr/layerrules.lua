@@ -5,17 +5,6 @@
 
 hl.layer_rule({ match = { namespace = "notifications" }, animation = "slide" })
 
--- Dofus group widget: the tab strip + context menu tracked to the group tile
--- (LEO-234/LEO-244). Pure fade — the surface is geometry-tracked, so a slide
--- would fly it across the screen on every position change — and blur behind it
--- when translucent (low ignore_alpha blurs translucent cards).
-hl.layer_rule({
-  match = { namespace = "quickshell-dofus" },
-  animation = "fade 2%",
-  blur = true,
-  ignore_alpha = 0.1,
-})
-
 -- 0.55, not 0.6, on every modal below.
 --
 -- A threshold has to sit between two moving numbers: below the lowest alpha any

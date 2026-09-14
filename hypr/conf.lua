@@ -85,8 +85,8 @@ hl.config({
       -- The defaults are 14px tall with 8px text, which is a decoration rather
       -- than something you can read across a 5120px panel. The bar takes the
       -- tile's top edge — the client's own top — and both Hypr's native bar
-      -- and the group widget (quickshell/modules/dofus/GroupBar.qml) render on
-      -- exactly this slot: one bar, one reservation.
+      -- exactly this slot: one bar per tile, one reservation. The Dofus
+      -- editors live in panels, not painted over the bar (LEO-234).
       height = 30,
       font_family = "JetBrainsMono Nerd Font",
       font_size = 14,
