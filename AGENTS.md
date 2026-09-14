@@ -48,7 +48,7 @@ Scene.realize(name)
 Scene.tile(name, match)    -- first tile of that match, or nil
 ```
 
-Long-term store is `$XDG_STATE_HOME` `scenes.json` (schema in sibling `quickshell`). The host files' `scenes` table (`conf/hosts/`) is a temporary host fork.
+Long-term store is `$XDG_STATE_HOME` `scenes.json` — Lua consumes it and seeds it from `hypr/scene/defaults.lua` on first run; the host files' `scenes` fork is gone (hypr `625a970`).
 
 ## Hyprland primitives (do not rediscover)
 
