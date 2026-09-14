@@ -154,6 +154,24 @@ t.describe("the watcher", function()
     t.ok(spawned, "the services half was never asked for")
   end)
 
+  t.it("a mode boundary clears the submap stack", function()
+    -- A submap entered under the previous mode may belong to a tree this
+    -- mode withholds: the way out must not be something the mode takes with
+    -- it. Resetting the stack on every converge costs nothing when the stack
+    -- is already empty.
+    local stub, _, watch, stores = fresh(DECLARATION)
+    watch.tick()
+    stores.focus = { mode = "game" }
+    watch.tick()
+    local reset_seen = nil
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.submap" and tostring(d.args[1]) == "reset" then
+        reset_seen = true
+      end
+    end
+    t.ok(reset_seen, "the stack is reset at the mode boundary")
+  end)
+
   t.it("attaches event subscriptions, not a clock", function()
     -- The watcher subscribes to the desk's own events instead of paying a
     -- clock tick forever: convergence is a chance the desk already runs.

@@ -247,10 +247,20 @@ end
 ---mode already, and rewriting it here would clobber at least the `until`
 ---expiry and who the pointer says set it. Both halves still run — the desk is
 ---one thing regardless of who asked.
+---
+---A mode boundary also clears the submap stack: a submap entered under the
+---previous mode may belong to a tree this mode withholds, and the last thing
+---a mode change should leave is a menu full of keys that no longer exist (or
+---worse, a submap whose binds are disabled and whose way out went with them).
+---An empty stack is a no-op, so this is cheap at the entry points that did
+---not need it.
 ---@param mode string
 ---@return table? report, string? error
 function M.converge(mode)
   local report, apply_err = M.apply(mode)
+  pcall(function()
+    require("hypr.lib.submap").reset()
+  end)
   hl.dispatch(hl.dsp.exec_cmd(("%s apply %s"):format(CLI, mode)))
   return report, apply_err
 end
