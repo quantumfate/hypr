@@ -169,5 +169,25 @@ else
 fi
 teardown
 
+echo "retention is bounded, and the bound is a fact (LEO-241)"
+setup
+# Overflow the bound with real applies: forty transitions on a one-unit
+# mood must keep the log at its stated maximum, and the newest decisions
+# must survive (the diary is bounded, not forgetful).
+jq '.moods.gaming.background.prevent = ["obsidian"]' "$FIXTURE" >"$XDG_STATE_HOME/mood-policy.json"
+for _ in $(seq 1 40); do
+    printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+    run gaming
+done
+lines=$(wc -l <"$QF_STORE/scene-policy/log.jsonl")
+if [ "$lines" -le 2000 ]; then
+    printf '  ok   the log keeps at most its stated bound (%s lines)\n' "$lines"
+    pass=$((pass + 1))
+else
+    printf '  FAIL the log grew past its bound (%s lines)\n' "$lines"
+    fail=$((fail + 1))
+fi
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

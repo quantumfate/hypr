@@ -316,6 +316,26 @@ def active(declaration: dict) -> dict:
         return {"mode": "neutral"}
 
 
+def log_read(state: Path, count: int) -> int:
+    """The recent decisions, one JSON row per line (LEO-241).
+
+    The logging workspace is the answer to "what did the desk just do",
+    readable with no compositor and no shell: this prints the last COUNT
+    rows, bottom-first (the newest read is about the present). Missing rows
+    read as an empty log, never an error — a fresh desk has made no
+    decisions yet.
+    """
+    path = state / "scene-policy" / "log.jsonl"
+    if not path.exists():
+        return 0
+    rows = path.read_text().splitlines()
+    for line in rows[-count:] if count else rows:
+        stripped = line.strip()
+        if stripped:
+            print(stripped)
+    return 0
+
+
 def conform(source: Path) -> int:
     """Run shared conformance fixtures against THIS resolver (LEO-287).
 
@@ -494,6 +514,8 @@ def main() -> None:
         "conform", help="run shared resolver conformance fixtures"
     )
     conform_parser.add_argument("source", type=Path)
+    log_parser = sub.add_parser("log", help="print the scene-policy log's recent rows")
+    log_parser.add_argument("count", nargs="?", type=int, default=20)
     for verb, help_text in (
         ("resolve", "the desk a mode means"),
         ("plan", "what would change"),
@@ -518,6 +540,9 @@ def main() -> None:
 
     if args.verb == "conform":
         return conform(args.source)
+
+    if args.verb == "log":
+        return log_read(state_dir(), args.count)
 
     declaration = load(args.declaration)
 
