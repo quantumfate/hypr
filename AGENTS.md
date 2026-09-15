@@ -225,7 +225,6 @@ Before marking work complete:
 - Do not silently widen scope. Create or propose follow-up issues for
   additional work.
 
-
 ## Read order
 
 New to the repo, read in this order — each layer points at the next:
