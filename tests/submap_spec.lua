@@ -109,19 +109,37 @@ t.describe("binding arity of trees", function()
     t.eq(before, binds.size("opened-tree"), "the door counts as the destination tree's")
   end)
 
-  t.it("escape stays at whatever tree the submap lives in, never the withheld one", function()
-    -- Not the architecture's final word (LEO-303 owns that): the checked
-    -- invariant is that the per-submap escape does not upholstery the submap
-    -- itself, since withholding that tree would take the exit with the room.
-    local binds = require("hypr.hyprfocus.binds") or {}
-    local before = binds.size("acc-tree-2")
-    submap.tree({
+  t.it("escapes are root facts: a withheld tree never takes the exit", function()
+    -- The way out is structural (LEO-303): created inside the submap body,
+    -- but re-anchored to root, since withholding the tree must not take the
+    -- exit with the room it locked (a keyboard with no escape is a reboot).
+    -- Fresh stub + reload, so the test reads its own trees.
+    _G.hl = require("tests.hl_stub").new()
+    package.loaded["hypr.hyprfocus.binds"] = nil
+    package.loaded["hypr.lib.submap"] = nil
+    -- The handles must be real for attribute() to file them; this harness
+    -- shape is the other specs' fresh(), cited once.
+    local stub = require("tests.hl_stub").new()
+    stub.bind = function(key)
+      local handle = { key = key, enabled = true }
+      function handle:set_enabled(_) end
+      return handle
+    end
+    stub.define_submap = function(_, fn)
+      fn()
+    end
+    _G.hl = stub
+    local binds = require("hypr.hyprfocus.binds")
+    local sm = require("hypr.lib.submap")
+    sm.tree({
       mods = { "SUPER", "p" },
-      name = "acc-tree-2",
-      entries = {
-        { key = "x", desc = "Leaf", action = function() end },
-      },
+      name = "esc-tree",
+      entries = { { key = "x", desc = "Leaf", action = function() end } },
     })
-    t.eq(before, binds.size("acc-tree-2"), "escape belongs to the tree the room evaluates out of")
+    -- The sizes are the real data plane: leader and leaf stayed inside the
+    -- withholdable tree; the two way-out binds moved OUT to root, where
+    -- nothing can withhold them.
+    t.eq(2, binds.size("esc-tree"))
+    t.eq(2, binds.size("root"))
   end)
 end)

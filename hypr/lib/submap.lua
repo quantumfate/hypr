@@ -162,15 +162,24 @@ local function define(name, entries, sticky)
         end
       end
     end
-    -- The way out is a root fact: it lives in the tree every submap evaluates
-    -- out of. Attributing escape to the submap itself would let a mode that
-    -- withholds that tree take the exit with the room it just locked.
-    hyprfocus_binds.bind(keystr({ "escape" }), function()
-      M.back()
-    end)
-    hyprfocus_binds.bind(keystr({ "SHIFT", "escape" }), function()
-      M.reset()
-    end)
+    -- The way out is a root fact, and the file placement HAS to match the
+    -- claim: these binds are created inside the submap body, where stack[2]
+    -- already names the submap, so without re-attribution the escape binds
+    -- filed under the tree — and a mode withholding that tree took the way
+    -- out with the room (the desk went unresponsive once the empty submap
+    -- was reachable). Re-anchoring to root is what the comment claims.
+    hyprfocus_binds.attribute(
+      hyprfocus_binds.bind(keystr({ "escape" }), function()
+        M.back()
+      end),
+      "root"
+    )
+    hyprfocus_binds.attribute(
+      hyprfocus_binds.bind(keystr({ "SHIFT", "escape" }), function()
+        M.reset()
+      end),
+      "root"
+    )
   end)
 end
 
@@ -181,9 +190,15 @@ end
 function M.tree(spec)
   hooks[spec.name] = { enter = spec.on_enter, leave = spec.on_leave }
   whichkey.register(spec.name, nil, spec.entries)
-  hyprfocus_binds.bind(keystr(spec.mods), function()
+  -- The entering leaf belongs to the DESTINATION tree (LEO-303): withholding
+  -- the tree takes its door with the room. Binding it here runs at root
+  -- scope (stack[2] is nil), so without the attribution every tree's leader
+  -- was filed under root — always live — and a mode that withheld the tree
+  -- left a live key opening a submap whose contents were gone.
+  local leader = hyprfocus_binds.bind(keystr(spec.mods), function()
     M.enter(spec.name)
   end, { description = (spec.desc or spec.name) .. "…" })
+  hyprfocus_binds.attribute(leader, spec.name)
   define(spec.name, spec.entries, spec.sticky or false)
 end
 
