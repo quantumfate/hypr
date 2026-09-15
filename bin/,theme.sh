@@ -205,22 +205,31 @@ is_mood() {
 
 # --- which palette --------------------------------------------------------
 
+# The pointer, resolved exactly like the mode policy reads it everywhere else:
+# the held mode, or "" at rest — a timed mode whose `until` already passed
+# reads as neutral. Shared by both lease applications (the palette and the
+# wallpaper) so two readers can never disagree about which mode is on.
+lease_state() {
+    local mode until until_ms file="$FOCUS"
+    [ -f "$file" ] || { [ ! -f "$LEGACY_FOCUS" ] || file="$LEGACY_FOCUS"; }
+    [ -f "$file" ] && mode=$(jq -r '.mode // "neutral"' "$file" 2>/dev/null) || mode=neutral
+    until=$(jq -r '.until // ""' "$file" 2>/dev/null)
+    if [ "$mode" != neutral ] && [ -n "$until" ]; then
+        until_ms=$(date -d "$until" +%s%3N 2>/dev/null || echo 0)
+        [ "$(date +%s%3N)" -gt "$until_ms" ] && mode=neutral
+    fi
+    printf '%s' "$mode"
+}
+
 # The palette a mode leases while it runs (LEO-288). The declaration names one
 # in the mode's `presentation`; the pointer (focus.json) says the mode is on,
 # and a timed mode whose `until` already passed reads as neutral — the same
 # rule the mode policy keeps everywhere else. "" means no lease held, and an
 # unknown lease palette reads as no lease: resolution never fails.
 lease() {
-    local mode until until_ms palette file="$FOCUS"
-    [ -f "$file" ] || { [ ! -f "$LEGACY_FOCUS" ] || file="$LEGACY_FOCUS"; }
-    [ -f "$file" ] || return 0
-    mode=$(jq -r '.mode // "neutral"' "$file" 2>/dev/null) || return 0
+    local mode until until_ms palette
+    mode=$(lease_state)
     [ "$mode" != neutral ] || return 0
-    until=$(jq -r '.until // ""' "$file" 2>/dev/null)
-    if [ -n "$until" ]; then
-        until_ms=$(date -d "$until" +%s%3N 2>/dev/null || echo 0)
-        [ "$(date +%s%3N)" -le "$until_ms" ] || return 0
-    fi
     palette=$(jq -r --arg m "$mode" '.modes[$m].presentation.palette // ""' "$DECLARATION" 2>/dev/null) || return 0
     is_palette "$palette" && printf '%s' "$palette" || return 0
 }
@@ -621,10 +630,23 @@ process_wallpaper() {
 # re-roll on every palette switch. Shared with `status` so the two can never
 # disagree about what is bound.
 resolve_wallpaper() {
-    local palette=$1 mood wall
-    mood=$(get mood "")
-    if [ -n "$mood" ]; then
-        wall=$(jq -r --arg m "$mood" '.moods[$m] // ""' "$STATE" 2>/dev/null || echo "")
+    local palette=$1 mood wall mode lease_wall
+    # The mode's wallpaper lease (LEO-289) sits above the paint binding and
+    # the palette binding, the same way the palette lease sits above the
+    # baseline: a mode that needs a specific look names the file, and hands
+    # it back when the mode ends. But a mood's own binding — the wallpaper a
+    # user bound to that mood — outranks the lease, the same way an explicit
+    # pick outranks a lease for the palette itself.
+    if [ -z "${wall:-}" ]; then
+        mood=$(get mood "")
+        if [ -n "$mood" ]; then
+            wall=$(jq -r --arg m "$mood" '.moods[$m] // ""' "$STATE" 2>/dev/null || echo "")
+        fi
+    fi
+    mode=$(lease_state)
+    if [ "$mode" != neutral ]; then
+        lease_wall=$(jq -r --arg m "$mode" '.modes[$m].presentation.wallpaper // ""' "$DECLARATION" 2>/dev/null || echo "")
+        [ -n "$lease_wall" ] && [ -z "${wall:-}" ] && wall="$lease_wall"
     fi
     [ -n "${wall:-}" ] || wall=$(jq -r --arg p "$palette" '.wallpapers[$p] // ""' "$STATE" 2>/dev/null || echo "")
     [ -n "$wall" ] || wall=$(get wallpaper "")

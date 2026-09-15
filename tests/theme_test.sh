@@ -435,6 +435,33 @@ contains "the unnamed surface records a named failure, not a crash" \
     "gtk: catppuccin-gruvbox-material-mauve-standard+default not installed" "$out"
 teardown
 
+echo "a mode leases its wallpaper, above the palette binding and under the mood's"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers" "$XDG_STATE_HOME/quantum-store"
+touch "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" "$XDG_CONFIG_HOME/hypr/wallpapers/gaming.jpg"
+STORE="$XDG_STATE_HOME/quantum-store/theme.json"
+printf '{"mode":"manual","palette":"mocha","day":"latte","night":"mocha"}\n' >"$STORE"
+printf '{"modes":{"gaming":{"name":"gaming","presentation":{"wallpaper":"/w-LEASE.jpg"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+
+# At rest the palette's own binding answers; the mood's own binding — a user
+# decision — outranks the lease; the lease outranks the palette binding.
+"$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" mocha >/dev/null
+contains "at rest the palette binding answers" \
+    "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" "$("$THEME" status)"
+
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/quantum-store/focus.json"
+contains "a held lease binds its own look" "wallpaper /w-LEASE.jpg" "$("$THEME" status)"
+
+# A user decision outranks the declared one. The 'mood' pointer is what
+# `cmd_mood_wallpaper` (and the shell switcher) write, so the chain reads the
+# mood the way the shell already does.
+jq '. + {mood: "gaming"}' "$STORE" >"$STORE.tmp" && mv "$STORE.tmp" "$STORE"
+"$THEME" mood-wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/gaming.jpg" gaming >/dev/null
+contains "the mood's own binding outranks the lease" \
+    "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/gaming.jpg" "$("$THEME" status)"
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
 
