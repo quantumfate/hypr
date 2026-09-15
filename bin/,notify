@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# ,notify — the one way the desk's scripts send notifications (LEO-274).
+#
+# The convention: every notification the system sends resolves at tier 2 or
+# better. The resolved identity chain reads hints first (desktop entry, then
+# x-hyprfocus-source), so a sender's app_name — free text the sender chose —
+# is never what routing keys on. This helper makes that the easy path and a
+# bare notify-send unnecessary:
+#
+#   ,notify <source-id> <summary> [body] [-u urgency]
+#
+# The source id is stable, kebab-case, and names the THING (linear-sync,
+# brightness), not the script that happened to send it — moving the code
+# does not change the routing. The category carries the domain when it has
+# one (x-hyprfocus.sync etc.), because categories are a route's second
+# voice (family matching).
+#
+# Shell feedback answering a key press goes through Notify's own IPC (tier
+# HYPRFOCUS) instead. use this helper from scripts outside the shell.
+set -euo pipefail
+
+usage() {
+    printf 'usage: ,notify <source-id> <summary> [body] [-u critical|normal|low]\n' >&2
+    exit 1
+}
+
+[ $# -ge 2 ] || usage
+source=$1
+summary=$2
+shift 2
+body=${1:-}
+[ $# -gt 0 ] && shift
+
+case "$source" in
+*-*) ;;
+*) echo ",notify: '$source' is not a stable kebab-case source id" >&2; exit 1 ;;
+esac
+
+urgency=normal
+while [ $# -gt 0 ]; do
+    case "$1" in
+    -u) urgency=${2:-normal}; shift 2 ;;
+    *) usage ;;
+    esac
+done
+case "$urgency" in
+critical | normal | low) ;;
+*) urgency=normal ;;
+esac
+
+exec notify-send -u "$urgency" \
+    -h string:x-hyprfocus-source:"$source" \
+    -h desktop-entry:hyprfocus \
+    "$summary" "$body"

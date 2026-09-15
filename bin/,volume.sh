@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-APP_NAME=pavucontrol
 SINK="@DEFAULT_AUDIO_SINK@"
 SOURCE="@DEFAULT_AUDIO_SOURCE@"
 STEP="3%"
@@ -42,7 +41,7 @@ get_icon() {
 
 # Notify
 notify_user() {
-    notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:sys-notify -u low "$(get_icon)   $(get_volume)%"
+    ,notify volume -u low "$(get_icon)   $(get_volume)%"
 }
 
 # Increase Volume
@@ -58,18 +57,18 @@ dec_volume() {
 # Toggle Mute
 toggle_mute() {
     if [ "$(get_mute)" == "false" ]; then
-        wpctl set-mute "$SINK" toggle && notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:sys-notify -u low -i "" "Volume Switched OFF"
+        wpctl set-mute "$SINK" toggle && ,notify volume -u low -i "" "Volume Switched OFF"
     elif [ "$(get_mute)" == "true" ]; then
-        wpctl set-mute "$SINK" toggle && notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:sys-notify -u low -i "$(get_icon)" "Volume Switched ON"
+        wpctl set-mute "$SINK" toggle && ,notify volume -u low -i "$(get_icon)" "Volume Switched ON"
     fi
 }
 
 # Toggle Mic
 toggle_mic() {
     if [ "$(get_mic_mute)" == "false" ]; then
-        wpctl set-mute "$SOURCE" toggle && notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:sys-notify -u low -i "" "Microphone Switched OFF"
+        wpctl set-mute "$SOURCE" toggle && ,notify volume -u low -i "" "Microphone Switched OFF"
     elif [ "$(get_mic_mute)" == "true" ]; then
-        wpctl set-mute "$SOURCE" toggle && notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:sys-notify -u low -i "" "Microphone Switched ON"
+        wpctl set-mute "$SOURCE" toggle && ,notify volume -u low -i "" "Microphone Switched ON"
     fi
 }
 

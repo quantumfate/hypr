@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-APP_NAME=Brightness
 has_hyprsunset=false
 CACHE_DIR="/tmp/hyprsunset"
 CACHE_FILE="$CACHE_DIR/brightness"
@@ -38,7 +37,7 @@ save_brightness() {
 }
 
 notify_user() {
-    notify-send --app-name="$APP_NAME" -h string:x-canonical-private-synchronous:sys-notify -u low "$(get_icon)   $(get_brightness)%"
+    ,notify brightness -u low "$(get_icon)   $(get_brightness)%"
 }
 
 inc_brightness() {

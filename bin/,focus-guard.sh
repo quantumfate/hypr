@@ -14,6 +14,6 @@ if [[ "$result" == yes ]]; then
 fi
 
 reason=${result#no: }
-notify-send "Blocked" "$reason"
+,notify focus-guard "Blocked" "$reason"
 echo "$reason" >&2
 exit 1

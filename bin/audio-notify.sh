@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="audio-device"
-
 get_default_sink_id() {
     wpctl status 2>/dev/null |
         LC_ALL=C tr -cd '[:print:]\n' |
@@ -35,7 +33,7 @@ pactl subscribe 2>/dev/null | while read -r line; do
         sleep 0.5
         new_label=$(get_label)
         if [[ -n "$new_label" && "$new_label" != "$current_label" ]]; then
-            notify-send -i audio-card -t 3000 "$APP_NAME" "Switched to $new_label"
+            ,notify audio-device -i audio-card -t 3000 "" "Switched to $new_label"
             current_label="$new_label"
         fi
         ;;

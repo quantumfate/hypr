@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-APP_NAME=playerctl
 STEP="0.03"
 
 # Get Volume (0-100 integer)
@@ -26,11 +25,11 @@ get_icon() {
 
 # Notify
 notify_volume() {
-    notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:player-notify -u low "$(get_icon)   $(get_volume)% — Player"
+    ,notify player -u low "$(get_icon)   $(get_volume)% — Player"
 }
 
 notify_track() {
-    notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:player-notify -u low "$(get_track)"
+    ,notify player -u low "$(get_track)"
 }
 
 # Increase Volume
@@ -52,17 +51,17 @@ play_pause() {
     else
         icon=""
     fi
-    notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:player-notify -u low "$icon  $status" "$(get_track)"
+    ,notify player -u low "$icon  $status" "$(get_track)"
 }
 
 # Previous track
 prev_track() {
-    playerctl previous && sleep 0.1 && notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:player-notify -u low "  Previous" "$(get_track)"
+    playerctl previous && sleep 0.1 && ,notify player -u low "  Previous" "$(get_track)"
 }
 
 # Next track
 next_track() {
-    playerctl next && sleep 0.1 && notify-send --app-name=$APP_NAME -h string:x-canonical-private-synchronous:player-notify -u low "  Next" "$(get_track)"
+    playerctl next && sleep 0.1 && ,notify player -u low "  Next" "$(get_track)"
 }
 
 # Execute accordingly

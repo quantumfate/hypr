@@ -104,7 +104,7 @@ die() {
     if [[ -n ${TMUX-} ]]; then
         command tmux display-message "proj: $1" 2>/dev/null || true
     elif command -v notify-send >/dev/null 2>&1; then
-        notify-send -u critical "proj" "$1" 2>/dev/null || true
+        ,notify proj -u critical "" "$1" 2>/dev/null || true
     fi
     exit 1
 }

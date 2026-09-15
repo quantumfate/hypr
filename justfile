@@ -39,6 +39,7 @@ test:
 	./tests/scene_apply_test.sh
 	./tests/hyprfocus_test.sh
 	./tests/hyprfocus_units_test.sh
+	./tests/notify_source_test.sh
 
 # Regenerate the capability targets (the systemd seam bin/,hyprfocus-units
 # writes). `just check` fails if the committed ones and the contract have
