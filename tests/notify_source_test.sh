@@ -18,12 +18,12 @@ bin_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../bin" && pwd)"
 # below.
 while IFS=: read -r file lineno line; do
     case "$file" in
-    */,notify) continue ;;          # the helper: file-level assertion below
-    */obsidian_linear_sync.py) continue ;;  # argv list: asserted at file level
+    */,notify) continue ;;                 # the helper: file-level assertion below
+    */obsidian_linear_sync.py) continue ;; # argv list: asserted at file level
     */tests/*) continue ;;
     esac
     case "$line" in
-    \#*) continue ;;                # a comment is not a call
+    \#*) continue ;; # a comment is not a call
     esac
     case "$line" in
     *"command -v notify-send"*) continue ;;

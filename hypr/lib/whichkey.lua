@@ -36,6 +36,12 @@ M.path = (
 ---@type table<string, WhichKeyNode>
 local nodes = {}
 
+-- The root node's key: not a submap the compositor enters, but the registry's
+-- one entry point for the binds outside any submap, so the full cheatsheet
+-- and the overlay read the SAME document (LEO-268). WhichKey.js's nodeFor
+-- maps "reset" to null, so the overlay behaves exactly as before.
+local RESET = "reset"
+
 ---@param mods string[]?
 ---@return string[]
 local function sanitize_mods(mods)
@@ -44,6 +50,25 @@ local function sanitize_mods(mods)
     out[#out + 1] = m
   end
   return out
+end
+
+---Record a described bind that lives outside any submap (the root). The
+---"reset" node holds them: the cheatsheet's root view parses this node with
+---the same by-construction guarantee the submap trees carry — the shortcuts
+---it renders are exactly the shortcuts that work.
+---@param key string
+---@param mods string[]
+---@param desc string
+function M.record_root(key, mods, desc)
+  if not key or not desc then
+    return
+  end
+  local node = nodes[RESET]
+  if not node then
+    node = { parent = "", items = {} }
+    nodes[RESET] = node
+  end
+  node.items[#node.items + 1] = { key = key, mods = sanitize_mods(mods), desc = desc, group = false }
 end
 
 ---Record a submap node. `entries` are the raw SubmapEntry tables coming out of

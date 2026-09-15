@@ -33,13 +33,19 @@ body=${1:-}
 
 case "$source" in
 *-*) ;;
-*) echo ",notify: '$source' is not a stable kebab-case source id" >&2; exit 1 ;;
+*)
+    echo ",notify: '$source' is not a stable kebab-case source id" >&2
+    exit 1
+    ;;
 esac
 
 urgency=normal
 while [ $# -gt 0 ]; do
     case "$1" in
-    -u) urgency=${2:-normal}; shift 2 ;;
+    -u)
+        urgency=${2:-normal}
+        shift 2
+        ;;
     *) usage ;;
     esac
 done

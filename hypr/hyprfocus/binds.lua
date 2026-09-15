@@ -15,6 +15,8 @@
 -- rather than threading a tree name through ten call sites and their
 -- signatures. There is no API to enumerate binds afterwards, so capturing at
 -- creation is the only moment they can be grouped at all.
+local whichkey = require("hypr.lib.whichkey")
+
 local M = {}
 
 -- Tree name -> the keybind handles created while it was being defined.
@@ -43,11 +45,39 @@ local MODES = "modes"
 ---read-only in the Hyprland runtime, and assigning to it raises at config
 ---load — taking every module required after it down with it.
 ---@return HL.Keybind
-function M.bind(...)
-  local handle = hl.bind(...)
-  -- The outermost submap is the tree: everything nested under `dofus` belongs
-  -- to the Dofus tree, not to a tree of its own.
+---Split a combined bind spec into the words the registry renders: the mods
+---only, plus the key it ends with.
+---@param key string
+---@return string[] mods
+---@return string key
+local function split_key(key)
+  local mods, bare = key:match("^(.*)+([^+]+)$")
+  if not bare then
+    return {}, key
+  end
+  local mods_list = {}
+  for mod in (mods or ""):gmatch("[^+]+") do
+    mods_list[#mods_list + 1] = mod
+  end
+  return mods_list, bare
+end
+
+function M.bind(pattern, action, opts)
+  local handle = hl.bind(pattern, action, opts)
+  -- Described binds participate in the which-key document: root binds under
+  -- the registry's own root node, submap binds under their entries (recorded
+  -- by submap.lua already). Undescribed binds stay private — the cheatsheet's
+  -- one hard rule is that it never shows a key it cannot describe.
+  -- (LEO-268: one document, by construction, for both surfaces.)
   local name = stack[2] or ROOT
+  if name == ROOT then
+    opts = opts or {}
+    local desc = opts.description
+    if desc and not opts.submap_universal then
+      local mods, key = split_key(pattern or "")
+      whichkey.record_root(key, mods, desc)
+    end
+  end
   trees[name] = trees[name] or {}
   table.insert(trees[name], handle)
   return handle
