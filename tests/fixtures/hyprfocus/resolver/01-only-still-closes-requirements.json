@@ -1,0 +1,70 @@
+{
+  "name": "only still gets its required companions",
+  "declaration": {
+    "base": {
+      "workspaces": [
+        "code",
+        "gaming",
+        "media"
+      ],
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "requires": {
+        "workspace:code": [
+          "service:obsidian"
+        ]
+      },
+      "notify": {
+        "default": "show"
+      },
+      "scenes": {}
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "workspaces": {
+          "only": [
+            "code"
+          ]
+        }
+      }
+    }
+  },
+  "mode": "x",
+  "expected": {
+    "mode": "x",
+    "workspaces": [
+      "code"
+    ],
+    "bindings": [
+      "root",
+      "dofus"
+    ],
+    "services": [
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
+    ],
+    "projects": [
+      "obsidian",
+      "quantumnix"
+    ],
+    "scenes": {},
+    "notify": {
+      "default": "show"
+    },
+    "revoke": {},
+    "presentation": {}
+  }
+}

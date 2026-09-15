@@ -1,0 +1,57 @@
+{
+  "name": "wants yields to an explicit remove",
+  "declaration": {
+    "base": {
+      "workspaces": [
+        "code",
+        "gaming",
+        "media"
+      ],
+      "bindings": [
+        "root"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index"
+      ],
+      "projects": [],
+      "wants": {
+        "service:obsidian": [
+          "service:obsidian-index"
+        ]
+      },
+      "notify": {},
+      "scenes": {}
+    },
+    "modes": {
+      "media": {
+        "name": "Media",
+        "services": {
+          "remove": [
+            "obsidian-index"
+          ]
+        }
+      }
+    }
+  },
+  "mode": "media",
+  "expected": {
+    "mode": "media",
+    "workspaces": [
+      "code",
+      "gaming",
+      "media"
+    ],
+    "bindings": [
+      "root"
+    ],
+    "services": [
+      "obsidian"
+    ],
+    "projects": [],
+    "scenes": {},
+    "notify": {},
+    "revoke": {},
+    "presentation": {}
+  }
+}

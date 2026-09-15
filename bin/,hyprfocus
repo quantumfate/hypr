@@ -166,6 +166,7 @@ def resolve(declaration: dict, mode: str) -> dict:
     }
     desk["notify"] = {**base.get("notify", {}), **spec.get("notify", {})}
     desk["revoke"] = {**base.get("revoke", {}), **spec.get("revoke", {})}
+    desk["presentation"] = dict(spec.get("presentation", {}))
     return desk
 
 
@@ -315,6 +316,55 @@ def active(declaration: dict) -> dict:
         return {"mode": "neutral"}
 
 
+def conform(source: Path) -> int:
+    """Run shared conformance fixtures against THIS resolver (LEO-287).
+
+    The fixture shape is data: {name, declaration, mode, expected} — and
+    `expected_error` carries SUBSTRING of the message (the two
+    implementations may reach the same refusal in different words, which is
+    fine; the desks may not differ). Exit 1 names every fixture that broke,
+    so the composite gates fail closed.
+
+    `source` names one fixture file or a directory of them.
+    """
+    files = (
+        [source]
+        if source.is_file()
+        else sorted(p for p in source.iterdir() if p.suffix == ".json")
+    )
+    failed: list[str] = []
+    for path in files:
+        fixture = json.loads(path.read_text())
+        name = fixture.get("name", path.name)
+        want_error = fixture.get("expected_error")
+        try:
+            desk = resolve(fixture["declaration"], fixture["mode"])
+        except SystemExit as exc:
+            # `expected_error` covers a refusal by substring, so message
+            # wording may drift without failing the conformance gate.
+            if want_error and want_error in str(exc):
+                print(f"ok     {name}")
+            else:
+                failed.append(f"{name}: refused {exc} (wanted error {want_error!r})")
+            continue
+        if want_error:
+            failed.append(
+                f"{name}: resolved, but the fixture expected error {want_error!r}"
+            )
+            continue
+        if desk != fixture["expected"]:
+            failed.append(
+                f"{name}: desk disagrees with the fixture:\n{json.dumps(desk, indent=2)}"
+            )
+            continue
+        print(f"ok     {name}")
+    if failed:
+        for f in failed:
+            print(f"MISMATCH {f}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def print_desk(desk: dict) -> None:
     print(f"{'mode':<12}{desk['mode']}")
     for kind in KINDS:
@@ -440,6 +490,10 @@ def main() -> None:
         "--force", action="store_true", help="replace an existing store"
     )
     sub.add_parser("explain", help="which mode is on, who set it, and when")
+    conform_parser = sub.add_parser(
+        "conform", help="run shared resolver conformance fixtures"
+    )
+    conform_parser.add_argument("source", type=Path)
     for verb, help_text in (
         ("resolve", "the desk a mode means"),
         ("plan", "what would change"),
@@ -461,6 +515,9 @@ def main() -> None:
     if args.verb == "seed":
         seed(args.source, args.force)
         return
+
+    if args.verb == "conform":
+        return conform(args.source)
 
     declaration = load(args.declaration)
 

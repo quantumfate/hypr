@@ -1,0 +1,39 @@
+{
+  "name": "an unknown workspace refuses at resolve time",
+  "declaration": {
+    "base": {
+      "workspaces": [
+        "code",
+        "gaming",
+        "media"
+      ],
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "notify": {},
+      "scenes": {}
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "workspaces": {
+          "add": [
+            "ghost"
+          ]
+        }
+      }
+    }
+  },
+  "mode": "x",
+  "expected_error": "unknown workspaces"
+}

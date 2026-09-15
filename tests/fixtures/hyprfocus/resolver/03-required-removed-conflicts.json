@@ -1,0 +1,44 @@
+{
+  "name": "requires removed names a conflict (error case)",
+  "declaration": {
+    "base": {
+      "workspaces": [
+        "code",
+        "gaming",
+        "media"
+      ],
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "requires": {
+        "service:obsidian": [
+          "service:obsidian-index"
+        ]
+      },
+      "notify": {},
+      "scenes": {}
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "services": {
+          "remove": [
+            "obsidian-index"
+          ]
+        }
+      }
+    }
+  },
+  "mode": "x",
+  "expected_error": "removed but required"
+}

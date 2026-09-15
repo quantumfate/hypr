@@ -1,0 +1,88 @@
+{
+  "name": "scenes for unadmitted workspaces stay out of the desk",
+  "declaration": {
+    "base": {
+      "workspaces": [
+        "code",
+        "gaming",
+        "media"
+      ],
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "notify": {},
+      "scenes": {
+        "code": {
+          "blocks": []
+        },
+        "gaming": {
+          "blocks": [
+            {
+              "classes": [
+                "Dofus.x64"
+              ],
+              "order": 1,
+              "share": 0.67
+            }
+          ]
+        },
+        "media": {
+          "blocks": []
+        }
+      }
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "workspaces": {
+          "only": [
+            "code",
+            "media"
+          ]
+        }
+      }
+    }
+  },
+  "mode": "x",
+  "expected": {
+    "mode": "x",
+    "workspaces": [
+      "code",
+      "media"
+    ],
+    "bindings": [
+      "root",
+      "dofus"
+    ],
+    "services": [
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
+    ],
+    "projects": [
+      "obsidian",
+      "quantumnix"
+    ],
+    "scenes": {
+      "code": {
+        "blocks": []
+      },
+      "media": {
+        "blocks": []
+      }
+    },
+    "notify": {},
+    "revoke": {},
+    "presentation": {}
+  }
+}
