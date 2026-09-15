@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# ,privacy-check — the gate that fails when observation-classified data
+# lands in a repository (LEO-282).
+#
+# The registry (system-config/docs/stores.md) classifies every store the
+# desk keeps: a declaration says what the desk should be — safe to commit;
+# an observation says what was actually done — a diary, and these repos are
+# public. An ignore file is advice; this check is the guarantee.
+#
+# Runs over git-tracked files ("--cached --others --exclude-standard", the
+# same breadth the quickshell token gate uses, so a staged-but-untracked
+# store is caught before a commit can carry it). The observation rows are
+# parsed from the registry rather than mirrored here — the registry is the
+# list — and an unparseable registry fails closed: a privacy gate that
+# cannot see its rules must not pass silently.
+#
+#   ,privacy-check [--history]   the tracked/tree check; --history walks the
+#                                whole git log for the same paths, covering
+#                                what a deletion would have hidden.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+registry="${PRIVACY_REGISTRY:-$SCRIPT_DIR/../../system-config/docs/stores.md}"
+
+die() {
+    printf '%s: %s\n' "${0##*/}" "$1" >&2
+    exit 1
+}
+
+[ -f "$registry" ] || die "registry not found: $registry (set PRIVACY_REGISTRY)"
+
+# The observation rows of the registry: `| <store> | observation |`. Their
+# paths are rules, not stores: a bare name matches any file of that name
+# anywhere; a slashed path matches as a prefix.
+rules=()
+while IFS= read -r line; do
+    store=$(printf '%s' "$line" | awk -F'|' '{print $2}' | xargs)
+    if [ -n "$store" ]; then
+        rules+=("$store")
+    fi
+done < <(grep -E '^\|\s*[a-zA-Z0-9/*._-]+(\s*\+\s*[a-z0-9-]+)?\s*\|\s*observation\s*\|' "$registry" || true)
+
+[ ${#rules[@]} -gt 0 ] || die "the registry carries no observation rows — the gate cannot see its rules"
+
+breaks_file() {
+    for rule in "${rules[@]}"; do
+        case "$1" in
+        "$rule") return 0 ;;
+        "${rule}"/*) return 0 ;;
+        */"${rule}") return 0 ;;
+        esac
+    done
+    return 1
+}
+
+violations=()
+while IFS= read -r f; do
+    # Only real files; a directory tracked wholesale is a future mistake the
+    # filename rule still catches.
+    [ -n "$f" ] || continue
+    for rule in "${rules[@]}"; do
+        case "$f" in
+        "$rule") violations+=("$f (observation rule '$rule')") ;;
+        "${rule}"/*) violations+=("$f (observation rule '$rule')") ;;
+        */"${rule}") violations+=("$f (observation rule '$rule')") ;;
+        esac
+    done
+done < <(git ls-files --cached --others --exclude-standard)
+
+history=()
+if [ "${1-}" = "--history" ]; then
+    while IFS= read -r c; do
+        while IFS= read -r f; do
+            if rule=$(log_sha "$f"); then
+                history+=("$c $f (observation rule '$rule')")
+            fi
+        done < <(git show --name-only --format= "$c" 2>/dev/null || true)
+    done < <(git rev-list HEAD 2>/dev/null || true)
+fi
+
+if [ ${#violations[@]} -gt 0 ]; then
+    printf '%s: plaintext observation data in the tree — the desk refuses:\n' "${0##*/}" >&2
+    for v in "${violations[@]}"; do printf '  %s\n' "$v" >&2; done
+    exit 1
+fi
+
+if [ ${#history[@]} -gt 0 ]; then
+    printf '%s: observation data found in HISTORY:\n' "${0##*/}" >&2
+    for v in "${history[@]:0:40}"; do printf '  %s\n' "$v" >&2; done
+    exit 1
+fi
+
+printf 'privacy: clean (%d rules, %s)\n' "${#rules[@]}" \
+    "$([ "${1-}" = "--history" ] && echo "whole history checked" || echo "tracked tree")"

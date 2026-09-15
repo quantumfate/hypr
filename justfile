@@ -48,6 +48,8 @@ units:
 
 # CI/pre-commit gate: formatting + luacheck + tests (shellcheck/yamllint stay advisory via `lint`)
 check: fmt-check test
+	@../hypr/bin/,privacy-check
+
 	luacheck .
 
 # Ansible playbook syntax check (cheap; part of the CI gate)

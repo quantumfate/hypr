@@ -348,7 +348,8 @@ apply_qt() {
     local palette=$1
     # Separate declarations: within one `local`, the earlier assignment has not
     # taken effect yet, so $palette would be empty here.
-    local colors=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" qt "catppuccin-$palette-$ACCENT")
+    local colors
+    colors=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" qt "catppuccin-$palette-$ACCENT")
     local applied=()
     for v in qt5ct qt6ct; do
         local conf="$CONFIG/$v/$v.conf" scheme="$CONFIG/$v/colors/$colors.conf"
