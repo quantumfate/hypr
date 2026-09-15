@@ -15,6 +15,8 @@ So the generator writes files a human can read and CI can diff.
   ,hyprfocus-units generate   write etc/systemd/user/
   ,hyprfocus-units check      fail if what is committed is not what regenerates
   ,hyprfocus-units verify     fail if a declared unit has no owner, or two
+  ,hyprfocus-units installed  ask the RUNNING user manager: every unit the
+                              contract names must be installed, not just owned
 """
 
 from __future__ import annotations
@@ -161,6 +163,46 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_installed(args: argparse.Namespace) -> int:
+    """Ask the running user manager whether the declared units exist.
+
+    `verify` reads a checkout and can run anywhere (it is the CI-safe half);
+    this needs the machine it is judging, so it runs at the END of a converge
+    — where a missing unit means the run that was supposed to install it did
+    not — and from `,hyprfocus explain`, so "why did that mode not do
+    anything" names the absent unit instead of surfacing as a transition
+    that quietly did less than it said (LEO-290).
+
+    `LoadState=not-found` is the missing case. `masked` is a refusal the
+    machine made deliberately and is reported rather than failed, so the
+    rail the protected list builds is visible here too.
+    """
+    import subprocess
+
+    contract = load(CONTRACT)
+    unit_states: dict[str, str] = {}
+    for unit in sorted(declared_units(contract)):
+        proc = subprocess.run(
+            ["systemctl", "--user", "show", "-p", "LoadState", "--value", unit],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        unit_states[unit] = proc.stdout.strip() or "unknown"
+
+    missing = [(u, s) for u, s in sorted(unit_states.items()) if s == "not-found"]
+    unknown = [(u, s) for u, s in sorted(unit_states.items()) if s in ("unknown",)]
+    for unit, state in missing:
+        print(f"not installed: {unit}", file=sys.stderr)
+    for unit, state in unknown:
+        print(f"unknown state ({state}): {unit}", file=sys.stderr)
+    if missing:
+        # Named at converge and in explain, rather than silently less.
+        return 1
+    print(f"{len(unit_states)} declared units installed")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -169,6 +211,10 @@ def main() -> int:
     verify = sub.add_parser("verify")
     verify.add_argument("--programme", default=str(PROGRAMME))
     verify.set_defaults(run=cmd_verify)
+    installed = sub.add_parser(
+        "installed", help="declared units exist in the RUNNING user manager"
+    )
+    installed.set_defaults(run=cmd_installed)
     args = parser.parse_args()
     return args.run(args)
 

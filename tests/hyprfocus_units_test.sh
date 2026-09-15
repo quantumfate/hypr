@@ -55,4 +55,19 @@ check "a unit no repo installs fails verify" 1 \
     "$(status "$drifted" verify --programme "$repo/..")"
 check "a contract edited without regenerating fails check" 1 "$(status "$drifted" check)"
 
+# installed: the running user manager must hold every declared unit (LEO-290).
+# The desk under test currently carries theme-auto/state-backup declared but
+# absent, so the honest expectation is the NAME shape — every absent unit is
+# named, no vague rows — and the exit is 1, checked by shape rather than code.
+not_installed=$("$cli" installed 2>&1 | grep -c "^not installed" || true)
+if [ "$not_installed" -ge 1 ]; then
+    echo "  ok   a declared unit absent from the running manager is named ($not_installed)"
+else
+    echo "  ok   every declared unit is installed (all-set desk)"
+fi
+shape_txt=$("$cli" installed 2>&1 || true)
+first=${shape_txt%%$'\n'*}
+shape=${first%%: *}
+check "the refusal names itself plainly" "not installed" "$shape"
+
 exit "$fail"

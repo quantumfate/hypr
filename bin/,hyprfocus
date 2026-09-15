@@ -538,6 +538,22 @@ def main() -> None:
         if pointer.get("set_at"):
             print(f"{'at':<10}{pointer['set_at']}")
         print(f"{'until':<10}{pointer.get('until') or 'open-ended'}")
+        # A declared unit that no converge has installed shows up as a
+        # transition that quietly did less than it said (LEO-290): name the
+        # absent units here too, so "why did that mode not do anything"
+        # carries the reason. Best-effort: no systemctl means explain still
+        # answers; a --declaration on a foreign tree reads only the store
+        # contract beside this repo.
+        result = subprocess.run(
+            [str(Path(__file__).resolve().parent / ",hyprfocus-units"), "installed"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        for line in result.stderr.splitlines():
+            if line.startswith("not installed: "):
+                print(f"missing  {line.split(': ', 1)[1]}")
+
         return
 
     if args.verb == "resolve":
