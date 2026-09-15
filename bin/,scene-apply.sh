@@ -260,6 +260,27 @@ jq -nc --arg ts "$(date +%s)" --arg mode "$mode" --argjson vetoes "$vetoes_json"
     '{ts: ($ts | tonumber), mode: $mode, vetoes: $vetoes}' \
     >"$log_dir/last.json.tmp" && mv "$log_dir/last.json.tmp" "$log_dir/last.json"
 
+# The units gate (LEO-290): every declared unit must be INSTALLED in the
+# running manager, not merely owned somewhere in the checkout. Runs at the
+# end of this apply (a converge, from the shell's seam), where a missing
+# unit means the run that should have provisioned it did not. Best-effort:
+# the gate missing or failing only logs, never aborts an applied transition.
+if [ "$dry_run" != 1 ] && [ -x "$SCRIPT_DIR/,hyprfocus-units" ]; then
+    if out=$("$SCRIPT_DIR/,hyprfocus-units" installed 2>&1); then
+        log units "gate" "all declared units installed"
+    else
+        while IFS= read -r line; do
+            case "$line" in
+            "not installed: "*)
+                unit=${line#"not installed: "}
+                log units "$unit" "not-installed"
+                ;;
+            esac
+        done <<<"$out"
+        log units "gate" "declared units missing from the running manager"
+    fi
+fi
+
 if [ "$dry_run" = 1 ]; then
     printf '\n  PLAN mood=%s stop=%s hand-back=%s\n' "$mode" "${stop_units:-<none>}" "${starts:-<none>}"
 fi

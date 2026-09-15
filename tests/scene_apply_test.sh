@@ -155,5 +155,19 @@ plan=$(run gaming --dry-run)
 not_contains "a lapsed refusal is not honoured" "vetoed" "$plan"
 teardown
 
+echo "the units gate logs the running manager's gaps (LEO-290)"
+setup
+jq '.moods.gaming.background.prevent = ["obsidian"]' "$FIXTURE" >"$XDG_STATE_HOME/mood-policy.json"
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+run gaming
+if grep -q "not-installed" "$QF_STORE/scene-policy/log.jsonl"; then
+    printf '  ok   absent declared units land in the log\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the units gate logged nothing\n'
+    fail=$((fail + 1))
+fi
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
