@@ -61,6 +61,52 @@ die() {
 }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# --- the variant registry (LEO-210's harder half) ----------------------------
+
+# Where the packs ship. The shell's own assets are read from the config root,
+# so the script reads the same documents the Quickshell singletons do — one
+# registry, two readers, no second table to drift apart.
+# Where the packs ship. The shell's own assets are read from the config root,
+# so the script reads the same documents the Quickshell singletons do — one
+# registry, two readers, no second table to drift apart. An override names the
+# packs directory itself (the tests use it); unadorned, the deployment shape
+# is the config root's assets.
+PACKS="${THEME_PACKS_DIR:-}"
+if [ -z "$PACKS" ]; then
+    candidate="$CONFIG/quickshell/quantumfate/assets/packs"
+    [ -d "$candidate" ] && PACKS="$candidate" || PACKS=""
+fi
+
+# The pack that owns a variant, and the template it names the variant with on
+# a surface. Output is either "" (the pack carries no names for that surface —
+# partial coverage, the applier keeps its own shape) or the raw template.
+surface_template() {
+    local variant=$1 surface=$2 f
+    [ -d "$PACKS" ] || return 0
+    for f in "$PACKS"/*.json; do
+        [ -f "$f" ] || continue
+        if jq -e --arg v "$variant" '.variants[$v] != null' "$f" >/dev/null 2>&1; then
+            jq -r --arg s "$surface" '.surfaces[$s] // ""' "$f"
+            return
+        fi
+    done
+}
+
+# The name a variant carries on a surface. Falls back to the template below
+# when the pack does not name it — Catppuccin's shape, which is exactly what
+# the shipped surface assets implement. Substitutes the variant's id, kind and
+# accent so every surface reads its own vocabulary from data, not from these
+# appliers hardcoding one ecosystem's name shape.
+resolve_surface() {
+    local variant=$1 kind=$2 accent=$3 surface=$4 fallback=$5 name
+    name=$(surface_template "$variant" "$surface")
+    [ -n "$name" ] || name="$fallback"
+    name="${name/"{variant}"/$variant}"
+    name="${name/"{kind}"/$kind}"
+    name="${name/"{accent}"/$accent}"
+    printf '%s' "$name"
+}
+
 # --- the store ---------------------------------------------------------------
 
 # Reads one field. jq is a hard dependency of the shell already. The legacy
@@ -130,8 +176,18 @@ write_result() {
 }
 
 is_palette() {
-    local p=$1
+    local p=$1 f
     for known in "${PALETTES[@]}"; do [ "$p" = "$known" ] && return 0; done
+    # The packs widen the vocabulary (LEO-210/289): any variant the packs
+    # carry is nameable. The appliers' own presence checks hold whether the
+    # surface assets actually exist for it — a leasable name is not a
+    # promise that every surface has the theme.
+    if [ -d "$PACKS" ]; then
+        for f in "$PACKS"/*.json; do
+            [ -f "$f" ] || continue
+            jq -e --arg p "$p" '.variants[$p] != null' "$f" >/dev/null 2>&1 && return 0
+        done
+    fi
     return 1
 }
 
@@ -234,24 +290,25 @@ AWWW_DAEMON=${THEME_AWWW_DAEMON:-awww-daemon}
 sandboxed() { [ -n "${THEME_GSETTINGS-}" ]; }
 
 apply_kitty() {
-    local palette=$1 conf="$CONFIG/kitty/current-theme.conf"
-    [ -f "$CONFIG/kitty/themes/$palette.conf" ] || {
-        echo "kitty: no theme for $palette"
-        record_failed kitty "no theme for $palette"
+    local palette=$1 conf="$CONFIG/kitty/current-theme.conf" theme
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" kitty "$palette")
+    [ -f "$CONFIG/kitty/themes/$theme.conf" ] || {
+        echo "kitty: no theme for $theme"
+        record_failed kitty "no theme for $theme"
         return
     }
     # Remote control is deliberately off in kitty.conf, so this is a file swap
     # plus SIGUSR1, which kitty answers by re-reading its config. Every running
     # window changes colour; no sockets, no open port.
-    ln -sfn "themes/$palette.conf" "$conf"
+    ln -sfn "themes/$theme.conf" "$conf"
     sandboxed || pkill -USR1 -x kitty 2>/dev/null || true
-    echo "kitty: $palette"
+    echo "kitty: $theme"
     record_applied kitty immediate
 }
 
 apply_gtk() {
     local palette=$1 theme scheme
-    theme="catppuccin-$palette-$ACCENT-standard+default"
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" gtk "catppuccin-$palette-$ACCENT-standard+default")
     if [ ! -d "/usr/share/themes/$theme" ] && [ ! -d "$HOME/.themes/$theme" ]; then
         echo "gtk: $theme not installed (see the theming role)"
         record_failed gtk "$theme not installed"
@@ -282,7 +339,7 @@ apply_qt() {
     local palette=$1
     # Separate declarations: within one `local`, the earlier assignment has not
     # taken effect yet, so $palette would be empty here.
-    local colors="catppuccin-$palette-$ACCENT"
+    local colors=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" qt "catppuccin-$palette-$ACCENT")
     local applied=()
     for v in qt5ct qt6ct; do
         local conf="$CONFIG/$v/$v.conf" scheme="$CONFIG/$v/colors/$colors.conf"
@@ -320,21 +377,23 @@ apply_qt() {
 
 # btop names its theme file outright.
 apply_btop() {
-    local palette=$1 conf="$CONFIG/btop/btop.conf"
+    local palette=$1 theme conf="$CONFIG/btop/btop.conf"
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" btop "catppuccin_$palette")
     [ -f "$conf" ] || return 0
-    [ -f "$CONFIG/btop/themes/catppuccin_$palette.theme" ] || return 0
-    sed -i "s|^color_theme = .*|color_theme = \"catppuccin_$palette.theme\"|" "$conf"
-    echo "btop: catppuccin_$palette"
+    [ -f "$CONFIG/btop/themes/$theme.theme" ] || return 0
+    sed -i "s|^color_theme = .*|color_theme = \"$theme.theme\"|" "$conf"
+    echo "btop: $theme"
     record_applied btop immediate
 }
 
 # zathura includes a file by bare name.
 apply_zathura() {
-    local palette=$1 conf="$CONFIG/zathura/zathurarc"
+    local palette=$1 theme conf="$CONFIG/zathura/zathurarc"
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" zathura "catppuccin-$palette")
     [ -f "$conf" ] || return 0
-    [ -f "$CONFIG/zathura/catppuccin-$palette" ] || return 0
-    sed -i "s|^include catppuccin-.*|include catppuccin-$palette|" "$conf"
-    echo "zathura: catppuccin-$palette"
+    [ -f "$CONFIG/zathura/$theme" ] || return 0
+    sed -i "s|^include catppuccin-.*|include $theme|" "$conf"
+    echo "zathura: $theme"
     record_applied zathura immediate
 }
 
@@ -348,20 +407,23 @@ apply_rofi() {
     [ -f "$conf" ] || return 0
     is_light "$palette" && icons="Papirus-Light" || icons="Papirus-Dark"
     sed -i "s|^\( *icon-theme: *\).*|\1\"$icons\";|" "$conf"
-    if [ -f "$custom" ] && [ -f "$HOME/.local/share/rofi/themes/catppuccin-$palette.rasi" ]; then
-        sed -i "s|^@import .*|@import \"catppuccin-$palette\"|" "$custom"
+    local rasi
+    rasi=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" rofi "catppuccin-$palette")
+    if [ -f "$custom" ] && [ -f "$HOME/.local/share/rofi/themes/$rasi.rasi" ]; then
+        sed -i "s|^@import .*|@import \"$rasi\"|" "$custom"
     fi
-    echo "rofi: catppuccin-$palette ($icons)"
+    echo "rofi: $rasi ($icons)"
     record_applied rofi immediate
 }
 
 # wlogout hardcodes the flavour inside every icon path.
 apply_wlogout() {
-    local palette=$1 css="$CONFIG/wlogout/style.css"
+    local palette=$1 theme css="$CONFIG/wlogout/style.css"
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" wlogout "$palette")
     [ -f "$css" ] || return 0
-    [ -d "$CONFIG/wlogout/catppuccin/icons/wlogout/$palette" ] || return 0
-    sed -i -E "s#(/wlogout/catppuccin/icons/wlogout/)[a-z]+/#\\1$palette/#g" "$css"
-    echo "wlogout: $palette"
+    [ -d "$CONFIG/wlogout/catppuccin/icons/wlogout/$theme" ] || return 0
+    sed -i -E "s#(/wlogout/catppuccin/icons/wlogout/)[a-z]+/#\\1$theme/#g" "$css"
+    echo "wlogout: $theme"
     record_applied wlogout immediate
 }
 
@@ -437,7 +499,7 @@ apply_linear() {
 # cursor; miss the last and a fresh login has no cursor theme at all.
 apply_cursor() {
     local palette=$1 theme size
-    theme="catppuccin-$palette-$ACCENT-cursors"
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" cursor "catppuccin-$palette-$ACCENT-cursors")
     size=$(get cursor_size 28)
     if [ ! -d "/usr/share/icons/$theme" ] && [ ! -d "$HOME/.icons/$theme" ] && [ ! -d "$HOME/.local/share/icons/$theme" ]; then
         echo "cursor: $theme not installed"

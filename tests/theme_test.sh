@@ -377,6 +377,64 @@ contains "wallpaper apply reports skipped, not attempted" "skipped (sandboxed)" 
 unset THEME_MAGICK
 teardown
 
+echo "a pack-names a variant the appliers do not (LEO-210's harder half)"
+setup
+# The scratch pack dir: a gruvbox pack shipping partial coverage — the kitty
+# surface named, the others not.
+PACKS="$XDG_STATE_HOME/packs"
+export THEME_PACKS_DIR="$PACKS"
+mkdir -p "$PACKS"
+cat >"$PACKS/gruvbox.json" <<'PACK'
+{
+  "pack": "gruvbox",
+  "accents": {
+    "lavender": "base16", "blue": "base0d", "peach": "base09",
+    "mauve": "base0e", "green": "base0b", "pink": "base17", "teal": "base0c"
+  },
+  "names": { "base": "base00" },
+  "surfaces": { "kitty": "gruvbox-material-{variant}" },
+  "variants": {
+    "gruvbox-material": {
+      "kind": "dark",
+      "slots": {
+        "base00": "#282828", "base01": "#3c3836", "base02": "#504945",
+        "base03": "#665c54", "base04": "#928374", "base05": "#ebdbb2",
+        "base06": "#fbf1c7", "base07": "#f9f5d7", "base08": "#cc241d",
+        "base09": "#d65d0e", "base0a": "#d79921", "base0b": "#98971a",
+        "base0c": "#689d6a", "base0d": "#458588", "base0e": "#b16286",
+        "base0f": "#9d0006", "base10": "#2a2520", "base11": "#1d1d1d",
+        "base12": "#fb4934", "base13": "#fabd2f", "base14": "#b8bb26",
+        "base15": "#8ec07c", "base16": "#83a598", "base17": "#d3869b"
+      }
+    }
+  }
+}
+PACK
+# The surface assets carry what the pack names: kitty has the theme under the
+# registry's own name shape.
+mkdir -p "$XDG_CONFIG_HOME/kitty/themes"
+touch "$XDG_CONFIG_HOME/kitty/themes/gruvbox-material-gruvbox-material.conf"
+
+# The shell's theme.json + mode pointer lease it through the whole desk.
+STORE="$XDG_STATE_HOME/quantum-store/theme.json"
+printf '{"palette":"mocha","mode":"manual"}\n' >"$STORE"
+printf '{"modes":{"gaming":{"name":"gaming","presentation":{"palette":"gruvbox-material"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/quantum-store/focus.json"
+
+get=$("$THEME" get)
+check "the lease resolves through the pack" "gruvbox-material" "$get"
+"$THEME" apply >/dev/null
+check "the kitty surface reads the pack's own name" "themes/gruvbox-material-gruvbox-material.conf" \
+    "$(readlink "$XDG_CONFIG_HOME/kitty/current-theme.conf")"
+
+# Partial coverage is normal, not a failure of the apply: a surface the pack
+# does not name keeps its own shape and records the gap.
+out=$("$THEME" apply 2>&1)
+contains "the unnamed surface records a named failure, not a crash" \
+    "gtk: catppuccin-gruvbox-material-mauve-standard+default not installed" "$out"
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
 
