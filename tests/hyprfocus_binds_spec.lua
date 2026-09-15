@@ -181,3 +181,30 @@ t.describe("admission", function()
     t.eq("dofus,llm,modes,root,screencapture", table.concat(binds.names(), ","))
   end)
 end)
+
+t.describe("the registry's words (LEO-306/287)", function()
+  t.it("a keystr trigger unwraps before the split mines the words", function()
+    -- Requiring the binds module after a fresh load also loads its whichkey
+    -- requirement, whose registry we read through serialize.
+    package.loaded["hypr.hyprfocus.binds"] = nil
+    local stub = require("tests.hl_stub").new()
+    _G.hl = stub
+    stub.bind = function(key)
+      local handle = { key = key, enabled = true }
+      function handle:set_enabled(_) end
+      return handle
+    end
+    package.loaded["hypr.lib.whichkey"] = nil
+    local wk = require("hypr.lib.whichkey")
+    local binds = require("hypr.hyprfocus.binds")
+    binds.reset()
+    -- stack is at root during a plain require; a described bind lands
+    -- in the reset node with its SPEAKING words, not the whole trigger.
+    binds.bind("+SUPER+d+", function() end, { description = "A described bind" })
+    local registry = wk.serialize()
+    local items = registry["reset"] and registry["reset"].items or {}
+    t.eq(1, #items)
+    t.eq("d", items[1].key)
+    t.eq("SUPER", items[1].mods[1])
+  end)
+end)

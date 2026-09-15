@@ -51,7 +51,11 @@ local MODES = "modes"
 ---@return string[] mods
 ---@return string key
 local function split_key(key)
-  local mods, bare = key:match("^(.*)+([^+]+)$")
+  -- Trigger strings arrive wrapped by keystr ("+SUPER+a+"), so the wrapping
+  -- pluses are the spec's own words and come off before the split: the mods
+  -- are the interior words, the key is the last one.
+  key = key:gsub("^%++", ""):gsub("%++$", "")
+  local mods, bare = key:match("^(.*)%+([^+]+)$")
   if not bare then
     return {}, key
   end
