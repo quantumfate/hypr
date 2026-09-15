@@ -32,6 +32,11 @@ ROOT="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
 LEGACY="${XDG_STATE_HOME:-$HOME/.local/state}/theme.json"
 STATE="$ROOT/theme.json"
 RESULT="$ROOT/theme.result.json"
+# The mode pointer and the declaration live in the same store the shell keeps
+# (the lease is read there, never written — a mode leases, a user points).
+LEGACY_FOCUS="${XDG_STATE_HOME:-$HOME/.local/state}/focus.json"
+FOCUS="$ROOT/focus.json"
+DECLARATION="$ROOT/hyprfocus.json"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wallpapers"
 
@@ -144,10 +149,31 @@ is_mood() {
 
 # --- which palette --------------------------------------------------------
 
-# `mode: auto` means the sun decides; `manual` means a deliberate pick stands
-# until it is handed back. Resolving here rather than in the timer keeps every
-# entry point agreeing on what "now" looks like.
-resolve() {
+# The palette a mode leases while it runs (LEO-288). The declaration names one
+# in the mode's `presentation`; the pointer (focus.json) says the mode is on,
+# and a timed mode whose `until` already passed reads as neutral — the same
+# rule the mode policy keeps everywhere else. "" means no lease held, and an
+# unknown lease palette reads as no lease: resolution never fails.
+lease() {
+    local mode until until_ms palette file="$FOCUS"
+    [ -f "$file" ] || { [ ! -f "$LEGACY_FOCUS" ] || file="$LEGACY_FOCUS"; }
+    [ -f "$file" ] || return 0
+    mode=$(jq -r '.mode // "neutral"' "$file" 2>/dev/null) || return 0
+    [ "$mode" != neutral ] || return 0
+    until=$(jq -r '.until // ""' "$file" 2>/dev/null)
+    if [ -n "$until" ]; then
+        until_ms=$(date -d "$until" +%s%3N 2>/dev/null || echo 0)
+        [ "$(date +%s%3N)" -le "$until_ms" ] || return 0
+    fi
+    palette=$(jq -r --arg m "$mode" '.modes[$m].presentation.palette // ""' "$DECLARATION" 2>/dev/null) || return 0
+    is_palette "$palette" && printf '%s' "$palette" || return 0
+}
+
+# The baseline: the palette the desk shows when no lease is held. `mode: auto`
+# means the sun decides; `manual` means a deliberate pick stands until it is
+# handed back. Resolving here rather than in the timer keeps every entry point
+# agreeing on what "now" looks like.
+baseline() {
     local mode palette
     mode=$(get mode auto)
     if [ "$mode" = "auto" ]; then
@@ -156,6 +182,12 @@ resolve() {
         palette=$(get palette macchiato)
         is_palette "$palette" && printf '%s' "$palette" || printf 'macchiato'
     fi
+}
+
+resolve() {
+    local lease
+    lease=$(lease)
+    if [ -n "$lease" ]; then printf '%s' "$lease"; else baseline; fi
 }
 
 # Sunrise/sunset without a network call or a geolocation dependency: the hours
@@ -605,11 +637,15 @@ accent_hex() {
 # --- commands ----------------------------------------------------------------
 
 cmd_apply() {
-    local palette
+    local palette baseline
     palette=$(resolve)
-    # Keep the resolved palette in the store so the shell and the script never
-    # disagree about what is showing, even in auto mode.
-    put "$(jq -n --arg p "$palette" '{palette: $p}')"
+    baseline=$(baseline)
+    # Keep the BASELINE in the store so the shell and the script never
+    # disagree about what the desk shows with no lease held, even in auto
+    # mode. A lease is never written here: a mode holds a palette the way it
+    # holds a window, and when the mode ends the store still points at what
+    # the sun (or the user) chose — a mood must not bury the baseline.
+    put "$(jq -n --arg p "$baseline" '{palette: $p}')"
 
     apply_kitty "$palette"
     apply_gtk "$palette"

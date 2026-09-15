@@ -379,3 +379,72 @@ teardown
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
+
+echo "a mode leases a palette while it runs"
+setup
+printf '{"mode":"manual","palette":"mocha","day":"latte","night":"macchiato"}\n' >"$STORE"
+# The pointer is one store the script never writes: a live mode (no `until`)
+# whose declaration names a palette in its presentation.
+printf '{"modes":{"gaming":{"name":"Gaming","presentation":{"palette":"latte"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"gaming","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+
+# The lease is in effect: the manual pick (mocha) must not win while the mode
+# holds, whatever the store's pointer says.
+check "a held lease is found" "latte" "$("$THEME" get)"
+"$THEME" apply >/dev/null
+check "kitty points at the leased palette" "themes/latte.conf" \
+    "$(readlink "$XDG_CONFIG_HOME/kitty/current-theme.conf")"
+
+# The lease replaces the pointer in effect, never the pointer itself: the
+# store's palette and mode survive the apply untouched, so when the mode ends
+# the sun's or the user's choice comes back.
+check "the baseline palette is intact" "mocha" "$(field palette)"
+check "the baseline mode is intact" "manual" "$(field mode)"
+
+# Not holding: leaving the mode (the pointer going neutral) resolves again
+# from the baseline.
+printf '{"mode":"neutral","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+check "the lease is given back when the mode ends" "mocha" "$("$THEME" get)"
+
+# A timed mode whose `until` already passed reads as neutral — the same rule
+# the mode policy keeps everywhere else.
+printf '{"mode":"gaming","until":"2020-01-01T00:00:00Z"}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+check "a lapsed lease resolves from the baseline" "mocha" "$("$THEME" get)"
+
+# An unknown lease palette reads as none — resolution never fails.
+printf '{"mode":"gaming","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+printf '{"modes":{"gaming":{"name":"Gaming","presentation":{"palette":"dracula"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+check "an unknown lease falls to the baseline" "mocha" "$("$THEME" get)"
+
+# No declaration at all: no lease, no crash.
+rm "$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+check "a missing declaration still resolves" "mocha" "$("$THEME" get)"
+teardown
+
+echo "auto mode keeps resolving under the lease"
+setup
+printf '{"mode":"auto","day":"latte","night":"mocha","palette":"frappe"}\n' >"$STORE"
+printf '{"modes":{"gaming":{"name":"Gaming","presentation":{"palette":"frappe"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"gaming","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+# Whatever the sun picks, the store's pointer follows it: so the lease ending
+# later hands the desk back to the same palette the sun would have applied.
+"$THEME" apply >/dev/null
+case "$(field palette)" in
+latte | mocha)
+    printf '  ok   the store pointer follows the sun (%s)\n' "$(field palette)"
+    pass=$((pass + 1))
+    ;;
+*)
+    printf '  FAIL auto pointer moved to %s, expected a day/night palette\n' "$(field palette)"
+    fail=$((fail + 1))
+    ;;
+esac
+teardown
