@@ -624,6 +624,22 @@ submap.tree({
         qs.call("dofus", "reload")
       end,
     },
+    -- The on-demand System Center (LEO-226): settings/actions live in the
+    -- widget, which-key carries the door.
+    {
+      key = "u",
+      desc = "Open the System Center",
+      action = function()
+        qs.call("systemcenter", "toggle")
+      end,
+    },
+    {
+      key = "b",
+      desc = "Open the Control Centre",
+      action = function()
+        qs.call("control", "toggle")
+      end,
+    },
     {
       key = "n",
       desc = "Show roster",
