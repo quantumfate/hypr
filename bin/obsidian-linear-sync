@@ -5,4 +5,12 @@ set -euo pipefail
 BIN="$(dirname "$(readlink -f "$0")")"
 export PATH="$HOME/.local/bin:$PATH"   # pass-cli installs here
 
+# Proton Pass's keyring choice must reach pass-cli on EVERY run, whichever
+# context launches this (systemd unit, a terminal, an ad-hoc job): the secret
+# read is how the sync authenticates, and a headless invocation outside the
+# session env would otherwise lock. The unit pins the same variable; the
+# wrapper guarantees it the rest of the time, defaulting to dbus — the
+# unlocked session's ring — so a bare run works the same as a managed one.
+export PROTON_PASS_LINUX_KEYRING="${PROTON_PASS_LINUX_KEYRING:-dbus}"
+
 exec python3 "$BIN/obsidian_linear_sync.py" "$@"
