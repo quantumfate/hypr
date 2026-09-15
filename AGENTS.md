@@ -24,6 +24,8 @@ a separate, visually distinct mode.
 
 Read the Linear issue's `Model tier` label before starting.
 
+Named models for each tier live in [LEO-169](https://linear.app/quantumfate/issue/LEO-169). Do not copy that table here.
+
 - **Frontier**
   - Use a frontier model.
   - Required for architecture, security, systemd/service lifecycle, state

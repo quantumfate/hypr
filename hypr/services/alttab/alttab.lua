@@ -98,12 +98,50 @@ M.__index = M
 
 M:bind(true)
 
-hl.define_submap("alttab", function()
-  hl.bind("Return", hl.dsp.send_shortcut({ mods = "", key = "return", window = "class:alttab" }))
-  hl.bind("SHIFT + Return", hl.dsp.send_shortcut({ mods = "SHIFT", key = "return", window = "class:alttab" }))
-  hl.bind("escape", hl.dsp.send_shortcut({ mods = "", key = "escape", window = "class:alttab" }))
-  hl.bind("SHIFT + escape", hl.dsp.send_shortcut({ mods = "SHIFT", key = "escape", window = "class:alttab" }))
-end)
+-- The alt-tab picker is a contextual submap: it is entered programmatically
+-- when the picker opens, and its forwarding binds only matter while the
+-- class:alttab window is focused. Defining it at config load through the same
+-- tree grammar as other submaps makes it visible to which-key and to mode
+-- admission, instead of a raw hl.define_submap outside the three classes
+-- (LEO-324).
+local submap = require("hypr.lib.submap")
+
+submap.tree({
+  name = "alttab",
+  desc = "Alt-tab picker",
+  entries = {
+    {
+      key = "return",
+      desc = "Pick selected window",
+      stay = true,
+      opts = { window = "class:alttab" },
+      action = hl.dsp.send_shortcut({ mods = "", key = "return", window = "class:alttab" }),
+    },
+    {
+      key = "return",
+      mods = { "SHIFT" },
+      desc = "Pick selected window (reverse)",
+      stay = true,
+      opts = { window = "class:alttab" },
+      action = hl.dsp.send_shortcut({ mods = "SHIFT", key = "return", window = "class:alttab" }),
+    },
+    {
+      key = "escape",
+      desc = "Cancel",
+      stay = true,
+      opts = { window = "class:alttab" },
+      action = hl.dsp.send_shortcut({ mods = "", key = "escape", window = "class:alttab" }),
+    },
+    {
+      key = "escape",
+      mods = { "SHIFT" },
+      desc = "Cancel (reverse)",
+      stay = true,
+      opts = { window = "class:alttab" },
+      action = hl.dsp.send_shortcut({ mods = "SHIFT", key = "escape", window = "class:alttab" }),
+    },
+  },
+})
 
 hl.workspace_rule({ workspace = "special:alttab", gaps_out = 0, gaps_in = 0, border_size = 0 })
 

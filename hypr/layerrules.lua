@@ -14,10 +14,10 @@ hl.layer_rule({ match = { namespace = "notifications" }, animation = "slide" })
 -- The scrim is 0.5, so 0.55 keeps the dim passing through unblurred while
 -- giving the thinnest mood 0.07 of room.
 --
--- Cheatsheet: fullscreen overlay (dim backdrop + solid-ish card). Pop in with a
--- subtle zoom (reads better than a flat fade for a centered modal), and frost
--- only the card: ignore_alpha above the backdrop's alpha (~0.5) so the thin dim
--- passes through unblurred while the card gets a blur.
+-- Cheatsheet: fullscreen reference card, no dim backdrop. Pop in with a subtle
+-- zoom (reads better than a flat fade for a centered card), and frost only the
+-- card: ignore_alpha sits under the card's alpha so the wallpaper stays visible
+-- behind the transparent surround.
 hl.layer_rule({
   match = { namespace = "quickshell-cheatsheet" },
   animation = "popin 92%",
@@ -25,20 +25,9 @@ hl.layer_rule({
   ignore_alpha = 0.55,
 })
 
--- Passive peek cheatsheet: non-interactive contextual panel (no dim backdrop,
--- no keyboard focus — see CheatSheetPeek.qml). The fade is owned by the QML
--- (fast in, slower out, independent timing), so the compositor maps it with no
--- animation of its own — it just frosts the card, like the Dofus HUD.
-hl.layer_rule({
-  match = { namespace = "quickshell-cheatsheet-peek" },
-  animation = "none",
-  blur = true,
-  ignore_alpha = 0.1,
-})
-
--- Which-key overlay (LEO-222): the live SUPER-Space leader. Same feel as the
--- cheatsheet — pop in, frost the card — but the QML owns the fade-out timing
--- so dismissal can start before the submap reset lands.
+-- Which-key overlay (LEO-222 / LEO-327 / LEO-300): recursive submap HUD. Same
+-- feel as the cheatsheet — pop in, frost the card — but the QML owns the
+-- fade-out timing so dismissal can start before the submap reset lands.
 hl.layer_rule({
   match = { namespace = "quickshell-whichkey" },
   animation = "popin 92%",

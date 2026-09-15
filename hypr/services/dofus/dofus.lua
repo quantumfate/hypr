@@ -147,7 +147,6 @@ dofus_bind(
 -- toggle, opening the team UI) — nothing you need mid-fight, so no more team
 -- submaps and no team selection here (the UI owns that).
 submap.tree({
-  mods = { config.main_mod, "d" },
   name = "dofus",
   desc = "Dofus",
   sticky = false,

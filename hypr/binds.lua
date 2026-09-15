@@ -100,7 +100,6 @@ bind.exec("return", "uwsm app -- " .. config.apps.terminal.cmd, {
 })
 
 submap.tree({
-  mods = { config.main_mod, config.secondary_mod, "return" },
   name = "terminal",
   desc = "Terminal",
   entries = {
@@ -117,7 +116,6 @@ submap.tree({
 -- so it and `C-b C-o` inside tmux always agree), and the key you press picks
 -- which window of the project session the new client lands on.
 submap.tree({
-  mods = { config.main_mod, "p" },
   name = "project",
   desc = "Projects",
   entries = {
@@ -163,7 +161,6 @@ bind.exec("r", config.apps.app_launcher.cmd, {
 })
 
 submap.tree({
-  mods = { config.main_mod, "a" },
   name = "applications",
   desc = "Applications",
   entries = {
@@ -193,7 +190,6 @@ submap.tree({
 })
 
 submap.tree({
-  mods = { config.main_mod, "c" },
   name = "configuration",
   desc = "Configuration",
   entries = {
@@ -203,7 +199,6 @@ submap.tree({
 })
 
 submap.tree({
-  mods = { config.main_mod, "w" },
   name = "special-ws",
   desc = "Special workspaces",
   entries = {
@@ -276,7 +271,6 @@ for _, ls in ipairs(layout_lib.get_submaps()) do
 end
 
 submap.tree({
-  mods = { config.main_mod, "m" },
   name = "layout",
   desc = "Layout messages",
   entries = layout_groups,
@@ -323,7 +317,6 @@ hyprfocus_binds.bind(config.main_mod .. " + x", cycle_workspace_layout, {
 })
 
 submap.tree({
-  mods = { config.main_mod, config.secondary_mod, "r" },
   name = "window-management",
   desc = "Window management",
   entries = {
@@ -351,7 +344,6 @@ hyprfocus_binds.bind(config.main_mod .. " + " .. config.tertiary_mod .. " + m", 
 end, { description = "Minimize Window", submap_universal = true })
 
 submap.tree({
-  mods = { config.main_mod, "s" },
   name = "screencapture",
   desc = "Screen capture",
   entries = {
@@ -377,11 +369,13 @@ submap.tree({
   },
 })
 
--- === Which-key (LEO-222) ===
+-- === Which-key (LEO-222 / LEO-327) ===
 --
--- SUPER Space is the leader: it opens a root overlay listing the named
--- submaps. Each entry enters the existing submap, so the overlay re-renders
--- that submap's own entries in place, and escape unwinds exactly one level.
+-- SUPER Space is the leader: it opens the which-key overlay listing the
+-- named groups. Each entry is an `opens` leaf that nests into the destination
+-- submap and stays there, so the overlay re-renders that group's keys in place
+-- and escape unwinds exactly one level back to the leader. The group trees
+-- below have no direct leader; the only way to reach them is through the hub.
 -- The renderer is modules/whichkey in the quickshell repo, fed the tree that
 -- hypr/lib/whichkey.lua dumps at config load.
 local kb_layouts = { "Dvorak (custom)", "Programmer Dvorak" }
@@ -601,7 +595,6 @@ submap.tree({
 })
 
 submap.tree({
-  mods = { config.main_mod, "q" },
   name = "shell",
   desc = "Shell / Quickshell",
   entries = {
@@ -634,7 +627,7 @@ submap.tree({
       end,
     },
     {
-      key = "b",
+      key = "c",
       desc = "Open the Control Centre",
       action = function()
         qs.call("control", "toggle")

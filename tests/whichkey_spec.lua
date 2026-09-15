@@ -45,19 +45,22 @@ t.describe("whichkey registry (LEO-222)", function()
       entries = {
         { key = "g", desc = "Grouped", entries = { { key = "l", desc = "Leaf", action = function() end } } },
         { key = "e", mods = { "SHIFT" }, desc = "Plain", action = function() end },
+        { key = "o", desc = "Opens", opens = "wk-other" },
       },
     })
     local node = whichkey.node("wk-root-a")
     t.eq("", node.parent, "root has no parent")
-    t.eq(2, #node.items, "two entries")
-    local group, plain = node.items[1], node.items[2]
+    t.eq(3, #node.items, "three entries")
+    local group, plain, opens = node.items[1], node.items[2], node.items[3]
     t.eq("g", group.key)
     t.eq("Grouped", group.desc)
     t.ok(group.group, "group flagged")
     t.eq("wk-root-a-g", group.child, "default child name")
-    t.eq(false, plain.group, "leaf not flagged")
+    t.eq(false, plain.group, "plain leaf not flagged")
     t.eq("Plain", plain.desc)
     t.eq({ "SHIFT" }, plain.mods, "mods carried")
+    t.ok(opens.group, "opens leaf rendered as a group")
+    t.eq("wk-other", opens.child, "opens leaf names its destination")
   end)
 
   t.it("records nested children with their parent", function()
@@ -221,5 +224,106 @@ t.describe("dumping only what is loaded", function()
     local admitted = dumped(wk, { llm = true, flex = true, dofus = true })
     t.ok(not withheld:match('"dofus"'), "the leaf is gone while the tree is withheld")
     t.ok(admitted:match("Dofus"), "the leaf returns when the mode brings the tree back")
+  end)
+end)
+
+t.describe("boot dump is the admitted set", function()
+  t.it("hyprfocus.apply writes a filtered whichkey document", function()
+    -- The boot path must not dump the full registry. Applying the active mode
+    -- already re-dumps from the loaded set; this pins that contract end-to-end.
+    for _, mod in ipairs({
+      "hypr.lib.store",
+      "hypr.hyprfocus.binds",
+      "hypr.hyprfocus.hold",
+      "hypr.hyprfocus.workspaces",
+      "hypr.hyprfocus.resolve",
+      "hypr.hyprfocus.plan",
+      "hypr.hyprfocus.init",
+      "hypr.lib.whichkey",
+    }) do
+      package.loaded[mod] = nil
+    end
+
+    local stub = require("tests.hl_stub").new()
+    _G.hl = stub
+    stub.bind = function(key)
+      local h = { key = key, enabled = true }
+      function h:set_enabled(v)
+        self.enabled = v
+      end
+      return h
+    end
+    stub.define_submap = function(_, fn)
+      fn()
+    end
+
+    local declaration = {
+      version = 1,
+      base = {
+        workspaces = { "code" },
+        bindings = { "root", "terminal", "dofus" },
+      },
+      modes = {
+        neutral = { name = "Neutral" },
+        work = { name = "Work", bindings = { remove = { "dofus" } } },
+      },
+    }
+    package.loaded["hypr.lib.store"] = {
+      define = function(name)
+        local data
+        if name == "hyprfocus" then
+          data = declaration
+        elseif name == "focus" then
+          data = { mode = "work" }
+        elseif name == "hyprfocus-held" then
+          data = {}
+        else
+          data = {}
+        end
+        return {
+          get = function(_, key)
+            return key == nil and data or data[key]
+          end,
+          set = function(_, patch)
+            for k, v in pairs(patch) do
+              data[k] = v
+            end
+          end,
+        }
+      end,
+    }
+
+    local binds = require("hypr.hyprfocus.binds")
+    binds.reset()
+    binds.bind("+SUPER+t+", function() end, { description = "Test root bind" })
+    binds.submap("terminal", function()
+      binds.bind("a")
+    end)
+    binds.submap("dofus", function()
+      binds.bind("b")
+    end)
+
+    local workspaces = require("hypr.hyprfocus.workspaces")
+    workspaces.reset()
+    local rule = hl.workspace_rule({ workspace = "code", default_name = "code" })
+    workspaces.record("code", rule)
+
+    local wk = require("hypr.lib.whichkey")
+    wk.register("terminal", nil, { { key = "t", desc = "Terminal" } })
+    wk.register("dofus", nil, { { key = "d", desc = "Dofus" } })
+
+    local hyprfocus = require("hypr.hyprfocus.init")
+    local path = os.tmpname()
+    wk.path = path
+    local report = hyprfocus.apply("work")
+    t.ok(report, tostring(report))
+
+    local f = assert(io.open(path, "r"))
+    local raw = f:read("a")
+    f:close()
+    os.remove(path)
+    t.ok(raw:match("terminal"), raw)
+    t.ok(raw:match("Test root bind"), "boot dump dropped the root/reset node")
+    t.ok(not raw:match("dofus"), "boot dump contained a withheld tree")
   end)
 end)

@@ -88,6 +88,9 @@ function M.register(name, parent, entries)
     elseif e.opens then
       -- A leaf that only enters another submap: the renderer needs to know
       -- its destination so a withheld tree can take its leaf down too.
+      -- Treat it as a group in the overlay so the nesting affordance renders
+      -- (LEO-327): pressing the key enters the submap and the menu follows.
+      item.group = true
       item.child = e.opens
     end
     node.items[#node.items + 1] = item
@@ -153,12 +156,20 @@ function M.dump(admitted)
   if admitted then
     out = {}
     for name, node in pairs(nodes) do
-      if admitted[tree_of(name)] then
+      -- The registry's root node ("reset") holds the binds outside any submap;
+      -- in the admission grammar that tree is called "root". Map the name so
+      -- the cheatsheet keeps its top-level entries when root is loaded.
+      local tree = tree_of(name)
+      if tree == RESET then
+        tree = "root"
+      end
+      if admitted[tree] then
         local rendered = { parent = node.parent, items = {} }
         for _, item in ipairs(node.items) do
           -- An `opens` leaf answers for its destination tree; a group's child
           -- is its own nesting and trivially admitted with its tree.
-          if not item.child or admitted[tree_of(item.child)] then
+          local child_tree = item.child and tree_of(item.child) or nil
+          if not item.child or admitted[child_tree] then
             rendered.items[#rendered.items + 1] = item
           end
         end

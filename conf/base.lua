@@ -34,9 +34,6 @@ local geometry_profiles = {
 
 return {
   main_mod = "SUPER",
-  -- Passive peek cheatsheet: how long to dwell in a submap before it fades in.
-  -- Short enough to feel like which-key rather than a delayed reaction.
-  peek_delay_ms = 350,
   primary_mod = "CTRL",
   secondary_mod = "SHIFT",
   tertiary_mod = "ALT",

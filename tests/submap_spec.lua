@@ -109,6 +109,47 @@ t.describe("binding arity of trees", function()
     t.eq(before, binds.size("opened-tree"), "the door counts as the destination tree's")
   end)
 
+  t.it("an opens leaf nests into its destination and stays there", function()
+    -- The hub's group entries are `opens` leaves: they enter the destination
+    -- submap and must not reset the tree (LEO-327).
+    submap.reset()
+    submap.tree({
+      mods = { "SUPER", "o" },
+      name = "hub-nest",
+      entries = {
+        {
+          key = "d",
+          desc = "Door",
+          opens = "nested-tree",
+          action = function()
+            submap.enter("nested-tree")
+          end,
+        },
+      },
+    })
+    submap.tree({
+      name = "nested-tree",
+      entries = {
+        { key = "x", desc = "Leaf", action = function() end },
+      },
+    })
+    submap.enter("hub-nest")
+    local action
+    for _, b in ipairs(hl.binds) do
+      if b.submap == "hub-nest" and b.key == "+d+" then
+        action = b.action
+      end
+    end
+    t.ok(action, "opens leaf bound")
+
+    local execs_before = #hl.exec_cmds
+    local dispatch_before = #hl.dispatched
+    action()
+    t.eq(execs_before, #hl.exec_cmds, "opens leaf does not dismiss the overlay")
+    t.eq(dispatch_before + 1, #hl.dispatched, "opens leaf dispatches exactly one submap change")
+    t.eq(hl.dispatched[#hl.dispatched].args[1], "nested-tree", "opens leaf lands in the destination")
+  end)
+
   t.it("escapes are root facts: a withheld tree never takes the exit", function()
     -- The way out is structural (LEO-303): created inside the submap body,
     -- but re-anchored to root, since withholding the tree must not take the

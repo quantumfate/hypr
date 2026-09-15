@@ -150,7 +150,9 @@ local function define(name, entries, sticky)
           if e.action then
             run(e.action)
           end
-          if not stay then
+          -- `opens` means nest: the leaf enters another submap and stays there
+          -- (LEO-327). A plain leaf still exits the tree after its action.
+          if not stay and not e.opens then
             M.exit()
           end
         end, opts)
@@ -190,15 +192,15 @@ end
 function M.tree(spec)
   hooks[spec.name] = { enter = spec.on_enter, leave = spec.on_leave }
   whichkey.register(spec.name, nil, spec.entries)
-  -- The entering leaf belongs to the DESTINATION tree (LEO-303): withholding
-  -- the tree takes its door with the room. Binding it here runs at root
-  -- scope (stack[2] is nil), so without the attribution every tree's leader
-  -- was filed under root — always live — and a mode that withheld the tree
-  -- left a live key opening a submap whose contents were gone.
-  local leader = hyprfocus_binds.bind(keystr(spec.mods), function()
-    M.enter(spec.name)
-  end, { description = (spec.desc or spec.name) .. "…" })
-  hyprfocus_binds.attribute(leader, spec.name)
+  -- Trees entered by a key carry the leader here; trees entered programmatically
+  -- (e.g. the alt-tab picker) omit `mods`. The entering leaf still belongs to
+  -- the destination tree (LEO-303), so withholding the tree takes its door.
+  if spec.mods then
+    local leader = hyprfocus_binds.bind(keystr(spec.mods), function()
+      M.enter(spec.name)
+    end, { description = (spec.desc or spec.name) .. "…" })
+    hyprfocus_binds.attribute(leader, spec.name)
+  end
   define(spec.name, spec.entries, spec.sticky or false)
 end
 
