@@ -21,9 +21,13 @@
 # Units on the contract's `protected` list are never touched, period. Stops go
 # through systemd — SIGTERM + the unit's own TimeoutStopSec, never SIGKILL — so
 # a service mid-write gets a chance to finish. A mood that DEFERS a task stops
-# it like prevent does but records it as deferred. `graceful` entries names in
-# the contract are only REQUESTED and logged: the message protocol is LEO-242,
-# the seam here is that they are never forced.
+# it like prevent does but records it as deferred. A resource may refuse a
+# stop (LEO-256): it writes a veto window into the store
+# (scene-policy/veto.json, { "<unit>": { reason, until } }), this script
+# honours it for that apply and logs "vetoed" so the shell can surface the
+# refusal once; a veto that keeps being written lands in the log rather than
+# silently blocking forever. The protocol is for the things systemd cannot
+# speak for — units keep their own TimeoutStopSec semantics.
 #
 # Every decision lands in $XDG_STATE_HOME/scene-policy/log.jsonl (the scene-
 # policy logging workspace, LEO-241, reads it); the last state is written to
@@ -184,15 +188,47 @@ for unit in "${stopped_now[@]}"; do
     esac
 done
 
+# --- the veto (LEO-256) ------------------------------------------------------
+# Holds consulted per apply. A unit files its refusal at
+# scene-policy/veto.json: { "<unit>": { "reason": "...", "until": epoch-ms } }
+# — written by the resource itself, since systemd cannot speak for why a unit
+# is mid-work. An entry whose window has passed does not hold. A veto keeps
+# the stop: the unit is recorded (for the shell to surface once), skipped,
+# and the transition completes; the log carries every veto.
+
+VETOES=()  # "unit<TAB>reason", one per held stop
+STOPPED=() # units actually stopped this apply (vetoed units are not)
+
+veto_against() {
+    local unit=$1 entry until_ms
+    [ -f "$log_dir/veto.json" ] || return 1
+    entry=$(jq -r --arg u "$unit" '.[$u].reason // ""' "$log_dir/veto.json" 2>/dev/null)
+    [ -n "$entry" ] || return 1
+    until_ms=$(jq -r --arg u "$unit" '.[$u].until // 0' "$log_dir/veto.json" 2>/dev/null)
+    [ "$(date +%s%3N)" -lt "$until_ms" ] || return 1
+    return 0 # the window holds: this apply may not stop the unit
+}
+
+record_veto() {
+    local unit=$1 reason=$2
+    VETOES+=("$unit"$'\t'"$reason")
+}
+
 # Apply, or print the plan under --dry-run. systemd stop/start sends SIGTERM and
 # honours the unit's own TimeoutStopSec — nothing is ever force-killed here.
 for unit in $stop_units; do
+    if veto_against "$unit"; then
+        record_veto "$unit" "$(jq -r --arg u "$unit" '.[$u].reason' "$log_dir/veto.json" 2>/dev/null)"
+        log stop "$unit" "vetoed"
+        continue
+    fi
     if [ "$dry_run" = 1 ]; then
         log stop "$unit" "would-stop"
         continue
     fi
     if "$SYSTEMCTL" --user stop "$unit" >/dev/null 2>&1; then
         log stop "$unit" "stopped"
+        STOPPED+=("$unit")
     else
         log stop "$unit" "failed"
     fi
@@ -211,9 +247,18 @@ for unit in $starts; do
 done
 
 # Persist the applied state so the next transition knows what to hand back.
-stopped_json=$(printf '%s' "$stop_units" | jq -R -s 'split(" ") | map(select(length > 0))')
+# Only units actually stopped go in: a vetoed unit keeps running, and a later
+# mood must not "hand it back" a start it never lost.
+stopped_json=$(printf '%s\n' "${STOPPED[@]}" | jq -R -s 'split("\n") | map(select(length > 0))')
 jq -nc --arg mode "$mode" --argjson stopped "$stopped_json" '{mode: $mode, stopped: $stopped}' \
     >"$applied_file.tmp" && mv "$applied_file.tmp" "$applied_file"
+
+# The vetoes this apply honoured, once, for the shell to surface. Written per
+# apply (empty when none held), watched like theme.result.json is.
+vetoes_json=$(printf '%s\n' "${VETOES[@]}" | jq -R -s 'split("\n") | map(select(length > 0)) | map(split("\t") | {unit: .[0], reason: .[1]})')
+jq -nc --arg ts "$(date +%s)" --arg mode "$mode" --argjson vetoes "$vetoes_json" \
+    '{ts: ($ts | tonumber), mode: $mode, vetoes: $vetoes}' \
+    >"$log_dir/last.json.tmp" && mv "$log_dir/last.json.tmp" "$log_dir/last.json"
 
 if [ "$dry_run" = 1 ]; then
     printf '\n  PLAN mood=%s stop=%s hand-back=%s\n' "$mode" "${stop_units:-<none>}" "${starts:-<none>}"

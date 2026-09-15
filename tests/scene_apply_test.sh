@@ -124,5 +124,36 @@ for unit in $(jq -r '.tasks.obsidian[]?' "$CONTRACT"); do
 done
 teardown
 
+echo "a veto holds a stop, once, and the transition completes (LEO-256)"
+setup
+jq '.moods.gaming.background.prevent = ["obsidian"]' "$FIXTURE" >"$XDG_STATE_HOME/mood-policy.json"
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+# The unit files its own refusal: mid-work windows, in its own words.
+mkdir -p "$QF_STORE/scene-policy"
+printf '{"%s":{"reason":"indexing a large vault","until":9999999999999}}\n' \
+    "$(jq -r '.tasks.obsidian[0]' "$CONTRACT")" >"$QF_STORE/scene-policy/veto.json"
+run gaming
+not_contains "a vetoing unit is not stopped" "--user stop $(jq -r '.tasks.obsidian[0]' "$CONTRACT")" "$(stopper)"
+vetoes=$(jq -r '.vetoes[0].unit' "$QF_STORE/scene-policy/last.json")
+check "the veto record names the unit" "$(jq -r '.tasks.obsidian[0]' "$CONTRACT")" "$vetoes"
+check "and the reason the unit gave" "indexing a large vault" \
+    "$(jq -r '.vetoes[0].reason' "$QF_STORE/scene-policy/last.json")"
+# The next mood must not "hand the running unit back a start it never lost":
+stopp=$(jq -r '.tasks.obsidian[0]' "$CONTRACT")
+stopped_list=$(jq -r --arg s "$stopp" '.stopped | index($s) // -1' "$QF_STORE/scene-policy/applied.json")
+check "a vetoed unit is not recorded as stopped" "-1" "$stopped_list"
+teardown
+
+echo "an expired veto does not hold"
+setup
+jq '.moods.gaming.background.prevent = ["obsidian"]' "$FIXTURE" >"$XDG_STATE_HOME/mood-policy.json"
+printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/focus.json"
+mkdir -p "$QF_STORE/scene-policy"
+printf '{"%s":{"reason":"stale window","until":1}}\n' \
+    "$(jq -r '.tasks.obsidian[0]' "$CONTRACT")" >"$QF_STORE/scene-policy/veto.json"
+plan=$(run gaming --dry-run)
+not_contains "a lapsed refusal is not honoured" "vetoed" "$plan"
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
