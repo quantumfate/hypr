@@ -250,6 +250,18 @@ function M.apply(mode)
 
   applied = mode
 
+  -- Re-resolve the compositor accent now that the mode has actually
+  -- transitioned (LEO-341): `colors.lua` only ran this at config load, so
+  -- borders and groupbar kept the previous mode's accent until the next
+  -- manual `hyprctl reload`. `apply_colors` reads the palette and mode from
+  -- the stores itself, so passing the mode we just applied keeps this call
+  -- accurate even if the pointer store's write has not settled to disk yet.
+  -- Wrapped in pcall: a missing/broken theme module must not fail a mode
+  -- transition that otherwise succeeded.
+  pcall(function()
+    require("hypr.themes.colors").apply_colors(nil, mode)
+  end)
+
   return {
     mode = mode,
     bindings_disabled = disabled,
