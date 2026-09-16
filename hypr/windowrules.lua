@@ -37,7 +37,7 @@ windowrule.tag_props({
 }, "+creative")
 
 windowrule.tag_set_effects("creative", {
-  static = { workspace = "name:creative" },
+  static = { workspace = "name:obsidian-linear" },
 })
 
 windowrule.tag_props({
@@ -156,8 +156,8 @@ windowrule.tag_set_effects("media-browser", {
   static = { workspace = "name:media" },
 })
 
--- The gaming scene's own zen instance (apps.scene_browser, LEO-230): pinned
--- to name:gaming so it lands beside the Dofus group wherever it is spawned.
+-- The dofus scene's own zen instance (apps.scene_browser, LEO-230): pinned
+-- to name:dofus so it lands beside the Dofus group wherever it is spawned.
 -- Its group guard is the scene block's (`guard = "deny"`), emitted by
 -- hypr/scene/compile.lua — the scene decides grouping once, for every class it
 -- names. The browser opens automatically with the first Dofus window and
@@ -169,7 +169,7 @@ windowrule.tag_props({
 }, "+gaming-media")
 
 windowrule.tag_set_effects("gaming-media", {
-  static = { workspace = "name:gaming" },
+  static = { workspace = "name:dofus" },
 })
 
 local not_eso_launcher = { class = "steam_app_default", title = "[^(Zenimax Online Studios Launcher)]" }
@@ -187,11 +187,11 @@ windowrule.tag_props({
 }, "+gaming")
 
 windowrule.tag_set_effects("gaming", {
-  -- These classes are in the gaming scene's `barred` list (conf/hosts/), so
-  -- the bar that keeps auto_group from swallowing a game into the Dofus tab
-  -- strip is emitted by hypr/scene/compile.lua rather than repeated here.
+  -- These classes are in the steam-games scene's `barred` list (conf/hosts/),
+  -- so the bar that keeps auto_group from swallowing a game into the Dofus
+  -- tab strip is emitted by hypr/scene/compile.lua rather than repeated here.
   static = {
-    workspace = "name:gaming",
+    workspace = "name:steam-games",
     suppress_event = "activate activatefocus",
     fullscreen_state = "2 3",
   },
@@ -243,7 +243,7 @@ windowrule.tag_set_effects("steam-toast", {
 
 -- Dofus / Ankama
 --
--- The group itself is declared by the gaming scene, not here: the block
+-- The group itself is declared by the dofus scene, not here: the block
 -- carries `group = true`, and hypr/scene/compile.lua emits the `set always`
 -- that puts every Dofus client in one group every time. The runtime engine
 -- then holds that invariant against auto_group races — one decision, asserted
@@ -252,7 +252,7 @@ windowrule.tag_set_effects("steam-toast", {
 -- was tried (LEO-234) and live-regressed the group: the lock also rejects
 -- later Dofus clients, and `invade` did not reliably override it, so a third
 -- client landed in a group of its own. The guard is instead enforced from the
--- other side: every window that could land on name:gaming is denied or barred
+-- other side: every window that could land on name:dofus is denied or barred
 -- by its own rule (the scene browser is `deny`, the gaming tag and the Ankama
 -- overlay are `barred`), which keeps the group pure without touching the
 -- Dofus clients themselves. A future OBS
@@ -265,7 +265,7 @@ windowrule.tag_set_effects("steam-toast", {
 -- and marks the focused one.
 hl.window_rule({
   match = { initial_class = "Dofus.x64" },
-  workspace = "name:gaming",
+  workspace = "name:dofus",
   center = true,
   content = "game",
   opacity = "1.0 override",
@@ -274,12 +274,12 @@ hl.window_rule({
 })
 hl.window_rule({
   match = { initial_class = "Ankama Launcher" },
-  workspace = "special:ankama",
+  workspace = "name:ankama-launcher",
 })
 hl.window_rule({
   match = { class = "Ankama Launcher", title = "overlay" },
-  workspace = "name:gaming",
-  -- The bar that keeps this overlay out of the Dofus group is the gaming
+  workspace = "name:dofus",
+  -- The bar that keeps this overlay out of the Dofus group is the dofus
   -- scene's (`barred` in conf/hosts/), emitted by hypr/scene/compile.lua.
   float = true,
   center = true,
@@ -292,7 +292,7 @@ windowrule.tag_props({
 }, "+comms")
 
 windowrule.tag_set_effects("comms", {
-  static = { suppress_event = "activate activatefocus", workspace = "special:comms" },
+  static = { suppress_event = "activate activatefocus", workspace = "name:communication" },
 })
 
 -- Media apps (opacity fix)
