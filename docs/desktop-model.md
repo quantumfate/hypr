@@ -28,7 +28,8 @@ controls exactly four things:
 
 Later: permissions (what may launch) and notification routing per mode.
 
-`neutral` is a hidden fallback for recovery, reachable from a submap, not a
+`neutral` is a hidden fallback for recovery (scenes: `code`, `proton`,
+`communication`, `logs`; validated like every mode), reachable from a submap, not a
 peer choice.
 
 ## Scene
