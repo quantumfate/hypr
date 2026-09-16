@@ -136,21 +136,36 @@ Hyprland owns window state, placement, grouping, and layouts.
   as a scene, its binding tree travels with it. Do not leak scene-specific
   actions into generic submaps such as `shell`; the which-key overlay must
   render only the keys the current mode admits.
+- The target model (focus mode → scene set → monitor; scenes with bring-up,
+  teardown and window-state behaviour) is
+  [docs/desktop-model.md](docs/desktop-model.md). Read it before any scene,
+  mode, workspace or binding work. It is mostly not implemented yet; do not
+  assume a behaviour exists because that document describes it.
 
 ## Keybindings and which-key
 
-Maintain three keybinding classes:
+Maintain three keybinding classes. The intent is defined in
+[docs/desktop-model.md](docs/desktop-model.md#bindings); it overrides older
+wording elsewhere.
 
 1. **System-level**
-   - Always available.
-   - Never withheld by mode.
-   - Includes escape hatches, exits, and essential compositor controls.
+   - Always available; never withheld.
+   - Escape hatches, exits, compositor and window controls, system-centric
+     actions. Not individual Quickshell widgets owned by another module.
 
 2. **Contextual**
-   - Depend on workspace, focused class, group, layout, or scene.
+   - Available while a matching window is **focused**.
+   - Common actions across applications via the app's API or CLI.
+   - Never keyed on scenes or workspaces.
 
 3. **Mode-scoped**
-   - Admitted or withheld by the active mode declaration.
+   - Owned by a **scene**, not by the mode declaration.
+   - Available while the scene is active in the current mode and its workspace
+     is focused. Trees of a mode's scenes merge; a conflict is a validation
+     error.
+
+Which-key follows Neovim: holding the main modifier for more than 1.5 s opens
+it; `SUPER+Space` is the leader for domain-specific trees.
 
 Which-key must render the runtime-enabled set by construction.
 
@@ -265,14 +280,14 @@ Scenes are a **document**. Engines execute it. Do not add per-feature merge, `ba
 
 Read [docs/scenes.md](docs/scenes.md) before touching window placement, grouping, or workspace layout.
 
-**A scene is geometry only.** It says how windows sit on one named workspace. It does not decide whether that workspace exists, which binding trees are loaded, or what may run — a **mode** declares those, and the compositor is one of its executors. The engine as a whole is `hyprfocus`; the cross-repo architecture lives in the sibling `system-config/docs/hyprfocus.md`.
+**A scene owns its workspace; a mode selects scenes.** A scene declares which windows belong, how they sit (it is the layout), its bring-up/teardown, its window-state behaviour and its mode-scoped bindings. A **mode** selects the active scenes, their monitors and the theme, and calls scene bring-up/teardown. See [docs/desktop-model.md](docs/desktop-model.md). The engine as a whole is `hyprfocus`; the cross-repo architecture lives in the sibling `system-config/docs/hyprfocus.md`.
 
 - Keyed by workspace `default_name` (`code`, `gaming`). Workspace ids are host data in `workspace_specs`.
 - The scene **is** the layout (`hl.layout.register`), not a corrector running on top of one. Order is the order boxes are placed; share is a fraction of `ctx.area`. Neither is a dispatched correction.
 - `group = true` on a member match = one Hyprland group of **only those classes**. Fold matches in; eject foreigners. Never `lock` (it rejects later same-class members).
 - Derive a block's group each pass — the group already holding the most of its tiles wins. Do not remember a membership set: it cannot recover from `auto_group` splitting a block in two.
-- Companion windows: member `spawn`. Binding trees are a declared resource, admitted by a mode or a scene — not filtered after the fact.
-- Mode reachability is a different word. Do not merge it into scene geometry.
+- Companion windows: member `spawn`. Mode-scoped binding trees are owned by scenes and admitted with them; contextual trees follow the focused window — never filtered after the fact.
+- A mode selects scenes; it does not arrange windows or own binding trees.
 
 Lua surface (`hypr/events/scene.lua`; the engine itself is layered under `hypr/scene/`):
 

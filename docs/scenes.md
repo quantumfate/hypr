@@ -2,23 +2,35 @@
 
 Declarative window manager. The document is the interface. Engines execute it.
 
-## A scene is geometry only
+## What a scene owns
 
-A scene says how windows sit on one named workspace. It does **not** decide
-whether that workspace exists, which binding trees are loaded, what runs in the
-background, or how notifications route. A **mode** declares those, and this
-repo is one of its executors.
+The target model is [desktop-model.md](desktop-model.md); this document
+describes the scene engine as it runs today and is being brought in line with
+it. Where they disagree, desktop-model.md is the intent.
+
+A scene is a plug-in unit mapped to one workspace. It owns which windows
+belong there, how they sit (it is the layout), what it brings up and tears
+down, how it reacts when windows open or close, and its mode-scoped binding
+tree. A **focus mode** decides which scenes are active, on which monitor, the
+theme, and calls their bring-up and teardown. A mode does not arrange windows
+and does not own binding trees.
 
 The engine as a whole is `hyprfocus`; its cross-repo architecture lives in the
-sibling `system-config` repo. Read it before changing what a scene is
-responsible for — the common mistake is to grow a scene into a mode.
+sibling `system-config` repo.
 
-| Question                      | Answered by                           |
-| ----------------------------- | ------------------------------------- |
-| does this workspace exist?    | mode                                  |
-| how are its windows arranged? | scene                                 |
-| which binds are loaded here?  | mode, or a scene that carries its own |
-| what runs in the background?  | mode                                  |
+| Question                          | Answered by                        |
+| --------------------------------- | ---------------------------------- |
+| is this scene/workspace active?   | mode                               |
+| on which monitor?                 | mode (monitor roles are host data) |
+| which windows belong, how placed? | scene                              |
+| what happens on open/close?       | scene                              |
+| mode-scoped binds                 | scene (merged across a mode)       |
+| contextual binds                  | focused window, never the scene    |
+| theme                             | mode                               |
+
+Today's gap: modes still admit workspaces by name rather than scene sets,
+scenes have no bring-up/teardown or window-state behaviour, and `strays` is
+parsed but not executed.
 
 ## Declaration
 
