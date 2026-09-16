@@ -108,13 +108,14 @@ hyprfocus phase 6, "log every decision, appended".
 
 ### Scene bring-up / teardown (mode-driven sub-stages of admit and leave)
 
-| Call                      | Caller     | Returns                                     | Refusal                                                                                                                                                                                                                                                                                                    | Events                                     |
-| ------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `scene.up(name, monitor)` | mode enter | `ok \| partial{missing} \| refused{reason}` | `partial` means the mode is still entered and the missing launches are logged. The companion `spawn` moves here.                                                                                                                                                                                           | `admit.scene_up`, `admit.scene_up_refused` |
-| `scene.down(name)`        | mode exit  | `ok \| veto{reason}`                        | Cooperative: windows are never killed. A veto leaves the scene up and recorded, and the mode is still entered (hyprfocus phase 3). Held windows and locks must resolve first. A vetoed scene's workspace is **withdrawn**; its windows go to the hold area until the work finishes, then teardown retries. | `leave.scene_down`, `leave.scene_veto`     |
+| Call                      | Caller                                      | Returns                                     | Refusal                                                                                                                                                                                                                                                                     | Events                                     |
+| ------------------------- | ------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `scene.up(name, monitor)` | mode enter                                  | `ok \| partial{missing} \| refused{reason}` | `partial` means the mode is still entered and the missing launches are logged. The companion `spawn` moves here.                                                                                                                                                            | `admit.scene_up`, `admit.scene_up_refused` |
+| `scene.down(name)`        | mode exit (scenes not in the new mode only) | `ok \| veto{windows, reason}`               | Sends a cooperative **close** to every window of the scene to free resources. A window still open after the close timeout (unsaved-changes dialog, or a scene-declared veto) is a veto: it is moved to the hold area and reported, never killed; the mode is still entered. | `leave.scene_down`, `leave.scene_veto`     |
 
 Bring-up **launches every declared app that is not running**, then arranges.
 A failed launch is logged and never blocks the mode.
+Bring-up runs on mode entry only. The scene binding "complete the scene" relaunches missing apps mid-mode.
 
 ### Window-state transitions (within interact)
 
@@ -160,3 +161,4 @@ Option 2 is rejected.
 - **D6** The Quickshell focus-mode panel shrinks to what a mode controls:
   theme, active scenes, monitors. Notification, background and launch
   controls move out of the per-mode panel.
+- **D7 Teardown closes** the scene's applications (cooperative close, veto = held). **Drawers** (dependency apps on engine-managed special workspaces, global or scene-assigned, with reserved default bindings) are defined in [desktop-model.md](desktop-model.md). **Identity** for same-class windows is a tag stamped at launch by address. Transitions support variants and hand-offs from the start.
