@@ -1,5 +1,5 @@
 {
-  "name": "requires removed names a conflict (error case)",
+  "name": "a scene listed twice refuses the mode",
   "declaration": {
     "base": {
       "bindings": [
@@ -26,11 +26,6 @@
         "media": {
           "blocks": []
         }
-      },
-      "requires": {
-        "service:obsidian": [
-          "service:obsidian-index"
-        ]
       }
     },
     "modes": {
@@ -40,16 +35,15 @@
           {
             "name": "code",
             "monitor": "primary"
+          },
+          {
+            "name": "code",
+            "monitor": "secondary"
           }
-        ],
-        "services": {
-          "remove": [
-            "obsidian-index"
-          ]
-        }
+        ]
       }
     }
   },
   "mode": "x",
-  "expected_error": "removed but required"
+  "expected_error": "duplicate_scene"
 }

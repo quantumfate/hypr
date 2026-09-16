@@ -2,13 +2,14 @@
   "name": "a wants cycle terminates at the first revisit",
   "declaration": {
     "base": {
-      "workspaces": [],
       "bindings": [],
       "services": [
         "obsidian",
         "obsidian-index"
       ],
       "projects": [],
+      "notify": {},
+      "scenes": {},
       "wants": {
         "service:obsidian": [
           "service:obsidian-index"
@@ -16,13 +17,12 @@
         "service:obsidian-index": [
           "service:obsidian"
         ]
-      },
-      "notify": {},
-      "scenes": {}
+      }
     },
     "modes": {
       "x": {
         "name": "X",
+        "scenes": [],
         "services": {
           "only": [
             "obsidian"
@@ -34,6 +34,9 @@
   "mode": "x",
   "expected": {
     "mode": "x",
+    "hidden": false,
+    "scenes": [],
+    "scene_specs": {},
     "workspaces": [],
     "bindings": [],
     "services": [
@@ -41,7 +44,6 @@
       "obsidian-index"
     ],
     "projects": [],
-    "scenes": {},
     "notify": {},
     "revoke": {},
     "presentation": {}

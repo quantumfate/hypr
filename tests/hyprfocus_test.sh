@@ -11,7 +11,8 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cli="$here/../bin/,hyprfocus"
 [[ -x $cli ]] || cli="$here/../,hyprfocus"
-declaration="$here/../../quickshell/assets/hyprfocus.default.json"
+# Overridable so a quickshell worktree can be checked before it merges.
+declaration="${HYPRFOCUS_DECLARATION:-$here/../../quickshell/assets/hyprfocus.default.json}"
 
 if [[ ! -f $declaration ]]; then
     echo "skip: sibling quickshell checkout not found at $declaration" >&2
@@ -33,10 +34,9 @@ check() {
 
 run() { "$cli" --declaration "$declaration" "$@"; }
 
-# Game mode is the sharpest case: it is the only one using `only`, and the one
-# whose whole point is giving things up. Special workspaces are retired (LEO-330):
-# every gaming surface is now an ordinary mode-admitted workspace.
-check "gaming admits only its declared workspaces" \
+# Game mode is the sharpest case: the widest scene set, and the one whose whole
+# point is giving things up. Its workspaces are derived from its scene set.
+check "gaming admits only its scene set's workspaces" \
     "dofus, pokemon, steam-games, communication, lutris, steam, media, ankama-launcher" \
     "$(run resolve gaming | awk '/^workspaces/ {sub(/^workspaces */, ""); print}')"
 
@@ -44,13 +44,13 @@ check "gaming stops the Obsidian suite" \
     "theme-auto, state-backup, chezmoi, audio-notify" \
     "$(run resolve gaming | awk '/^services/ {sub(/^services */, ""); print}')"
 
-# A scene is geometry for a workspace; one whose workspace is gone must go too.
-check "gaming carries only its own scenes" \
-    "communication, dofus, lutris, media, pokemon, steam, steam-games" \
+# Each scene carries the monitor role the mode places it on.
+check "gaming carries only its own scenes, placed by role" \
+    "dofus@primary, pokemon@primary, steam-games@primary, communication@secondary, lutris@secondary, steam@secondary, media@secondary, ankama-launcher@secondary" \
     "$(run resolve gaming | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
-check "neutral carries every base scene" \
-    "code, communication, dofus, logs, lutris, media, obsidian-linear, pokemon, proton, steam, steam-games" \
+check "neutral is the recovery set" \
+    "code@primary, proton@primary, communication@secondary, logs@secondary" \
     "$(run resolve neutral | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
 # Dependency closure: nothing names the indexer, it arrives via `wants`.
@@ -58,8 +58,9 @@ check "neutral pulls in Obsidian's companions without naming them" \
     "theme-auto, obsidian, obsidian-index, linear-sync, state-backup, chezmoi, audio-notify" \
     "$(run resolve neutral | awk '/^services/ {sub(/^services */, ""); print}')"
 
-check "every declared mode is listed" \
-    "gaming neutral study work" \
+# neutral is hidden: the recovery fallback is never listed as a peer.
+check "every user-facing mode is listed, hidden ones are not" \
+    "gaming study work" \
     "$(run modes | sed 's/^[* ] *//' | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
 
 # A typo must fail loudly rather than resolving to a desk missing a workspace.
@@ -127,7 +128,7 @@ fi
 # A declaration that cannot resolve is one the desk would fail on at the next
 # mode change; failing at seed time is the cheaper place to find out.
 broken=$scratch/broken.json
-jq '.modes.gaming.workspaces.only[1] = "commms"' "$declaration" >"$broken"
+jq '.modes.gaming.scenes[1].name = "commms"' "$declaration" >"$broken"
 if QF_STORE=$scratch/quantum-store "$cli" seed "$broken" --force >/dev/null 2>&1; then
     echo "  FAIL seeding an unresolvable declaration should refuse"
     fail=1

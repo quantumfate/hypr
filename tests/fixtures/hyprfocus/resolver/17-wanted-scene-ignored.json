@@ -1,5 +1,5 @@
 {
-  "name": "requires removed names a conflict (error case)",
+  "name": "a wanted scene missing from the set is not added and not refused",
   "declaration": {
     "base": {
       "bindings": [
@@ -27,9 +27,9 @@
           "blocks": []
         }
       },
-      "requires": {
-        "service:obsidian": [
-          "service:obsidian-index"
+      "wants": {
+        "scene:code": [
+          "scene:media"
         ]
       }
     },
@@ -41,15 +41,43 @@
             "name": "code",
             "monitor": "primary"
           }
-        ],
-        "services": {
-          "remove": [
-            "obsidian-index"
-          ]
-        }
+        ]
       }
     }
   },
   "mode": "x",
-  "expected_error": "removed but required"
+  "expected": {
+    "mode": "x",
+    "hidden": false,
+    "scenes": [
+      {
+        "name": "code",
+        "monitor": "primary"
+      }
+    ],
+    "scene_specs": {
+      "code": {
+        "blocks": []
+      }
+    },
+    "workspaces": [
+      "code"
+    ],
+    "bindings": [
+      "root",
+      "dofus"
+    ],
+    "services": [
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
+    ],
+    "projects": [
+      "obsidian",
+      "quantumnix"
+    ],
+    "notify": {},
+    "revoke": {},
+    "presentation": {}
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "requires removed names a conflict (error case)",
+  "name": "a monitor that is not a host role refuses the mode",
   "declaration": {
     "base": {
       "bindings": [
@@ -26,11 +26,6 @@
         "media": {
           "blocks": []
         }
-      },
-      "requires": {
-        "service:obsidian": [
-          "service:obsidian-index"
-        ]
       }
     },
     "modes": {
@@ -39,17 +34,12 @@
         "scenes": [
           {
             "name": "code",
-            "monitor": "primary"
+            "monitor": "DP-1"
           }
-        ],
-        "services": {
-          "remove": [
-            "obsidian-index"
-          ]
-        }
+        ]
       }
     }
   },
   "mode": "x",
-  "expected_error": "removed but required"
+  "expected_error": "unknown_monitor"
 }

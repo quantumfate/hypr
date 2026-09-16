@@ -1,0 +1,66 @@
+{
+  "name": "two active scenes claiming one class refuse the mode",
+  "declaration": {
+    "base": {
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "notify": {},
+      "scenes": {
+        "dofus": {
+          "blocks": [
+            {
+              "classes": [
+                "Dofus.x64"
+              ],
+              "order": 1
+            },
+            {
+              "classes": [
+                "zen-gaming-media"
+              ],
+              "order": 2
+            }
+          ]
+        },
+        "pokemon": {
+          "blocks": [
+            {
+              "classes": [
+                "zen-gaming-media"
+              ],
+              "order": 1
+            }
+          ]
+        }
+      }
+    },
+    "modes": {
+      "gaming": {
+        "name": "Gaming",
+        "scenes": [
+          {
+            "name": "dofus",
+            "monitor": "primary"
+          },
+          {
+            "name": "pokemon",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "gaming",
+  "expected_error": "class_conflict"
+}

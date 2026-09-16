@@ -1,12 +1,7 @@
 {
-  "name": "an unknown workspace refuses at resolve time",
+  "name": "an unknown delta name refuses at resolve time",
   "declaration": {
     "base": {
-      "workspaces": [
-        "code",
-        "gaming",
-        "media"
-      ],
       "bindings": [
         "root",
         "dofus"
@@ -21,12 +16,28 @@
         "quantumnix"
       ],
       "notify": {},
-      "scenes": {}
+      "scenes": {
+        "code": {
+          "blocks": []
+        },
+        "gaming": {
+          "blocks": []
+        },
+        "media": {
+          "blocks": []
+        }
+      }
     },
     "modes": {
       "x": {
         "name": "X",
-        "workspaces": {
+        "scenes": [
+          {
+            "name": "code",
+            "monitor": "primary"
+          }
+        ],
+        "services": {
           "add": [
             "ghost"
           ]
@@ -35,5 +46,5 @@
     }
   },
   "mode": "x",
-  "expected_error": "unknown workspaces"
+  "expected_error": "unknown services"
 }

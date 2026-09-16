@@ -258,14 +258,18 @@ t.describe("boot dump is the admitted set", function()
     end
 
     local declaration = {
-      version = 1,
+      version = 3,
       base = {
-        workspaces = { "code" },
         bindings = { "root", "terminal", "dofus" },
+        scenes = { code = {} },
       },
       modes = {
-        neutral = { name = "Neutral" },
-        work = { name = "Work", bindings = { remove = { "dofus" } } },
+        neutral = { name = "Neutral", hidden = true, scenes = { { name = "code", monitor = "primary" } } },
+        work = {
+          name = "Work",
+          scenes = { { name = "code", monitor = "primary" } },
+          bindings = { remove = { "dofus" } },
+        },
       },
     }
     package.loaded["hypr.lib.store"] = {

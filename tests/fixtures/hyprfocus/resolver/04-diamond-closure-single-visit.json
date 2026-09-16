@@ -2,7 +2,6 @@
   "name": "a diamond closes once and never duplicates",
   "declaration": {
     "base": {
-      "workspaces": [],
       "bindings": [],
       "services": [
         "state-backup",
@@ -12,6 +11,8 @@
         "obsidian",
         "quantumnix"
       ],
+      "notify": {},
+      "scenes": {},
       "requires": {
         "project:obsidian": [
           "service:state-backup"
@@ -19,13 +20,12 @@
         "project:quantumnix": [
           "service:state-backup"
         ]
-      },
-      "notify": {},
-      "scenes": {}
+      }
     },
     "modes": {
       "x": {
         "name": "X",
+        "scenes": [],
         "services": {
           "only": []
         },
@@ -41,6 +41,9 @@
   "mode": "x",
   "expected": {
     "mode": "x",
+    "hidden": false,
+    "scenes": [],
+    "scene_specs": {},
     "workspaces": [],
     "bindings": [],
     "services": [
@@ -50,7 +53,6 @@
       "obsidian",
       "quantumnix"
     ],
-    "scenes": {},
     "notify": {},
     "revoke": {},
     "presentation": {}

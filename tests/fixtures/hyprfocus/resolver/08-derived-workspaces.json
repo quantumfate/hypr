@@ -1,5 +1,5 @@
 {
-  "name": "only still gets its required companions",
+  "name": "workspaces are derived from the scene set",
   "declaration": {
     "base": {
       "bindings": [
@@ -15,9 +15,7 @@
         "obsidian",
         "quantumnix"
       ],
-      "notify": {
-        "default": "show"
-      },
+      "notify": {},
       "scenes": {
         "code": {
           "blocks": []
@@ -28,11 +26,6 @@
         "media": {
           "blocks": []
         }
-      },
-      "requires": {
-        "scene:code": [
-          "service:obsidian"
-        ]
       }
     },
     "modes": {
@@ -40,13 +33,14 @@
         "name": "X",
         "scenes": [
           {
+            "name": "gaming",
+            "monitor": "primary"
+          },
+          {
             "name": "code",
             "monitor": "primary"
           }
-        ],
-        "services": {
-          "only": []
-        }
+        ]
       }
     }
   },
@@ -56,16 +50,24 @@
     "hidden": false,
     "scenes": [
       {
+        "name": "gaming",
+        "monitor": "primary"
+      },
+      {
         "name": "code",
         "monitor": "primary"
       }
     ],
     "scene_specs": {
+      "gaming": {
+        "blocks": []
+      },
       "code": {
         "blocks": []
       }
     },
     "workspaces": [
+      "gaming",
       "code"
     ],
     "bindings": [
@@ -73,15 +75,15 @@
       "dofus"
     ],
     "services": [
-      "obsidian"
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
     ],
     "projects": [
       "obsidian",
       "quantumnix"
     ],
-    "notify": {
-      "default": "show"
-    },
+    "notify": {},
     "revoke": {},
     "presentation": {}
   }

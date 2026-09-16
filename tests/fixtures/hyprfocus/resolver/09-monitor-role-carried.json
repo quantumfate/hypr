@@ -1,5 +1,5 @@
 {
-  "name": "only still gets its required companions",
+  "name": "each scene carries its monitor role onto the desk",
   "declaration": {
     "base": {
       "bindings": [
@@ -15,9 +15,7 @@
         "obsidian",
         "quantumnix"
       ],
-      "notify": {
-        "default": "show"
-      },
+      "notify": {},
       "scenes": {
         "code": {
           "blocks": []
@@ -28,11 +26,6 @@
         "media": {
           "blocks": []
         }
-      },
-      "requires": {
-        "scene:code": [
-          "service:obsidian"
-        ]
       }
     },
     "modes": {
@@ -42,11 +35,12 @@
           {
             "name": "code",
             "monitor": "primary"
+          },
+          {
+            "name": "media",
+            "monitor": "secondary"
           }
-        ],
-        "services": {
-          "only": []
-        }
+        ]
       }
     }
   },
@@ -58,30 +52,38 @@
       {
         "name": "code",
         "monitor": "primary"
+      },
+      {
+        "name": "media",
+        "monitor": "secondary"
       }
     ],
     "scene_specs": {
       "code": {
         "blocks": []
+      },
+      "media": {
+        "blocks": []
       }
     },
     "workspaces": [
-      "code"
+      "code",
+      "media"
     ],
     "bindings": [
       "root",
       "dofus"
     ],
     "services": [
-      "obsidian"
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
     ],
     "projects": [
       "obsidian",
       "quantumnix"
     ],
-    "notify": {
-      "default": "show"
-    },
+    "notify": {},
     "revoke": {},
     "presentation": {}
   }

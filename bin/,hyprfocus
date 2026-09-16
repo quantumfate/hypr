@@ -14,7 +14,7 @@ enter it.
   ,hyprfocus resolve <mode>   the complete desk that mode means
   ,hyprfocus plan <mode>      what would change from the mode running now
   ,hyprfocus explain          which mode is on, who set it, and when
-  ,hyprfocus modes            every declared mode
+  ,hyprfocus modes            every user-facing mode (hidden ones omitted)
   ,hyprfocus seed <file>      install a declaration into the store
   ,hyprfocus apply <mode>     bring background work in line with a mode
   ,hyprfocus log              recent scene-policy rows (background work)
@@ -38,14 +38,18 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-KINDS = ("workspaces", "bindings", "services", "projects")
+# Delta-grammar kinds. Scenes are listed per mode outright; the mode's
+# workspaces are derived from its scene set.
+KINDS = ("bindings", "services", "projects")
 REF_KIND = {
-    "workspace": "workspaces",
+    "scene": "scenes",
     "binding": "bindings",
     "service": "services",
     "project": "projects",
 }
 KIND_REF = {plural: singular for singular, plural in REF_KIND.items()}
+# Host monitor roles a scene placement may name (conf/hosts/*.lua).
+MONITOR_ROLES = ("primary", "secondary")
 
 
 def state_dir() -> Path:
@@ -111,7 +115,8 @@ def close_deps(desk: dict, base: dict, mode: str, removed: dict[str, set[str]]) 
     """
     graphs = {"requires": base.get("requires", {}), "wants": base.get("wants", {})}
     present = {kind: set(desk[kind]) for kind in KINDS}
-    queue = [f"{KIND_REF[kind]}:{name}" for kind in KINDS for name in desk[kind]]
+    queue = [f"scene:{name}" for name in desk["workspaces"]]
+    queue += [f"{KIND_REF[kind]}:{name}" for kind in KINDS for name in desk[kind]]
     seen: set[str] = set()
 
     while queue:
@@ -127,6 +132,13 @@ def close_deps(desk: dict, base: dict, mode: str, removed: dict[str, set[str]]) 
                     sys.exit(
                         f"mode '{mode}': malformed {strength} reference '{ref}' on {key}"
                     )
+                if kind == "scenes":
+                    # Checked, never added: scene sets are explicit.
+                    if strength == "requires" and name not in desk["workspaces"]:
+                        sys.exit(
+                            f"scene_required: mode '{mode}': scene '{name}' is required by {key} but not in the mode's scene set"
+                        )
+                    continue
                 if name in removed[kind]:
                     if strength == "requires":
                         sys.exit(
@@ -139,14 +151,95 @@ def close_deps(desk: dict, base: dict, mode: str, removed: dict[str, set[str]]) 
                     queue.append(ref)
 
 
+def refusal(mode: str, token: str, detail: str, **extra) -> dict:
+    """A mode-validation refusal record; `reason` leads with the token."""
+    return {
+        "stage": "admit",
+        "event": "mode_refused",
+        "decision": "refuse",
+        "mode": mode,
+        "refusal": token,
+        "reason": f"{token}: mode '{mode}': {detail}",
+        **extra,
+    }
+
+
+def validate(declaration: dict, mode: str) -> dict | None:
+    """Refuse a malformed scene set before resolving; mirrors resolve.lua.
+
+    Claims are block `classes` strings compared textually; `barred` and
+    `spawn.class` are not claims.
+    """
+    spec = declaration.get("modes", {}).get(mode)
+    if spec is None:
+        return refusal(mode, "unknown_mode", "not declared")
+    if not isinstance(spec.get("scenes"), list):
+        return refusal(
+            mode, "missing_scenes", "no `scenes` list (a pre-v3 declaration?)"
+        )
+    if mode == "neutral" and spec.get("hidden") is not True:
+        return refusal(
+            mode,
+            "hidden_required",
+            "neutral is the recovery fallback and must be hidden",
+        )
+    catalog = declaration.get("base", {}).get("scenes", {})
+    listed: set[str] = set()
+    claimed_by: dict[str, str] = {}
+    for placement in spec["scenes"]:
+        name = placement.get("name")
+        if name not in catalog:
+            return refusal(
+                mode, "unknown_scene", f"scene '{name}' is not in base.scenes"
+            )
+        monitor = placement.get("monitor")
+        if monitor not in MONITOR_ROLES:
+            return refusal(
+                mode,
+                "unknown_monitor",
+                f"scene '{name}' names monitor '{monitor}', not a host role",
+                scenes=[name],
+            )
+        if name in listed:
+            return refusal(
+                mode,
+                "duplicate_scene",
+                f"scene '{name}' is listed twice",
+                scenes=[name],
+            )
+        listed.add(name)
+        for block in catalog[name].get("blocks", []):
+            for cls in block.get("classes", []):
+                owner = claimed_by.get(cls)
+                if owner and owner != name:
+                    return refusal(
+                        mode,
+                        "class_conflict",
+                        f"class '{cls}' claimed by {owner} and {name}",
+                        **{"class": cls, "scenes": [owner, name]},
+                    )
+                claimed_by[cls] = name
+    return None
+
+
 def resolve(declaration: dict, mode: str) -> dict:
     base = declaration.get("base", {})
     spec = declaration.get("modes", {}).get(mode)
     if spec is None:
         known = ", ".join(sorted(declaration.get("modes", {})))
         sys.exit(f"unknown mode '{mode}' (known: {known})")
+    refused = validate(declaration, mode)
+    if refused:
+        sys.exit(refused["reason"])
 
-    desk = {"mode": mode}
+    placements = [{"name": p["name"], "monitor": p["monitor"]} for p in spec["scenes"]]
+    desk = {
+        "mode": mode,
+        "hidden": spec.get("hidden") is True,
+        "scenes": placements,
+        "scene_specs": {p["name"]: base["scenes"][p["name"]] for p in placements},
+        "workspaces": [p["name"] for p in placements],
+    }
     removed: dict[str, set[str]] = {}
     for kind in KINDS:
         desk[kind] = apply_delta(
@@ -165,10 +258,6 @@ def resolve(declaration: dict, mode: str) -> dict:
                 f"mode '{mode}': unknown {kind} {sorted(unknown)} — not declared in base"
             )
 
-    admitted = set(desk["workspaces"])
-    desk["scenes"] = {
-        ws: s for ws, s in base.get("scenes", {}).items() if ws in admitted
-    }
     desk["notify"] = {**base.get("notify", {}), **spec.get("notify", {})}
     desk["revoke"] = {**base.get("revoke", {}), **spec.get("revoke", {})}
     desk["presentation"] = dict(spec.get("presentation", {}))
@@ -438,9 +527,9 @@ def conform(source: Path) -> int:
 
 def print_desk(desk: dict) -> None:
     print(f"{'mode':<12}{desk['mode']}")
-    for kind in KINDS:
+    for kind in ("workspaces", *KINDS):
         print(f"{kind:<12}{', '.join(desk[kind]) or '—'}")
-    scenes = ", ".join(sorted(desk["scenes"])) or "—"
+    scenes = ", ".join(f"{p['name']}@{p['monitor']}" for p in desk["scenes"]) or "—"
     print(f"{'scenes':<12}{scenes}")
     routes = desk.get("notify", {})
     if routes:
@@ -620,6 +709,9 @@ def main() -> None:
     if args.verb == "modes":
         current = active(declaration).get("mode")
         for name, spec in sorted(declaration.get("modes", {}).items()):
+            # Hidden modes (neutral, the recovery fallback) are never a peer.
+            if spec.get("hidden"):
+                continue
             marker = "*" if name == current else " "
             print(f"{marker} {name:<10}{spec.get('name', '')}")
         return

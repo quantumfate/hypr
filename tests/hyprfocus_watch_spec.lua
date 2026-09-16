@@ -9,18 +9,27 @@
 local t = require("tests.harness")
 
 local DECLARATION = {
-  version = 1,
+  version = 3,
   base = {
-    workspaces = { "code", "gaming", "media", "logs" },
     bindings = { "root", "dofus", "llm" },
     services = { "obsidian" },
     projects = {},
+    scenes = { code = {}, gaming = {}, media = {}, logs = {} },
   },
   modes = {
-    neutral = { name = "Neutral" },
+    neutral = {
+      name = "Neutral",
+      hidden = true,
+      scenes = {
+        { name = "code", monitor = "primary" },
+        { name = "gaming", monitor = "primary" },
+        { name = "media", monitor = "primary" },
+        { name = "logs", monitor = "primary" },
+      },
+    },
     game = {
       name = "Gaming",
-      workspaces = { only = { "gaming", "logs" } },
+      scenes = { { name = "gaming", monitor = "primary" }, { name = "logs", monitor = "primary" } },
       bindings = { remove = { "llm" } },
     },
   },

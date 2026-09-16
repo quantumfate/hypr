@@ -2,11 +2,6 @@
   "name": "wants yields to an explicit remove",
   "declaration": {
     "base": {
-      "workspaces": [
-        "code",
-        "gaming",
-        "media"
-      ],
       "bindings": [
         "root"
       ],
@@ -15,17 +10,33 @@
         "obsidian-index"
       ],
       "projects": [],
+      "notify": {},
+      "scenes": {
+        "code": {
+          "blocks": []
+        },
+        "gaming": {
+          "blocks": []
+        },
+        "media": {
+          "blocks": []
+        }
+      },
       "wants": {
         "service:obsidian": [
           "service:obsidian-index"
         ]
-      },
-      "notify": {},
-      "scenes": {}
+      }
     },
     "modes": {
       "media": {
         "name": "Media",
+        "scenes": [
+          {
+            "name": "media",
+            "monitor": "primary"
+          }
+        ],
         "services": {
           "remove": [
             "obsidian-index"
@@ -37,9 +48,19 @@
   "mode": "media",
   "expected": {
     "mode": "media",
+    "hidden": false,
+    "scenes": [
+      {
+        "name": "media",
+        "monitor": "primary"
+      }
+    ],
+    "scene_specs": {
+      "media": {
+        "blocks": []
+      }
+    },
     "workspaces": [
-      "code",
-      "gaming",
       "media"
     ],
     "bindings": [
@@ -49,7 +70,6 @@
       "obsidian"
     ],
     "projects": [],
-    "scenes": {},
     "notify": {},
     "revoke": {},
     "presentation": {}

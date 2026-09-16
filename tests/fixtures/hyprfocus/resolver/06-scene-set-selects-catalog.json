@@ -1,5 +1,5 @@
 {
-  "name": "only still gets its required companions",
+  "name": "only the listed scenes reach the desk, in declaration order",
   "declaration": {
     "base": {
       "bindings": [
@@ -15,24 +15,25 @@
         "obsidian",
         "quantumnix"
       ],
-      "notify": {
-        "default": "show"
-      },
+      "notify": {},
       "scenes": {
         "code": {
           "blocks": []
         },
         "gaming": {
-          "blocks": []
+          "blocks": [
+            {
+              "classes": [
+                "Dofus.x64"
+              ],
+              "order": 1,
+              "share": 0.67
+            }
+          ]
         },
         "media": {
           "blocks": []
         }
-      },
-      "requires": {
-        "scene:code": [
-          "service:obsidian"
-        ]
       }
     },
     "modes": {
@@ -40,13 +41,14 @@
         "name": "X",
         "scenes": [
           {
+            "name": "media",
+            "monitor": "primary"
+          },
+          {
             "name": "code",
             "monitor": "primary"
           }
-        ],
-        "services": {
-          "only": []
-        }
+        ]
       }
     }
   },
@@ -56,16 +58,24 @@
     "hidden": false,
     "scenes": [
       {
+        "name": "media",
+        "monitor": "primary"
+      },
+      {
         "name": "code",
         "monitor": "primary"
       }
     ],
     "scene_specs": {
+      "media": {
+        "blocks": []
+      },
       "code": {
         "blocks": []
       }
     },
     "workspaces": [
+      "media",
       "code"
     ],
     "bindings": [
@@ -73,15 +83,15 @@
       "dofus"
     ],
     "services": [
-      "obsidian"
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
     ],
     "projects": [
       "obsidian",
       "quantumnix"
     ],
-    "notify": {
-      "default": "show"
-    },
+    "notify": {},
     "revoke": {},
     "presentation": {}
   }

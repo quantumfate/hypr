@@ -108,17 +108,20 @@ end)
 
 t.describe("hyprfocus/init.lua wiring", function()
   local DECLARATION = {
-    version = 1,
+    version = 3,
     base = {
-      workspaces = { "code", "gaming" },
       bindings = { "root" },
       services = {},
       projects = {},
-      scenes = {},
+      scenes = { code = {}, gaming = {} },
     },
     modes = {
-      neutral = { name = "Neutral" },
-      game = { name = "Gaming", workspaces = { only = { "gaming" } } },
+      neutral = {
+        name = "Neutral",
+        hidden = true,
+        scenes = { { name = "code", monitor = "primary" }, { name = "gaming", monitor = "primary" } },
+      },
+      game = { name = "Gaming", scenes = { { name = "gaming", monitor = "primary" } } },
     },
   }
 

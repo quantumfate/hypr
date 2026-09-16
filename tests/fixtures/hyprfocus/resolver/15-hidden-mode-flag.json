@@ -1,12 +1,7 @@
 {
-  "name": "scenes for unadmitted workspaces stay out of the desk",
+  "name": "neutral resolves only when hidden, and carries the flag",
   "declaration": {
     "base": {
-      "workspaces": [
-        "code",
-        "gaming",
-        "media"
-      ],
       "bindings": [
         "root",
         "dofus"
@@ -26,15 +21,7 @@
           "blocks": []
         },
         "gaming": {
-          "blocks": [
-            {
-              "classes": [
-                "Dofus.x64"
-              ],
-              "order": 1,
-              "share": 0.67
-            }
-          ]
+          "blocks": []
         },
         "media": {
           "blocks": []
@@ -42,23 +29,35 @@
       }
     },
     "modes": {
-      "x": {
-        "name": "X",
-        "workspaces": {
-          "only": [
-            "code",
-            "media"
-          ]
-        }
+      "neutral": {
+        "name": "Neutral",
+        "hidden": true,
+        "scenes": [
+          {
+            "name": "code",
+            "monitor": "primary"
+          }
+        ]
       }
     }
   },
-  "mode": "x",
+  "mode": "neutral",
   "expected": {
-    "mode": "x",
+    "mode": "neutral",
+    "hidden": true,
+    "scenes": [
+      {
+        "name": "code",
+        "monitor": "primary"
+      }
+    ],
+    "scene_specs": {
+      "code": {
+        "blocks": []
+      }
+    },
     "workspaces": [
-      "code",
-      "media"
+      "code"
     ],
     "bindings": [
       "root",
@@ -73,14 +72,6 @@
       "obsidian",
       "quantumnix"
     ],
-    "scenes": {
-      "code": {
-        "blocks": []
-      },
-      "media": {
-        "blocks": []
-      }
-    },
     "notify": {},
     "revoke": {},
     "presentation": {}

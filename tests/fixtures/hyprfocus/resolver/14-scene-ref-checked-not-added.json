@@ -1,5 +1,5 @@
 {
-  "name": "requires removed names a conflict (error case)",
+  "name": "a required scene is checked, never added",
   "declaration": {
     "base": {
       "bindings": [
@@ -28,8 +28,8 @@
         }
       },
       "requires": {
-        "service:obsidian": [
-          "service:obsidian-index"
+        "binding:dofus": [
+          "scene:gaming"
         ]
       }
     },
@@ -41,15 +41,10 @@
             "name": "code",
             "monitor": "primary"
           }
-        ],
-        "services": {
-          "remove": [
-            "obsidian-index"
-          ]
-        }
+        ]
       }
     }
   },
   "mode": "x",
-  "expected_error": "removed but required"
+  "expected_error": "scene_required"
 }
