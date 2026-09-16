@@ -26,6 +26,9 @@ local M = {}
 ---@field barred string[] classes that may land here but must never join a group
 ---@field strays "slot"|"float" what happens to a window matching no block
 ---@field solo_frame? boolean explicit host opt-out of the lone-tile frame (nil means default)
+---@field bindings string[] binding trees admitted while this scene is active
+---@field moods string[] mood tags this scene matches
+---@field machines table<string, table> machine-specific geometry overrides
 
 ---Also carries a host map field except the name to fill: the document is
 ---keyed by workspace `default_name`, so the caller passes the key rather
@@ -68,6 +71,9 @@ local function normalize(name, raw)
     -- strays instead so the declared split never shifts.
     strays = raw.strays == "float" and "float" or "slot",
     solo_frame = raw.solo_frame,
+    bindings = raw.bindings or {},
+    moods = raw.moods or {},
+    machines = raw.machines or {},
   }
 end
 

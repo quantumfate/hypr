@@ -50,6 +50,10 @@ return {
       -- that matches no block floats above it rather than taking a slot
       -- and shifting the split the crop is aimed at.
       strays = "float",
+      -- The Dofus tree is mode-scoped by hyprfocus; the scene can add its own
+      -- buffer-local trees here (e.g. a capture-only tree). Empty means none.
+      bindings = {},
+      moods = { "gaming" },
     },
     code = {
       blocks = {
@@ -59,6 +63,8 @@ return {
         { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 },
         { classes = { "zen-twilight", "firefox-developer-edition" }, order = 2, share = 0.33 },
       },
+      bindings = {},
+      moods = { "work" },
     },
   },
 }

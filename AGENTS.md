@@ -132,6 +132,10 @@ Hyprland owns window state, placement, grouping, and layouts.
 - Dofus groups accept only Dofus windows.
 - Ad-hoc terminals remain floating or slide in from the bottom.
 - Prefer reusable scene and group rules over application-specific exceptions.
+- A scene-worthy abstraction owns its bindings: if a class or concept is modeled
+  as a scene, its binding tree travels with it. Do not leak scene-specific
+  actions into generic submaps such as `shell`; the which-key overlay must
+  render only the keys the current mode admits.
 
 ## Keybindings and which-key
 

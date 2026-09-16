@@ -27,6 +27,10 @@ local M = {}
 --- (the shell edits it without the compositor running).
 local applied = nil
 
+--- The scene whose bindings were last admitted, so a change in scene can
+--- re-admit without re-running the whole mode transition.
+local applied_scene = nil
+
 -- The declaration store, seeded from the shell repo on first run and editable
 -- at runtime. mtime-cached by the store handle, so reading it per mode change
 -- costs nothing when it has not changed.
@@ -100,33 +104,79 @@ end
 ---registry refuses to do it — so without step 3, step 4 would silently do
 ---nothing at all.
 ---@param mode string
----@return table? report, string? error
-function M.apply(mode)
+---Binding trees declared by a scene, normalized to a set.
+---@param declaration table
+---@param name string?
+---@return table<string, true>
+local function scene_binding_set(declaration, name)
+  local out = {}
+  local scenes = (declaration.base or {}).scenes or {}
+  local scene = name and scenes[name]
+  if scene and type(scene.bindings) == "table" then
+    for _, tree in ipairs(scene.bindings) do
+      out[tree] = true
+    end
+  end
+  return out
+end
+
+---Every binding tree that is under any form of admission control: mode
+---control (base.bindings) plus scene control (any scene's bindings). A tree
+---named by a scene but not by base.bindings is still conditional on the scene.
+---@param declaration table
+---@return table<string, true>
+local function conditional_binding_set(declaration)
+  local out = {}
+  for _, name in ipairs((declaration.base or {}).bindings or {}) do
+    out[name] = true
+  end
+  for _, scene in pairs((declaration.base or {}).scenes or {}) do
+    if type(scene.bindings) == "table" then
+      for _, name in ipairs(scene.bindings) do
+        out[name] = true
+      end
+    end
+  end
+  return out
+end
+
+---Admit or withhold binding trees based on the resolved mode plus the active
+---scene. This is separated from the full mode apply so a workspace/scene
+---change can recompute binds without re-holding every window.
+---@param mode string
+---@param scene string? active scene name, if any
+---@return string[] disabled tree names
+---@return string? error
+function M.apply_bindings(mode, scene)
   local declaration, err = M.declaration()
   if not declaration then
-    return nil, err
+    return {}, err
   end
 
   local ok, desk = pcall(resolve.resolve, declaration, mode)
   if not ok then
-    return nil, tostring(desk)
+    return {}, tostring(desk)
   end
 
-  -- What this mode takes away, not what it keeps. The base's `bindings` list
-  -- names the trees that are UNDER MODE CONTROL; a tree outside that list is
-  -- always available, so a gap in the declaration cannot silently remove the
-  -- terminal or the way back to another mode.
-  local conditional = (declaration.base or {}).bindings or {}
+  -- A tree is available if the mode admits it OR the active scene admits it.
+  -- That is what "scene-admitted trees follow the active scene as well as the
+  -- active mode" means: either context can keep a tree loaded.
   local keeps = {}
   for _, name in ipairs(desk.bindings) do
     keeps[name] = true
   end
+  for name in pairs(scene_binding_set(declaration, scene)) do
+    keeps[name] = true
+  end
+
+  local conditional = conditional_binding_set(declaration)
   local withheld = {}
-  for _, name in ipairs(conditional) do
+  for name in pairs(conditional) do
     if not keeps[name] then
       withheld[#withheld + 1] = name
     end
   end
+  table.sort(withheld)
   local disabled = binds.admit(withheld)
 
   -- Re-dump the cheatsheet against what is now loaded. A filtered list can
@@ -140,6 +190,27 @@ function M.apply(mode)
     loaded[name] = nil
   end
   pcall(whichkey.dump, loaded)
+
+  applied_scene = scene
+  return disabled, nil
+end
+
+---@return table? report, string? error
+function M.apply(mode)
+  local declaration, err = M.declaration()
+  if not declaration then
+    return nil, err
+  end
+
+  local ok, desk = pcall(resolve.resolve, declaration, mode)
+  if not ok then
+    return nil, tostring(desk)
+  end
+
+  local disabled, bind_err = M.apply_bindings(mode, nil)
+  if bind_err then
+    return nil, bind_err
+  end
 
   local admitted = {}
   for _, name in ipairs(desk.workspaces) do
@@ -284,6 +355,12 @@ end
 ---@return string?
 function M.last_applied()
   return applied
+end
+
+---The scene whose bindings were last admitted, or nil.
+---@return string?
+function M.last_applied_scene()
+  return applied_scene
 end
 
 return M

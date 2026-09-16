@@ -217,6 +217,96 @@ t.describe("grouping", function()
   end)
 end)
 
+t.describe("class-scoped group admission (LEO-307)", function()
+  local function tmux(addr, over)
+    over = over or {}
+    over.address, over.class = addr, "Kitty-Main"
+    return win(over)
+  end
+
+  local function zen(addr, over)
+    over = over or {}
+    over.address, over.class = addr, "zen-twilight"
+    return win(over)
+  end
+
+  local TMUX = { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 }
+  local ZEN_BLOCK = { classes = { "zen-twilight" }, order = 2, share = 0.33 }
+
+  t.it("ejects a foreign class the scene did not list", function()
+    -- Simulates Alt-drag dropping an unrelated window onto the group, or
+    -- auto_group swallowing it at map time: the class is not in the block and
+    -- not in `barred`, but the runtime still evicts it.
+    local spec = scene({ TMUX, ZEN_BLOCK })
+    local windows = {
+      tmux("0x1", { group = "0x1" }),
+      tmux("0x2", { group = "0x1" }),
+      win({ address = "0xf", class = "org.wezfurlong.wezterm", group = "0x1" }),
+    }
+    local intent = model.intent(spec, snap(windows), {})
+    t.eq("evict", intent.op)
+    t.eq("0xf", intent.address)
+  end)
+
+  t.it("ejects a window from another block that landed in the group", function()
+    -- A Zen window focus-driven into the tmux group must not stay there.
+    local spec = scene({ TMUX, ZEN_BLOCK })
+    local windows = {
+      tmux("0x1", { group = "0x1" }),
+      tmux("0x2", { group = "0x1" }),
+      zen("0x9", { group = "0x1" }),
+    }
+    local intent = model.intent(spec, snap(windows), {})
+    t.eq("evict", intent.op)
+    t.eq("0x9", intent.address)
+  end)
+
+  t.it("does not split legitimate members when evicting a foreigner", function()
+    local spec = scene({ TMUX, ZEN_BLOCK })
+    local windows = {
+      tmux("0x1", { group = "0x1" }),
+      tmux("0x2", { group = "0x1" }),
+      tmux("0x3", { group = "0x1" }),
+      zen("0x9", { group = "0x1" }),
+    }
+    local intent = model.intent(spec, snap(windows), {})
+    t.eq("evict", intent.op)
+    t.eq("0x9", intent.address)
+    -- No join/reorder/resize is issued: the three tmux windows are already
+    -- one tile, and evicting the foreigner leaves them that way.
+  end)
+
+  t.it("uses the same engine path for Dofus-only and tmux-only groups", function()
+    local dofus_spec = scene({ GROUPED, ZEN_BLOCK })
+    local tmux_spec = scene({ TMUX, ZEN_BLOCK })
+    local foreign = browser("0x9", { group = "0x1" })
+
+    local dofus_intent = model.intent(
+      dofus_spec,
+      snap({
+        dofus("0x1", { group = "0x1" }),
+        dofus("0x2", { group = "0x1" }),
+        foreign,
+      }),
+      {}
+    )
+    local tmux_intent = model.intent(
+      tmux_spec,
+      snap({
+        tmux("0x1", { group = "0x1" }),
+        tmux("0x2", { group = "0x1" }),
+        win({ address = "0x9", class = "zen-twilight", group = "0x1" }),
+      }),
+      {}
+    )
+
+    t.eq("evict", dofus_intent.op)
+    t.eq("evict", tmux_intent.op)
+    t.eq("0x9", dofus_intent.address)
+    t.eq("0x9", tmux_intent.address)
+  end)
+end)
+
 t.describe("collection", function()
   t.it("brings an owned member home when the block asked for it", function()
     local spec = scene({ GROUPED })

@@ -15,16 +15,20 @@ local DECLARATION = {
   version = 1,
   base = {
     workspaces = { "code", "gaming", "media", "logs" },
-    bindings = { "root", "dofus", "llm" },
+    bindings = { "root", "dofus", "llm", "media" },
     services = { "obsidian" },
     projects = {},
+    scenes = {
+      gaming = { bindings = { "dofus", "media" } },
+      code = { bindings = { "llm" } },
+    },
   },
   modes = {
     neutral = { name = "Neutral" },
     game = {
       name = "Gaming",
       workspaces = { only = { "gaming", "logs" } },
-      bindings = { remove = { "llm" } },
+      bindings = { remove = { "llm", "media" } },
     },
   },
 }
@@ -82,7 +86,7 @@ local function fresh(declaration, pointer)
     fn()
   end
   binds.bind("SUPER, t")
-  for _, name in ipairs({ "dofus", "llm" }) do
+  for _, name in ipairs({ "dofus", "llm", "media" }) do
     binds.submap(name, function()
       binds.bind("a")
     end)
@@ -130,7 +134,9 @@ t.describe("applying", function()
   t.it("withdraws the workspaces and binding trees a mode does not admit", function()
     local _, hyprfocus, rules = fresh(DECLARATION)
     local report = hyprfocus.apply("game")
-    t.eq("llm", table.concat(report.bindings_disabled, ","))
+    local disabled = { table.unpack(report.bindings_disabled) }
+    table.sort(disabled)
+    t.eq("llm,media", table.concat(disabled, ","))
     t.eq("code,media", table.concat(report.workspaces_withdrawn, ","))
     t.eq(false, rules.code.enabled)
     t.eq(true, rules.gaming.enabled)
@@ -179,6 +185,42 @@ t.describe("applying", function()
     local running = hyprfocus.running()
     t.eq(0, #running.services)
     t.eq(0, #running.projects)
+  end)
+end)
+
+t.describe("scene-scoped binding admission (LEO-266)", function()
+  t.it("withholds a tree the active scene does not admit", function()
+    -- Game mode removes `media` and `llm`; the gaming scene admits `media` but
+    -- not `llm`, so `llm` stays withheld on the gaming workspace.
+    local _, hyprfocus = fresh(DECLARATION)
+    local disabled = hyprfocus.apply_bindings("game", "gaming")
+    table.sort(disabled)
+    t.eq("llm", table.concat(disabled, ","))
+  end)
+
+  t.it("admits a tree the active scene declares even when the mode removes it", function()
+    -- Game mode removes `media`, but the gaming scene declares it. On the
+    -- gaming workspace `media` stays loaded while `llm` (removed by mode, not
+    -- declared by scene) is withheld.
+    local _, hyprfocus = fresh(DECLARATION)
+    local disabled = hyprfocus.apply_bindings("game", "gaming")
+    table.sort(disabled)
+    t.eq("llm", table.concat(disabled, ","))
+  end)
+
+  t.it("uses union semantics for mode and scene admissions", function()
+    -- Game mode removes `llm` and `media`; the code scene declares `llm`.
+    -- Union keeps `llm`, and `media` is the only one withheld.
+    local _, hyprfocus = fresh(DECLARATION)
+    local disabled = hyprfocus.apply_bindings("game", "code")
+    table.sort(disabled)
+    t.eq("media", table.concat(disabled, ","))
+  end)
+
+  t.it("tracks the scene it last applied", function()
+    local _, hyprfocus = fresh(DECLARATION)
+    hyprfocus.apply_bindings("neutral", "gaming")
+    t.eq("gaming", hyprfocus.last_applied_scene())
   end)
 end)
 

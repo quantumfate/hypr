@@ -79,6 +79,86 @@ One engine for both scenes:
 
 Mood reachability ("focus scene") is a different word. It is not this document.
 
+## Editor contract (LEO-239)
+
+A workspace scene is edited through the same document the engine reads. The
+editor surface may be a Quickshell panel, a hand edit, or a migration script;
+the contract below is the schema it edits against.
+
+### Scene fields
+
+| Field        | Type                  | Meaning                                                                          |
+| ------------ | --------------------- | -------------------------------------------------------------------------------- |
+| `name`       | string                | workspace `default_name` (`code`, `gaming`). This is the key; ids are host data. |
+| `blocks`     | Block[]               | the ordered tiles of the scene                                                   |
+| `barred`     | string[]              | classes that may land here but must never join a group                           |
+| `strays`     | `"slot"` \| `"float"` | how unmatched tiled windows are treated                                          |
+| `solo_frame` | boolean?              | opt-out of the lone-tile decorative frame                                        |
+| `bindings`   | string[]?             | binding trees this scene admits while active                                     |
+| `moods`      | string[]?             | mood tags that select this scene when the mode does not                          |
+| `machines`   | table?                | machine-specific geometry overrides                                              |
+
+### Block fields
+
+| Field     | Type                                  | Meaning                                              |
+| --------- | ------------------------------------- | ---------------------------------------------------- |
+| `classes` | string[]                              | literal class or Lua pattern, in window-rule grammar |
+| `group`   | boolean                               | one Hyprland group containing only these classes     |
+| `order`   | integer                               | left-to-right tile sequence                          |
+| `share`   | number?                               | fraction of the tiled span this block holds          |
+| `collect` | boolean                               | bring drifted members back to this workspace         |
+| `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping               |
+| `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                           |
+
+### Workspace selects its scene
+
+A workspace's scene is its `default_name` entry in the store. The host's
+`workspace_specs` bind ids and monitors; the scene document binds behavior to
+the name. `Scene.active(ws)` returns the scene name for a workspace if one
+exists, and `Scene.realize(name)` runs its layout.
+
+There is no per-workscene indirection: `gaming` is both the workspace name and
+the scene name. A mode admits the workspace; the workspace admits the scene.
+This keeps the editor path single: changing the `gaming` scene changes the
+gaming workspace everywhere.
+
+### Gaming is a workspace scene
+
+The `gaming` scene uses the same fields as every other scene. Its Dofus block
+has `group = true` and a `zen-gaming-media` companion with `guard = "deny"`;
+`barred` lists Steam and Ankama launcher classes. Nothing in the schema is
+gaming-specific — the same contract serves `code`, `creative`, or any future
+workspace.
+
+### Machine-specific geometry
+
+Geometry is fingerprint-based: a scene declares ratios (`share`) and flags
+(`solo_frame`, `strays`), and the engine applies them within the monitor's work
+area. Machine profiles refine only host data:
+
+- `quantum-desktop` — ultrawide layouts may use dedicated regions, intentional
+  gaps, and visible wallpaper. `workspace_specs` assigns the scene to a wide
+  monitor; the engine places tiles across the full work area.
+- `quantum-laptop` — smaller displays must fit or float windows without
+  clipping, overlap, or desktop-sized geometry. A scene whose blocks would clip
+  can set `strays = "float"` so unmatched windows float rather than resize the
+  declared split.
+
+The scene document never names pixels or monitor models. Machine-specific pixel
+values live in `workspace_specs` and `conf/hosts/*.lua`, edited separately from
+the scene contract.
+
+### Bindings and moods
+
+A scene may carry `bindings`: buffer-local trees that exist while the scene is
+active, the same way a Neovim buffer brings its own mappings. These are admitted
+in addition to the mode's bindings, not instead of them, and are withdrawn when
+the user leaves the scene's workspace.
+
+`moods` is a list of mood tags the scene matches. The active mood can therefore
+select a scene without naming it directly in the mode declaration; the editor
+uses this to preview or override a scene for a given mood.
+
 ## The scene is the layout
 
 Registered with `hl.layout.register`: `recalculate(ctx)` receives the work area
@@ -89,8 +169,8 @@ This replaces a corrective loop that measured another layout's output and
 dispatched fixes at it. What the inversion removes, structurally: settle and
 verify timers, geometry digests, turn budgets, the focus-dance (positioning
 dispatchers act on the focused window, so every correction had to steal and
-restore focus), ordering via `movewindow` (at a monitor edge it moves the
-window to the next monitor), and the event subscriptions an engine has to guess
+restore focus), ordering via `movewindow` (at a monitor edge it moves the window
+to the next monitor), and the event subscriptions an engine has to guess
 at. Single-tile gaps and per-workspace layout options become branches in the
 same function.
 

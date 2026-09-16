@@ -3,6 +3,7 @@ local common = require("hypr.services.dofus.common")
 local team = require("hypr.services.dofus.team")
 local swap = require("hypr.services.dofus.swap")
 local ipc = require("hypr.services.dofus.ipc")
+local qs = require("hypr.lib.qs")
 local submap = require("hypr.lib.submap")
 
 local DOFUS_CLASS = "Dofus.x64"
@@ -143,9 +144,10 @@ dofus_bind(
   on_dofus
 )
 
--- The Dofus submap now only hosts management actions (launching, renaming, swap
--- toggle, opening the team UI) — nothing you need mid-fight, so no more team
--- submaps and no team selection here (the UI owns that).
+-- The Dofus submap hosts management actions (launching, renaming, swap toggle,
+-- opening the team UI) plus store and roster queries — nothing you need
+-- mid-fight, so no more team submaps and no team selection here (the UI owns
+-- that).
 submap.tree({
   name = "dofus",
   desc = "Dofus",
@@ -203,6 +205,28 @@ submap.tree({
           local name = active.title:gsub("^" .. common.title_prefix, "")
           ipc.class_of(name)
         end
+      end,
+    },
+    {
+      key = "r",
+      desc = "Reload team store",
+      action = function()
+        ipc.reload()
+      end,
+    },
+    {
+      key = "o",
+      desc = "Show roster",
+      action = function()
+        qs.notify("Dofus roster", "dofus", "team")
+      end,
+    },
+    {
+      key = "s",
+      mods = { "SHIFT" },
+      desc = "Selected team",
+      action = function()
+        qs.notify("Dofus team", "dofus", "selected")
       end,
     },
   },

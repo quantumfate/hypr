@@ -24,6 +24,7 @@ local spec_lib = require("hypr.scene.spec")
 local registry = require("hypr.scene.registry")
 local schedule = require("hypr.scene.schedule")
 local companion = require("hypr.scene.companion")
+local hyprfocus = require("hypr.hyprfocus")
 
 local specs = spec_lib.load()
 
@@ -71,6 +72,47 @@ local function scene_for(w)
   end
   local spec = w.workspace and specs[w.workspace.name]
   return spec and spec_lib.block_for(spec, w.class) and spec.name or nil
+end
+
+local M = {}
+
+---Scene name owning this workspace, or nil.
+---@param ws HL.Workspace?
+---@return string?
+function M.active(ws)
+  local name = ws and ws.name
+  return name and specs[name] and name or nil
+end
+
+---Run the realize loop for the named scene.
+---@param name string
+function M.realize(name)
+  if specs[name] then
+    schedule.realize(name)
+  end
+end
+
+---Leftmost live tile of the block matching `match`, or nil.
+---@param name string
+---@param match string|{ class: string }
+---@return HL.Window?
+function M.tile(name, match)
+  local spec = specs[name]
+  local class = type(match) == "table" and match.class or match
+  local block = spec and type(class) == "string" and spec_lib.block_for(spec, class)
+  if not block then
+    return nil
+  end
+  local best
+  for _, w in ipairs(hl.get_windows() or {}) do
+    local ws = w.workspace
+    if ws and ws.name == name and not w.floating and w.at and spec_lib.block_for(spec, w.class) == block then
+      if not best or w.at.y < best.at.y or (w.at.y == best.at.y and w.at.x < best.at.x) then
+        best = w
+      end
+    end
+  end
+  return best
 end
 
 -- Anything already open when the config (re)loads: the handlers below replay
@@ -148,51 +190,18 @@ end)
 
 -- Arriving on a workspace is the moment its scene may act: whatever drifted
 -- while it was behind the user is corrected now, in front of them, where a
--- focus-dance cannot carry them anywhere they did not ask to go.
+-- focus-dance cannot carry them anywhere they did not ask to go. The scene's
+-- binding trees are also admitted or withheld here (LEO-266).
 hl.on("workspace.active", function()
   local ws = hl.get_active_workspace()
-  schedule.on_enter(ws and ws.name)
-end)
-
-local M = {}
-
----Scene name owning this workspace, or nil.
----@param ws HL.Workspace?
----@return string?
-function M.active(ws)
   local name = ws and ws.name
-  return name and specs[name] and name or nil
-end
-
----Run the realize loop for the named scene.
----@param name string
-function M.realize(name)
-  if specs[name] then
-    schedule.realize(name)
+  schedule.on_enter(name)
+  local scene_name = M.active(ws)
+  if scene_name then
+    pcall(function()
+      hyprfocus.apply_bindings(hyprfocus.active(), scene_name)
+    end)
   end
-end
-
----Leftmost live tile of the block matching `match`, or nil.
----@param name string
----@param match string|{ class: string }
----@return HL.Window?
-function M.tile(name, match)
-  local spec = specs[name]
-  local class = type(match) == "table" and match.class or match
-  local block = spec and type(class) == "string" and spec_lib.block_for(spec, class)
-  if not block then
-    return nil
-  end
-  local best
-  for _, w in ipairs(hl.get_windows() or {}) do
-    local ws = w.workspace
-    if ws and ws.name == name and not w.floating and w.at and spec_lib.block_for(spec, w.class) == block then
-      if not best or w.at.y < best.at.y or (w.at.y == best.at.y and w.at.x < best.at.x) then
-        best = w
-      end
-    end
-  end
-  return best
-end
+end)
 
 return M

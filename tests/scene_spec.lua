@@ -296,6 +296,34 @@ t.describe("grouping", function()
     t.eq(nil, foreign.group, "the browser is a tile of its own again")
     t.eq(2, #a.group.members)
   end)
+
+  t.it("ejects an unknown foreign class from a tmux group without splitting it", function()
+    -- Same engine path as the Dofus group: the scene declares the allowed
+    -- classes, and any join path (Alt-drag, auto_group, focus-driven) is
+    -- corrected by eviction.
+    local stub, world = fresh()
+    define_store({
+      code = {
+        blocks = {
+          { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 },
+          { classes = { "zen-twilight" }, order = 2, share = 0.33, guard = "deny" },
+        },
+      },
+    })
+    world.active = "code"
+    local a = win(world, { address = "0x1", class = "Kitty-Main", ws = "code" })
+    local b = win(world, { address = "0x2", class = "Proj-nvim", ws = "code", x = 300 })
+    local foreign = win(world, { address = "0xf", class = "org.wezfurlong.wezterm", ws = "code", x = 600 })
+    local g = world.group("g")
+    g:add(a)
+    g:add(b)
+    g:add(foreign)
+    require("hypr.events.scene")
+    emit(stub, "window.open", foreign)
+    t.ok(drain(stub))
+    t.eq(nil, foreign.group, "the unknown terminal is evicted")
+    t.eq(2, #a.group.members, "the legitimate tmux group stays intact")
+  end)
 end)
 
 t.describe("collection", function()

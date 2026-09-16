@@ -501,8 +501,8 @@ bind.exec("slash", "qs -c quantumfate ipc call cheatsheet toggle", {
 })
 
 -- Quickshell control: which-key menu exposing the rest of the shell's IPC
--- surface (theme, cheatsheet, team panel, store queries). Actions that take an
--- argument are reached elsewhere: `dofus select` via the team submap, and
+-- surface (theme, cheatsheet, system center). Scene-specific actions live in
+-- their own trees; the Dofus tree carries team panel, roster, and store reload.
 -- `theme set <palette>` is covered here by `cycle`.
 -- Modes (SUPER+f): entering one is a single action that drives both halves of
 -- the desk — this runtime's workspaces and binding trees, and the command
@@ -598,25 +598,6 @@ submap.tree({
   name = "shell",
   desc = "Shell / Quickshell",
   entries = {
-    -- (cheatsheet toggle is the global super+/ bind, which is submap_universal)
-    {
-      key = "p",
-      desc = "Toggle team panel",
-      action = function()
-        -- teamSelector, not dofusPanel: the latter toggled the Dofus taskbar
-        -- strip in the bar, and the bar no longer carries one — groups show
-        -- what a workspace holds, so a taskbar duplicated it. The team panel
-        -- itself is a separate surface and is what this key always meant.
-        qs.call("teamSelector", "toggle")
-      end,
-    },
-    {
-      key = "r",
-      desc = "Reload team store",
-      action = function()
-        qs.call("dofus", "reload")
-      end,
-    },
     -- The on-demand System Center (LEO-226): settings/actions live in the
     -- widget, which-key carries the door.
     {
@@ -631,20 +612,6 @@ submap.tree({
       desc = "Open the Control Centre",
       action = function()
         qs.call("control", "toggle")
-      end,
-    },
-    {
-      key = "n",
-      desc = "Show roster",
-      action = function()
-        qs.notify("Dofus roster", "dofus", "team")
-      end,
-    },
-    {
-      key = "s",
-      desc = "Selected team",
-      action = function()
-        qs.notify("Dofus team", "dofus", "selected")
       end,
     },
     {
