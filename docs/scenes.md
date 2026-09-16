@@ -86,11 +86,10 @@ the pokemon browsers are unplaced.
 | primary   | `dofus`           | dofus           | 0.67 group / 0.33 browser  |
 | primary   | `pokemon`         | pokemon         | 0.30 emulator / 0.70 media |
 | primary   | `steam-games`     | steam-games     | 1.00 fullscreen            |
-| secondary | `communication`   | communication   | 0.50 signal / 0.50 vesktop |
-| secondary | `lutris`          | lutris          | 1.00 fullscreen            |
-| secondary | `steam`           | steam           | 1.00 fullscreen            |
 | secondary | `media`           | media           | 1.00 fullscreen            |
-| secondary | `ankama-launcher` | ankama-launcher | empty scene (drawer later) |
+
+Signal, Vesktop, Steam, Lutris and the Ankama Launcher are shelves, not scenes
+([shelves.md](shelves.md)).
 
 ### Work
 
@@ -118,7 +117,6 @@ The recovery fallback, reached from a submap and never listed as a peer mode
 | --------- | --------------- | ------------- |
 | primary   | `code`          | code          |
 | primary   | `proton`        | proton        |
-| secondary | `communication` | communication |
 | secondary | `logs`          | logs          |
 
 `creative` and `misc` are retired: no host, mode or scene declares them.

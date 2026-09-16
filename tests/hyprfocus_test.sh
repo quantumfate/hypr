@@ -37,7 +37,7 @@ run() { "$cli" --declaration "$declaration" "$@"; }
 # Game mode is the sharpest case: the widest scene set, and the one whose whole
 # point is giving things up. Its workspaces are derived from its scene set.
 check "gaming admits only its scene set's workspaces" \
-    "dofus, pokemon, steam-games, proton, communication, lutris, steam, media, ankama-launcher" \
+    "dofus, pokemon, steam-games, proton, media" \
     "$(run resolve gaming | awk '/^workspaces/ {sub(/^workspaces */, ""); print}')"
 
 check "gaming stops the Obsidian suite" \
@@ -46,11 +46,11 @@ check "gaming stops the Obsidian suite" \
 
 # Each scene carries the monitor role the mode places it on.
 check "gaming carries only its own scenes, placed by role" \
-    "dofus@primary, pokemon@primary, steam-games@primary, proton@primary, communication@secondary, lutris@secondary, steam@secondary, media@secondary, ankama-launcher@secondary" \
+    "dofus@primary, pokemon@primary, steam-games@primary, proton@primary, media@secondary" \
     "$(run resolve gaming | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
 check "neutral is the recovery set" \
-    "code@primary, proton@primary, communication@secondary, logs@secondary" \
+    "code@primary, proton@primary, logs@secondary" \
     "$(run resolve neutral | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
 # Dependency closure: nothing names the indexer, it arrives via `wants`.

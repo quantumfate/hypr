@@ -176,6 +176,8 @@
 ---@field opens? string Leaf that only enters another submap; the which-key
 ---omits it while that submap's tree is withheld, so the menu never advertises
 ---a door that leads into a tree this mode took away.
+---@field tree? string Leaf: the binding tree that admits this key on its own, so a mode can
+---withhold one entry of a submap without the rest (a shelf enabled only in some modes).
 ---@field stay? boolean Leaf: stay in the submap after running instead of exiting. Overrides `sticky`.
 ---@field sticky? boolean Group: default `stay` for descendant leaves (modal submap). Inherited by children.
 ---@field repeating? boolean Leaf: allow key repeat while held.

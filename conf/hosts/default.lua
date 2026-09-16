@@ -28,13 +28,9 @@ return {
       { workspace = "4", default_name = "dofus" },
       { workspace = "5", default_name = "pokemon" },
       { workspace = "6", default_name = "steam-games" },
-      { workspace = "7", default_name = "communication" },
       { workspace = "8", default_name = "obsidian-linear" },
-      { workspace = "9", default_name = "lutris" },
-      { workspace = "10", default_name = "steam" },
       { workspace = "11", default_name = "media", monitor = "secondary" },
       { workspace = "12", default_name = "logs", monitor = "secondary" },
-      { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
     workspace_keys = {
       "plus",

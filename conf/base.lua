@@ -37,6 +37,24 @@ return {
   primary_mod = "CTRL",
   secondary_mod = "SHIFT",
   tertiary_mod = "ALT",
+  -- Shelves (hypr/lib/shelf.lua, docs/shelves.md): one key each in the
+  -- `shelf` submap. A `tree` is admitted per mode by the hyprfocus
+  -- declaration; a shelf without one is always there.
+  ---@type Shelf[]
+  shelves = {
+    { name = "signal", key = "s", class = "signal", cmd = "signal-desktop", desc = "Signal" },
+    { name = "vesktop", key = "v", class = "vesktop", cmd = "vesktop", desc = "Vesktop" },
+    {
+      name = "ankama",
+      key = "a",
+      class = "Ankama Launcher",
+      cmd = ",ankama-launcher.sh",
+      desc = "Ankama Launcher",
+      tree = "shelf-ankama",
+    },
+    { name = "steam", key = "t", class = "steam", cmd = "steam", desc = "Steam", tree = "shelf-steam" },
+    { name = "lutris", key = "l", class = "net.lutris.Lutris", cmd = "lutris", desc = "Lutris", tree = "shelf-lutris" },
+  },
   ---@type table<string, AppScope>
   apps = {
     media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },

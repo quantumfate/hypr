@@ -29,7 +29,7 @@ controls exactly four things:
 Later: permissions (what may launch) and notification routing per mode.
 
 `neutral` is a hidden fallback for recovery (scenes: `code`, `proton`,
-`communication`, `logs`; validated like every mode), reachable from a submap, not a
+`logs`; validated like every mode), reachable from a submap, not a
 peer choice.
 
 ## Scene
@@ -55,7 +55,9 @@ A scene is a plug-in unit that maps to one workspace. It owns:
   drawer is either **global** or **assigned to scenes** and then never
   reachable outside them. Every drawer gets the same reserved default binding
   inside the owning scope's submap, so drawers behave consistently across
-  scopes. A locked scene still admits its drawers.
+  scopes. A locked scene still admits its drawers. The first implementation
+  is **shelves** ([shelves.md](shelves.md)): one `shelf` submap, one key per
+  app, with mode-admitted keys for Steam, Lutris and the Ankama Launcher.
 - **Window-state behaviour** — what happens when a window opens or closes:
   - a scene may **lock** its layout so no additional window may join (Dofus:
     the Dofus group left, `zen-gaming-media` right, never disturbed);

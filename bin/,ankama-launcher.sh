@@ -7,7 +7,7 @@ export LD_LIBRARY_PATH="/usr/lib:/usr/lib32:/usr/lib/libfakeroot:/usr/lib64:/hom
 export TERM="xterm"
 
 # Focus mode blocks starting a game session, not an already-running one; this
-# only runs when the special:ankama workspace is empty, i.e. nothing is up yet.
+# only runs when no Ankama Launcher window exists, i.e. nothing is up yet.
 ",focus-guard.sh" game || exit 1
 
 # Working Directory. Without the guard, a missing launcher means the exec below

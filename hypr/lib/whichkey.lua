@@ -80,7 +80,7 @@ end
 function M.register(name, parent, entries)
   local node = { parent = parent or "", items = {} }
   for _, e in ipairs(entries) do
-    local item = { key = e.key, mods = sanitize_mods(e.mods), desc = e.desc, group = false }
+    local item = { key = e.key, mods = sanitize_mods(e.mods), desc = e.desc, group = false, tree = e.tree }
     if e.entries then
       item.group = true
       item.child = e.name or (name .. "-" .. e.key)
@@ -169,7 +169,8 @@ function M.dump(admitted)
           -- An `opens` leaf answers for its destination tree; a group's child
           -- is its own nesting and trivially admitted with its tree.
           local child_tree = item.child and tree_of(item.child) or nil
-          if not item.child or admitted[child_tree] then
+          -- A leaf with its own `tree` answers for that tree instead.
+          if (not item.child or admitted[child_tree]) and (not item.tree or admitted[item.tree]) then
             rendered.items[#rendered.items + 1] = item
           end
         end

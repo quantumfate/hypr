@@ -60,8 +60,6 @@ return {
       { workspace = "5", default_name = "pokemon" },
       -- Steam games: fullscreen proton/steam windows, no split.
       { workspace = "6", default_name = "steam-games" },
-      -- Communication: signal + vesktop, 50/50 split.
-      { workspace = "7", default_name = "communication", monitor = "secondary" },
       -- Obsidian + Linear side-by-side. Shared by work + study modes.
       {
         workspace = "8",
@@ -69,10 +67,6 @@ return {
         monitor = "secondary",
         engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
       },
-      -- Lutris: game launcher, fullscreen.
-      { workspace = "9", default_name = "lutris", monitor = "secondary" },
-      -- Steam client: small floating window.
-      { workspace = "10", default_name = "steam", monitor = "secondary" },
       -- Media: fullscreen media player.
       {
         workspace = "11",
@@ -82,9 +76,9 @@ return {
       },
       -- Logs: tmux log workspace, secondary.
       { workspace = "12", default_name = "logs", monitor = "secondary" },
-      -- Ankama launcher: fullscreen, secondary. Retired from special:ankama.
-      { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
+    -- Communication, Lutris, Steam and the Ankama Launcher are shelves now
+    -- (conf/base.lua `shelves`), not workspaces.
     workspace_keys = {
       "plus",
       "bracketleft",

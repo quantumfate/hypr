@@ -198,16 +198,18 @@ submap.tree({
   },
 })
 
-submap.tree({
-  name = "special-ws",
-  desc = "Special workspaces",
-  entries = {
-    bind.special_ws_entry("s", "music"),
-    bind.special_ws_entry("v", "comms"),
-    bind.special_ws_entry("l", "launcher"),
-    bind.special_ws_entry("a", "ankama"),
-  },
-})
+-- Shelves: one key per app in a single submap. Shelves carrying a `tree`
+-- (Ankama Launcher, Steam, Lutris) are admitted by the mode, so their keys
+-- exist only where the mode enables them.
+do
+  local shelf = require("hypr.lib.shelf")
+  local entries = {}
+  for _, s in ipairs(config.shelves) do
+    entries[#entries + 1] = shelf.entry(s)
+  end
+  entries[#entries + 1] = bind.special_ws_entry("m", "music")
+  submap.tree({ name = "shelf", desc = "Shelves", entries = entries })
+end
 
 bind.focus_workspace("TAB", "e-1", "the previous used workspace")
 bind.focus_workspace("TAB", "e+1", "the next used workspace", { config.secondary_mod })
@@ -449,10 +451,10 @@ submap.tree({
     },
     {
       key = "w",
-      desc = "Special workspaces",
-      opens = "special-ws",
+      desc = "Shelves",
+      opens = "shelf",
       action = function()
-        submap.enter("special-ws")
+        submap.enter("shelf")
       end,
     },
     {

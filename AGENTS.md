@@ -252,7 +252,7 @@ New to the repo, read in this order — each layer points at the next:
 
 1. [README.md](README.md) — what this is, how to install it.
 2. [ARCHITECTURE.md](ARCHITECTURE.md) — the packaging model: dual delivery (Nix + Ansible), repo scope, ecosystem coupling, release channels.
-3. [docs/scenes.md](docs/scenes.md) — the scene contract (below is the enforcement; this is the reasoning).
+3. [docs/scenes.md](docs/scenes.md) — the scene contract (below is the enforcement; this is the reasoning). [docs/shelves.md](docs/shelves.md) — the shelf submap for apps that never tile.
 4. [docs/lifecycle.md](docs/lifecycle.md) — the window lifecycle: current behaviour per stage and the draft contract.
 5. [bin/Readme.md](bin/Readme.md) — the shell helpers the desktop spawns, and the state/IPC seams to the quickshell sibling repo.
 6. [system-config/docs/bindings.md](../system-config/docs/bindings.md) — the

@@ -161,6 +161,10 @@ local function define(name, entries, sticky)
         -- the leaf with it, so a mode removes the key and the room together.
         if e.opens then
           hyprfocus_binds.attribute(handle, e.opens)
+        elseif e.tree then
+          -- A leaf admitted on its own: it sits in this submap but a mode
+          -- loads or withholds it by its own tree name.
+          hyprfocus_binds.attribute(handle, e.tree)
         end
       end
     end

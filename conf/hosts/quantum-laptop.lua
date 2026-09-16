@@ -37,15 +37,12 @@ return {
       },
       { workspace = "5", default_name = "pokemon" },
       { workspace = "6", default_name = "steam-games" },
-      { workspace = "7", default_name = "communication", monitor = "secondary" },
       {
         workspace = "8",
         default_name = "obsidian-linear",
         monitor = "secondary",
         engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
       },
-      { workspace = "9", default_name = "lutris", monitor = "secondary" },
-      { workspace = "10", default_name = "steam", monitor = "secondary" },
       {
         workspace = "11",
         default_name = "media",
@@ -53,8 +50,9 @@ return {
         engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
       },
       { workspace = "12", default_name = "logs", monitor = "secondary" },
-      { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
+    -- Communication, Lutris, Steam and the Ankama Launcher are shelves now
+    -- (conf/base.lua `shelves`), not workspaces.
     workspace_keys = {
       "plus",
       "bracketleft",
