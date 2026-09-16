@@ -1,7 +1,7 @@
 # Desktop model
 
 The intent this desk is built toward. **Status: target model.** Parts of it
-are implemented, most are not; [lifecycle.md](lifecycle.md) (once written)
+are implemented, most are not; [lifecycle.md](lifecycle.md)
 records what runs today, stage by stage. When this document and older text in
 `AGENTS.md`, [scenes.md](scenes.md) or `system-config/docs/bindings.md`
 disagree, this document states the intent and the older text is the defect.
