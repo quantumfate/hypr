@@ -13,22 +13,28 @@
 -- (quickshell's scenes schema, LEO-235's members/gaps/layout those documents
 -- describe); the editor contract (LEO-239) owns that widening, in one store,
 -- so this document and that model converge rather than coexist.
+--
+-- LEO-330: every focus mode gets a distinct scene layout. Special workspaces
+-- are retired — every scene that used to live in `special:*` is now an
+-- ordinary workspace admitted per mode.
 return {
   -- The seed's own generation. A store carrying an OLDER generation (or none)
   -- is re-seeded once on load — the seed is the shipped default, and a
   -- document it predates cannot hold what it was never written with. User
   -- edits after that are their own, so this is version-keyed and one-way:
   -- a document can only be newer than this file, never older in interest.
-  version = 2,
+  version = 3,
   scenes = {
-    gaming = {
+    -- Gaming scenes (admitted by gaming mode) ---------------------------
+
+    -- Dofus: the primary gaming workspace. A group of Dofus clients fills
+    -- the left 67%; a companion browser fills the right 33% for streaming
+    -- media and the OBS crop. `collect` pulls drifted clients home because
+    -- the group is the scene — a client left behind is one the roster and
+    -- the crop both stop seeing. `deny` on the companion prevents it from
+    -- joining the Dofus group; it exists as a fixed capture region.
+    dofus = {
       blocks = {
-        -- `collect`: a Dofus client dragged to another workspace mid-session
-        -- comes back, because the group is the scene — a client left behind
-        -- is one the roster and the OBS crop both stop seeing.
-        -- The companion declines joining the group itself (`guard = "deny"`
-        -- below); it exists while the group does, to keep the capture's
-        -- geometry from being an empty half of the screen.
         {
           classes = { "Dofus.x64" },
           group = true,
@@ -37,32 +43,152 @@ return {
           collect = true,
           spawn = { class = "zen-gaming-media", command = "zen-twilight -P GamingMedia --name zen-gaming-media" },
         },
-        -- `deny`, not the default bar: this tile is a fixed region beside
-        -- the group, and grouping it — even deliberately — would collapse
-        -- the two-tile split the capture depends on.
         { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
       },
-      -- Classes that legitimately open here without belonging to a block.
-      -- They are barred because `auto_group` grabs whatever opens while a
-      -- group holds focus, and this workspace's main tile is a group.
       barred = { "steam_app_default", "steam_app_\\d+", "Ankama Launcher" },
-      -- This scene's tile geometry is a fixed capture region, so a window
-      -- that matches no block floats above it rather than taking a slot
-      -- and shifting the split the crop is aimed at.
+      -- Fixed capture region: a stray that takes a slot shifts the split
+      -- the OBS crop is aimed at, so unmatched windows float above it.
       strays = "float",
-      -- The Dofus tree is mode-scoped by hyprfocus; the scene can add its own
-      -- buffer-local trees here (e.g. a capture-only tree). Empty means none.
       bindings = {},
       moods = { "gaming" },
     },
+
+    -- Pokemon: emulator window + two streaming media browsers. The
+    -- RetroArch window is the active game; the browsers show the chat and
+    -- the stream preview. Three-tile split with the emulator in the centre
+    -- and media flanking. Unmatched windows float to preserve the streaming
+    -- geometry.
+    pokemon = {
+      blocks = {
+        { classes = { "zen-gaming-media" }, order = 1, share = 0.35, guard = "deny" },
+        { classes = { "com.libretro.RetroArch" }, order = 2, share = 0.30 },
+        { classes = { "zen-gaming-media" }, order = 3, share = 0.35, guard = "deny" },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "gaming" },
+    },
+
+    -- Steam games: fullscreen proton/steam windows. One tile, no split —
+    -- every game takes the full workspace. Unmatched windows float to avoid
+    -- disrupting the fullscreen layout.
+    ["steam-games"] = {
+      blocks = {
+        { classes = { "steam_app", "steam_app_\\d+" }, order = 1, share = 1.0 },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "gaming" },
+    },
+
+    -- Communication: Signal and Vesktop side by side. 50/50 split.
+    -- Unmatched windows float to preserve the symmetric layout.
+    communication = {
+      blocks = {
+        { classes = { "signal" }, order = 1, share = 0.5 },
+        { classes = { "vesktop" }, order = 2, share = 0.5 },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "gaming" },
+    },
+
+    -- Lutris: game launcher, fullscreen. Single tile.
+    lutris = {
+      blocks = {
+        { classes = { "net.lutris.Lutris" }, order = 1, share = 1.0 },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "gaming" },
+    },
+
+    -- Steam client: the store/library window (not a game). Fullscreen.
+    -- The floating "Steam" startup window shares the class; the title
+    -- distinguishes them (empty on the startup splash, "Steam" on the
+    -- real window).
+    steam = {
+      blocks = {
+        { classes = { "steam" }, order = 1, share = 1.0 },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "gaming" },
+    },
+
+    -- Media: fullscreen media player. Admitted by gaming mode for
+    -- watching streams or videos beside the gaming workspace.
+    media = {
+      blocks = {
+        { classes = { "mpv", "firefox" }, order = 1, share = 1.0 },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "gaming" },
+    },
+
+    -- Work + study scenes (admitted by work/study modes) ----------------
+
+    -- Code: the coding workspace. Terminals form one group on the left 67%;
+    -- the browser fills the right 33%. No `collect`: a project terminal
+    -- you moved away is where you wanted it. The custom columns layout
+    -- (LEO-308/311) is a follow-up; for now this uses the two-tile split.
     code = {
       blocks = {
-        -- No `collect`: a project terminal you moved to another workspace is
-        -- where you wanted it. Only the gaming group is cohesive enough to
-        -- be worth dragging home.
         { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 },
         { classes = { "zen-twilight", "firefox-developer-edition" }, order = 2, share = 0.33 },
       },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "work", "study" },
+    },
+
+    -- Obsidian + Linear: note-taking and issue tracking side by side.
+    -- 50/50 split. The Obsidian settings window (title starts with
+    -- "Settings") is a stray and floats.
+    ["obsidian-linear"] = {
+      blocks = {
+        { classes = { "md.obsidian.Obsidian" }, order = 1, share = 0.5 },
+        { classes = { "linear" }, order = 2, share = 0.5 },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "work", "study" },
+    },
+
+    -- Proton: mail client and password manager. 50/50 split. The Proton
+    -- Pass companion opens alongside Proton Mail.
+    proton = {
+      blocks = {
+        { classes = { "proton-mail" }, order = 1, share = 0.5 },
+        {
+          classes = { "Proton Pass" },
+          order = 2,
+          share = 0.5,
+          spawn = { class = "Proton Pass", command = "proton-pass" },
+        },
+      },
+      barred = {},
+      strays = "float",
+      bindings = {},
+      moods = { "work", "study", "gaming" },
+    },
+
+    -- Logs: the tmux log workspace. Empty blocks — the scene owns the
+    -- workspace but does not declare tile geometry, so tmux controls its
+    -- own layout. Follow-up: convert to LEO-308 terminal roles.
+    logs = {
+      blocks = {},
+      barred = {},
+      strays = "float",
       bindings = {},
       moods = { "work" },
     },
