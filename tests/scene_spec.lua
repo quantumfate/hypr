@@ -108,7 +108,7 @@ t.describe("compiled rules", function()
         local applied_tag = tag_rule.tag:match("%+(block:[^%s]+)") or tag_rule.tag:match("%+(scene:[^%s]+)")
         for _, group_rule in ipairs(rules) do
           if group_rule.match.tag == applied_tag then
-            return group_rule.group, tag_rule.match.onworkspace
+            return group_rule.group, tag_rule.match.workspace
           end
         end
       end

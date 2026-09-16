@@ -19,11 +19,10 @@
 -- the same class on a different workspace never receives the tag, so it
 -- never matches the group rule either.
 --
--- The workspace scope on the tagging rule uses `onworkspace`, not
--- `workspace`: in Hyprland's windowrulev2 grammar `workspace` (bare) is the
--- *effect* that assigns a window to a workspace, while `onworkspace` is the
--- *matcher* that tests the window's current workspace. Using `workspace` as
--- a matcher key would silently do nothing.
+-- The workspace scope is `match.workspace`: inside `match` it tests the
+-- window's workspace, while a top-level `workspace` is the effect that moves
+-- a window there. `onworkspace` is not a match key in the Lua API; the
+-- compositor rejects it at load.
 local M = {}
 
 ---One compiled window rule, before it is registered against `hl`. Kept as
@@ -75,7 +74,7 @@ function M.plan(specs)
         -- ahead of the group rule that depends on its tag.
         rules[#rules + 1] = {
           name = ("scene-%s-%d-%s-1-tag"):format(name, block.order, class),
-          match = { class = class, onworkspace = on_workspace },
+          match = { class = class, workspace = on_workspace },
           tag = ("+%s +%s"):format(scene_tag, block_tag),
         }
         -- Arrange: the group decision matches the block tag, not the bare
@@ -102,7 +101,7 @@ function M.plan(specs)
       local scene_tag = tags_for(name)
       rules[#rules + 1] = {
         name = ("scene-%s-barred-%s-1-tag"):format(name, class),
-        match = { class = class, onworkspace = on_workspace },
+        match = { class = class, workspace = on_workspace },
         tag = ("+%s"):format(scene_tag),
       }
       rules[#rules + 1] = {
