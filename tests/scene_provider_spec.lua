@@ -176,6 +176,26 @@ t.describe("gaps", function()
   end)
 end)
 
+t.describe("strays", function()
+  local FLOAT_CODE = {
+    default_name = "code",
+    blocks = CODE.blocks,
+    strays = "float",
+  }
+
+  t.it("floats a stray instead of giving it a slot", function()
+    local _, provider = fresh({ FLOAT_CODE })
+    local a = target("0x1", "Kitty-Main", "code")
+    local b = target("0x9", "zen-twilight", "code")
+    local stray = target("0xf", "mpv", "code")
+    provider.recalculate({ area = AREA, targets = { a, b, stray } })
+    -- The declared split is untouched by the floated stray.
+    t.eq(670, placed(a).w)
+    t.eq(330, placed(b).w)
+    t.ok(placed(stray), "the floated stray still gets placed")
+  end)
+end)
+
 t.describe("edges", function()
   t.it("does nothing with no targets", function()
     local _, provider = fresh({ CODE })

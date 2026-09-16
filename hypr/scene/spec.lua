@@ -152,17 +152,56 @@ function M.class_matches(class, patterns)
   return false
 end
 
----The block owning `class`, or nil.
+---Every block whose `classes` match, in declaration order. `block_for` takes
+---the first; this exposes the rest so a caller (the identify-stage logger,
+---LEO-355's follow-up) can see and report an ambiguous class instead of the
+---later blocks silently never filling.
+---@param spec Scene.Spec
+---@param class string?
+---@return Scene.Block[]
+function M.block_candidates(spec, class)
+  local out = {}
+  for _, block in ipairs(spec.blocks) do
+    if M.class_matches(class, block.classes) then
+      out[#out + 1] = block
+    end
+  end
+  return out
+end
+
+---The block owning `class`, or nil. First-match by declaration order: kept
+---deterministic and documented rather than refused, since a scene author can
+---always resolve a real ambiguity with `ambiguous_classes` below.
 ---@param spec Scene.Spec
 ---@param class string?
 ---@return Scene.Block?
 function M.block_for(spec, class)
+  return M.block_candidates(spec, class)[1]
+end
+
+---Declared class entries claimed by more than one of the scene's own blocks —
+---a static check over the declaration itself, not a live window's class, so
+---an author sees the conflict without needing a matching window open. Order
+---follows first appearance across the blocks.
+---@param spec Scene.Spec
+---@return string[]
+function M.ambiguous_classes(spec)
+  local count, order = {}, {}
   for _, block in ipairs(spec.blocks) do
-    if M.class_matches(class, block.classes) then
-      return block
+    for _, entry in ipairs(block.classes) do
+      if not count[entry] then
+        order[#order + 1] = entry
+      end
+      count[entry] = (count[entry] or 0) + 1
     end
   end
-  return nil
+  local out = {}
+  for _, entry in ipairs(order) do
+    if count[entry] > 1 then
+      out[#out + 1] = entry
+    end
+  end
+  return out
 end
 
 return M

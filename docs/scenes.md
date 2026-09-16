@@ -28,9 +28,8 @@ sibling `system-config` repo.
 | contextual binds                  | focused window, never the scene    |
 | theme                             | mode                               |
 
-Today's gap: modes still admit workspaces by name rather than scene sets,
-scenes have no bring-up/teardown or window-state behaviour, and `strays` is
-parsed but not executed.
+Today's gap: modes still admit workspaces by name rather than scene sets, and
+scenes have no bring-up/teardown or window-state behaviour.
 
 ## Declaration
 
@@ -163,6 +162,47 @@ the contract below is the schema it edits against.
 | `collect` | boolean                               | bring drifted members back to this workspace         |
 | `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping               |
 | `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                           |
+
+### Strays: `"slot"` executes, `"float"` centers
+
+`strays` used to be parsed and ignored — a `"float"` scene's unmatched windows
+still ate into the declared split. It is executed now, in `hypr/scene/layout.lua`:
+
+- `"slot"` (default): a stray divides whatever the declared blocks leave, same
+  as before.
+- `"float"`: strays are pulled out before shares are computed at all, so the
+  declared blocks keep exactly their geometry no matter what else is open —
+  the point of the flag for a fixed capture region.
+
+A Hyprland layout provider has no non-dispatch primitive to toggle a window's
+`floating` field from `recalculate` — `HL.LayoutTarget` offers only `place`
+and `set_box`, and the dispatcher path (`hl.dispatch.window.float`) acts on
+the _focused_ window, which this engine avoids on principle (see "Hyprland
+primitives" in `AGENTS.md`). So a floated stray still gets exactly one box —
+centered over the declared layout's area at half its size, each additional
+floated stray nudged so they do not exactly overlap — rather than truly
+floating. `layout.float_box` computes it; `layout.stack` (below) is unrelated.
+
+### Every window of a block gets placed
+
+A non-group block used to place only its first tile; the rest were silently
+dropped. Now the block's declared `share` is split vertically among all of
+its windows: equal heights, `gaps_in` between them, the last one taking
+whatever rounding left — the same "last slot takes the remainder" rule the
+horizontal split already used. A `group = true` block is unaffected: its
+members still collapse to one Hyprland group occupying one box.
+
+### Ambiguous classes: first-match, not silent
+
+`spec.block_for` is first-match by declaration order — deterministic, but a
+class declared in two blocks of the same scene means the second block can
+never fill from that class. `spec.block_candidates(spec, class)` returns
+every matching block so a caller can see and log the ambiguity (the follow-up
+issue wires this to `identify.ambiguous`); `spec.ambiguous_classes(spec)` is a
+static validator over the declaration itself, listing every class entry
+claimed by more than one block. The shipped defaults have exactly one:
+`zen-gaming-media` in the `pokemon` scene's flanking media blocks (by design —
+the same class fills both the left and right slot).
 
 ### Workspace selects its scene
 

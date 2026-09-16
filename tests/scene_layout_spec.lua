@@ -88,6 +88,39 @@ t.describe("declared blocks", function()
     local boxes = layout.boxes(spec, tiles, AREA, NO_GAPS)
     t.eq("0x1:0+670 0x2:0+670 0x9:670+330", trace(boxes), "group members share one box")
   end)
+
+  t.it("stacks every window of an ungrouped block within its share", function()
+    -- An ungrouped block with 3+ windows used to drop everything but the
+    -- first; now the block's share splits vertically among all of them.
+    -- TERMINALS (order 1, share 0.67) is a `group = true` block, so its lone
+    -- window sits in its own slot; BROWSER (order 2, share 0.33, ungrouped)
+    -- is the one under test here.
+    local spec, layout = scene({ TERMINALS, BROWSER })
+    local tiles = {
+      tile("0x1", "Kitty-Main"),
+      tile("0x2", "zen-twilight"),
+      tile("0x3", "zen-twilight"),
+      tile("0x4", "zen-twilight"),
+    }
+    local boxes = layout.boxes(spec, tiles, AREA, NO_GAPS)
+    local by_addr = {}
+    for _, b in ipairs(boxes) do
+      by_addr[b.address] = b
+    end
+    t.eq(4, #boxes, "every window got a box")
+    -- The browser block is the second, 330-wide column; its three windows
+    -- share that column, stacked.
+    t.eq(330, by_addr["0x2"].w)
+    t.eq(330, by_addr["0x3"].w)
+    t.eq(330, by_addr["0x4"].w)
+    t.eq(670, by_addr["0x2"].x)
+    t.eq(670, by_addr["0x3"].x)
+    t.eq(670, by_addr["0x4"].x)
+    t.eq(0, by_addr["0x2"].y)
+    t.eq(1000, by_addr["0x2"].h + by_addr["0x3"].h + by_addr["0x4"].h, "the stack fills the share's height")
+    t.ok(by_addr["0x3"].y >= by_addr["0x2"].y + by_addr["0x2"].h, "stacked windows do not overlap")
+    t.ok(by_addr["0x4"].y >= by_addr["0x3"].y + by_addr["0x3"].h, "stacked windows do not overlap")
+  end)
 end)
 
 t.describe("strays", function()
@@ -133,6 +166,40 @@ t.describe("strays", function()
   t.it("slot by default", function()
     local spec, layout = scene({ TERMINALS })
     t.ok(not layout.floats_strays(spec))
+  end)
+
+  t.it("take a slot and divide the remainder when the scene does not float them", function()
+    local spec, layout = scene({ TERMINALS, BROWSER })
+    local tiles = { tile("0x1", "Kitty-Main"), tile("0x9", "zen-twilight"), tile("0xf", "mpv") }
+    local boxes = layout.boxes(spec, tiles, AREA, NO_GAPS)
+    t.eq(3, #boxes, "the stray got a box")
+  end)
+
+  t.it("get placed but never take a slot when the scene floats them", function()
+    -- `strays = "float"` used to be parsed and ignored: a stray still ate
+    -- into the declared split. Now it is pulled out before shares are
+    -- computed, so the declared blocks keep exactly their geometry.
+    local spec, layout = scene({ TERMINALS, BROWSER }, { strays = "float" })
+    local tiles = { tile("0x1", "Kitty-Main"), tile("0x9", "zen-twilight"), tile("0xf", "mpv") }
+    local boxes = layout.boxes(spec, tiles, AREA, NO_GAPS)
+    local by_addr = {}
+    for _, b in ipairs(boxes) do
+      by_addr[b.address] = b
+    end
+    t.eq(670, by_addr["0x1"].w, "the declared block's share is untouched")
+    t.eq(330, by_addr["0x9"].w, "the declared block's share is untouched")
+    t.ok(by_addr["0xf"], "the floated stray still gets a box")
+    t.ok(by_addr["0xf"].w > 0 and by_addr["0xf"].h > 0)
+  end)
+
+  t.it("places a floated stray centered over the whole area when there are no blocks", function()
+    local spec, layout = scene({}, { strays = "float" })
+    local boxes = layout.boxes(spec, { tile("0xf", "mpv") }, AREA, NO_GAPS)
+    t.eq(1, #boxes)
+    t.eq(250, boxes[1].x)
+    t.eq(250, boxes[1].y)
+    t.eq(500, boxes[1].w)
+    t.eq(500, boxes[1].h)
   end)
 end)
 
@@ -201,6 +268,77 @@ t.describe("gaps", function()
   end)
 end)
 
+t.describe("ambiguity", function()
+  t.it("block_for still first-matches deterministically", function()
+    local spec = scene({
+      { classes = { "zen-gaming-media" }, order = 1 },
+      { classes = { "com.libretro.RetroArch" }, order = 2 },
+      { classes = { "zen-gaming-media" }, order = 3 },
+    })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq(1, spec_lib.block_for(spec, "zen-gaming-media").order)
+  end)
+
+  t.it("block_candidates exposes every match, not just the first", function()
+    local spec = scene({
+      { classes = { "zen-gaming-media" }, order = 1 },
+      { classes = { "zen-gaming-media" }, order = 3 },
+    })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq(2, #spec_lib.block_candidates(spec, "zen-gaming-media"))
+  end)
+
+  t.it("ambiguous_classes lists a class declared in two blocks", function()
+    local spec = scene({
+      { classes = { "zen-gaming-media" }, order = 1 },
+      { classes = { "com.libretro.RetroArch" }, order = 2 },
+      { classes = { "zen-gaming-media" }, order = 3 },
+    })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq("zen-gaming-media", table.concat(spec_lib.ambiguous_classes(spec), ","))
+  end)
+
+  t.it("ambiguous_classes is empty for an unambiguous scene", function()
+    local spec = scene({ TERMINALS, BROWSER })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq(0, #spec_lib.ambiguous_classes(spec))
+  end)
+
+  t.it("the shipped defaults' ambiguities are exactly the known pokemon duplicate", function()
+    package.loaded["hypr.scene.spec"] = nil
+    package.loaded["hypr.lib.store"] = nil
+    local defaults = require("hypr.scene.defaults")
+    package.loaded["hypr.lib.store"] = {
+      define = function()
+        return {
+          get = function()
+            return { version = defaults.version, scenes = defaults.scenes }
+          end,
+          put = function() end,
+        }
+      end,
+    }
+    local spec_lib = require("hypr.scene.spec")
+    local scenes = spec_lib.load()
+
+    local ambiguous = {}
+    for name, s in pairs(scenes) do
+      local classes = spec_lib.ambiguous_classes(s)
+      if #classes > 0 then
+        ambiguous[name] = classes
+      end
+    end
+
+    local names = {}
+    for name in pairs(ambiguous) do
+      names[#names + 1] = name
+    end
+    t.eq(1, #names, "exactly one scene is ambiguous: " .. table.concat(names, ","))
+    t.eq("pokemon", names[1])
+    t.eq("zen-gaming-media", table.concat(ambiguous.pokemon, ","))
+  end)
+end)
+
 t.describe("edges", function()
   t.it("places nothing on an empty workspace", function()
     local spec, layout = scene({ TERMINALS, BROWSER })
@@ -223,5 +361,54 @@ t.describe("edges", function()
     t.eq("0x1:100+800", trace(boxes))
     t.eq(50, boxes[1].y)
     t.eq(600, boxes[1].h)
+  end)
+end)
+
+---Whether two boxes' rectangles intersect.
+local function overlaps(a, b)
+  return a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h
+end
+
+---Every box is inside `area` and no two distinct boxes overlap. Boxes with
+---identical geometry are a deliberate group sharing one tile, not a bug.
+local function assert_well_formed(boxes, area)
+  for _, b in ipairs(boxes) do
+    t.ok(b.x >= area.x and b.y >= area.y, b.address .. " starts inside the area")
+    t.ok(b.x + b.w <= area.x + area.w and b.y + b.h <= area.y + area.h, b.address .. " ends inside the area")
+  end
+  for i = 1, #boxes do
+    for j = i + 1, #boxes do
+      local a, b = boxes[i], boxes[j]
+      local identical = a.x == b.x and a.y == b.y and a.w == b.w and a.h == b.h
+      if not identical then
+        t.ok(not overlaps(a, b), a.address .. " and " .. b.address .. " overlap")
+      end
+    end
+  end
+end
+
+t.describe("machine areas", function()
+  -- A mixed scene exercising every kind of slot at once: a grouped block, an
+  -- ungrouped block with 3 windows (stacked), and slotted strays.
+  local function place(area)
+    local spec, layout = scene({ TERMINALS, BROWSER })
+    local tiles = {
+      tile("0x1", "Kitty-Main", "g"),
+      tile("0x2", "Kitty-Main", "g"),
+      tile("0x9", "zen-twilight"),
+      tile("0xa", "zen-twilight"),
+      tile("0xb", "zen-twilight"),
+      tile("0xf", "mpv"),
+      tile("0xg", "nautilus"),
+    }
+    return layout.boxes(spec, tiles, area, { gaps_in = 8, gaps_out = 16 }), area
+  end
+
+  t.it("produces no overlaps and no out-of-area boxes on a laptop-sized area", function()
+    assert_well_formed(place({ x = 0, y = 0, w = 1920, h = 1200 }))
+  end)
+
+  t.it("produces no overlaps and no out-of-area boxes on an ultrawide area", function()
+    assert_well_formed(place({ x = 0, y = 0, w = 5120, h = 1440 }))
   end)
 end)

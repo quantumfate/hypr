@@ -89,15 +89,16 @@ local function sequence(scene, tiles)
   local out = {}
   for _, block in ipairs(scene.blocks) do
     local entry = by_block[block.order]
-    -- Only the block's first tile occupies a slot: a grouped block is one node,
-    -- and an ungrouped block's extra windows stack behind the first rather than
-    -- each claiming a share the declaration never promised them.
+    -- Every window of a block occupies the block's slot: a grouped block is
+    -- one node (its members share one box, resolved in `boxes`); an ungrouped
+    -- block's extra windows stack vertically within the same horizontal share
+    -- rather than being dropped.
     if entry and entry.tiles[1] then
-      out[#out + 1] = { block = block, tile = entry.tiles[1] }
+      out[#out + 1] = { block = block, tile = entry.tiles[1], tiles = entry.tiles }
     end
   end
   for _, tile in ipairs(strays) do
-    out[#out + 1] = { block = nil, tile = tile }
+    out[#out + 1] = { block = nil, tile = tile, tiles = { tile } }
   end
   return out
 end
@@ -171,8 +172,21 @@ function M.boxes(scene, tiles, area, opts)
   local gaps_out = opts.gaps_out or 0
 
   local representatives, members = collapse_groups(tiles)
-  local slots = sequence(scene, representatives)
-  if #slots == 0 then
+  local sequenced = sequence(scene, representatives)
+
+  -- A scene declaring `strays = "float"` pulls its strays out of the split
+  -- entirely: they never claim a share, so a fixed capture region's declared
+  -- blocks keep exactly their geometry regardless of what else is open.
+  local floats = M.floats_strays(scene)
+  local slots, floated = {}, {}
+  for _, entry in ipairs(sequenced) do
+    if entry.block == nil and floats then
+      floated[#floated + 1] = entry
+    else
+      slots[#slots + 1] = entry
+    end
+  end
+  if #slots == 0 and #floated == 0 then
     return {}
   end
 
@@ -196,15 +210,82 @@ function M.boxes(scene, tiles, area, opts)
     -- The last slot takes whatever remains, so rounding never leaves a seam
     -- against the right edge.
     local width = (i == #slots) and (inner_x + inner_w - cursor) or math.floor(usable * shares[i] + 0.5)
-    -- Every window in a group occupies the group's tile, so they all take the
-    -- same box; the compositor's groupbar is what distinguishes them.
-    local placed = slot.tile.group and members[slot.tile.group] or { slot.tile }
-    for _, tile in ipairs(placed) do
-      out[#out + 1] = { address = tile.address, x = cursor, y = inner_y, w = width, h = inner_h }
+    if slot.tile.group and members[slot.tile.group] then
+      -- Every window in a group occupies the group's tile, so they all take
+      -- the same box; the compositor's groupbar is what distinguishes them.
+      for _, tile in ipairs(members[slot.tile.group]) do
+        out[#out + 1] = { address = tile.address, x = cursor, y = inner_y, w = width, h = inner_h }
+      end
+    elseif slot.block and not slot.block.group and #slot.tiles > 1 then
+      -- An ungrouped block's extra windows stack vertically within its own
+      -- share instead of being dropped: the declared share is the block's,
+      -- not just its first window's.
+      for _, box in ipairs(M.stack(slot.tiles, cursor, inner_y, width, inner_h, gaps_in)) do
+        out[#out + 1] = box
+      end
+    else
+      out[#out + 1] = { address = slot.tile.address, x = cursor, y = inner_y, w = width, h = inner_h }
     end
     cursor = cursor + width + gaps_in
   end
+
+  for i, entry in ipairs(floated) do
+    -- No layout-target primitive can toggle a window floating (only `place`
+    -- and `set_box`), and dispatchers act on the focused window, which this
+    -- engine avoids on principle. A floated stray gets a centered box over
+    -- the declared layout instead, nudged per index so several do not stack
+    -- exactly on top of each other; the declared blocks above are untouched.
+    local box = M.float_box(area, i)
+    local placed = entry.tile.group and members[entry.tile.group] or { entry.tile }
+    for _, tile in ipairs(placed) do
+      out[#out + 1] = { address = tile.address, x = box.x, y = box.y, w = box.w, h = box.h }
+    end
+  end
   return out
+end
+
+---Stack a block's windows vertically within one horizontal share: equal
+---heights, `gaps_in` between them, the last one taking whatever rounding left.
+---@param tiles Scene.Tile[]
+---@param x number
+---@param y number
+---@param w number
+---@param h number
+---@param gaps_in number
+---@return Scene.Box[]
+function M.stack(tiles, x, y, w, h, gaps_in)
+  local n = #tiles
+  local usable_h = h - gaps_in * (n - 1)
+  local out, cursor = {}, y
+  for i, t in ipairs(tiles) do
+    local height = (i == n) and (y + h - cursor) or math.floor(usable_h / n + 0.5)
+    out[#out + 1] = { address = t.address, x = x, y = cursor, w = w, h = height }
+    cursor = cursor + height + gaps_in
+  end
+  return out
+end
+
+---Fraction of the area a floated stray's centered box covers.
+local FLOAT_FRACTION = 0.5
+
+---Where a floated stray lands: centered over the declared layout's area,
+---sized to half of it, offset per index so several floated strays do not
+---exactly overlap.
+---@param area Scene.Area
+---@param index integer 1-based position among this pass's floated strays
+---@return { x: number, y: number, w: number, h: number }
+function M.float_box(area, index)
+  local w = math.floor(area.w * FLOAT_FRACTION)
+  local h = math.floor(area.h * FLOAT_FRACTION)
+  local margin_x = math.floor((area.w - w) / 2)
+  local margin_y = math.floor((area.h - h) / 2)
+  local step = (index - 1) * 24
+  return {
+    x = area.x + margin_x + math.min(step, margin_x),
+    y = area.y + margin_y + math.min(step, margin_y),
+    w = w,
+    h = h,
+  }
 end
 
 ---Whether a stray should float instead of taking a slot.
