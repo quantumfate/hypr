@@ -25,6 +25,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 # The shared quantum-store directory: every state file this desk keeps lives
 # under one root the environment names (QF_STORE), so a runtime that migrates
 # or relocates its stores does not become a find across $XDG_STATE_HOME.
@@ -340,7 +342,43 @@ apply_gtk() {
     # GTK4 ignores the theme name and reads this instead.
     mkdir -p "$CONFIG/gtk-4.0"
     ln -sfn "/usr/share/themes/$theme/gtk-4.0/gtk.css" "$CONFIG/gtk-4.0/gtk.css" 2>/dev/null || true
-    echo "gtk: $theme ($scheme, $icons)"
+
+    # The gsettings writes are live, but the declaration files the theming
+    # role seeded keep the palette the machine was installed with. A light
+    # switch therefore left native GTK menus — which Zen draws with the theme
+    # GTK hands it — still announcing a dark theme: bright menu text on the
+    # mod's light panel background. Write the same values into every file a
+    # reader could be looking at, so no consumer can disagree about what is on.
+    local dark=0
+    is_light "$palette" || dark=1
+    for c in "$CONFIG/gtk-3.0/settings.ini" "$CONFIG/gtk-4.0/settings.ini"; do
+        [ -f "$c" ] || continue
+        # prefer-dark is what flips the theme variant GTK serves; 1 hands
+        # every app the dark look whatever the declared theme name says.
+        sed -i "s|^gtk-theme-name=.*|gtk-theme-name=$theme|" "$c"
+        sed -i "s|^gtk-icon-theme-name=.*|gtk-icon-theme-name=$icons|" "$c"
+        sed -i "s|^gtk-application-prefer-dark-theme=.*|gtk-application-prefer-dark-theme=$dark|" "$c"
+    done
+    # XWayland toolkits learn the theme from this. The HUP is what makes
+    # already-running ones re-read — the same poke apply_qt sends.
+    if [ -f "$CONFIG/xsettingsd/xsettingsd.conf" ]; then
+        sed -i "s|^Net/ThemeName .*|Net/ThemeName \"$theme\"|" "$CONFIG/xsettingsd/xsettingsd.conf"
+        sed -i "s|^Net/IconThemeName .*|Net/IconThemeName \"$icons\"|" "$CONFIG/xsettingsd/xsettingsd.conf"
+        sandboxed || pkill -HUP -x xsettingsd 2>/dev/null || true
+    fi
+    # GTK2 reads this fallback next to ~/.gtkrc-2.0 (nwg-look owns that one).
+    # The file lives in the home directory, so by default the write is held
+    # back under sandbox like the other live surfaces: a test must not repaint
+    # the desk it runs on. THEME_GTKRC_MINE redirects it, the same escape hatch
+    # THEME_AWWW gives the wallpaper recorder.
+    if [ -n "${THEME_GTKRC_MINE-}" ] || ! sandboxed; then
+        local mine="${THEME_GTKRC_MINE:-$HOME/.gtkrc-2.0.mine}"
+        if [ -f "$mine" ]; then
+            sed -i 's|^gtk-theme-name=.*|gtk-theme-name="'"$theme"'"|' "$mine"
+            sed -i 's|^gtk-icon-theme-name=.*|gtk-icon-theme-name="'"$icons"'"|' "$mine"
+        fi
+    fi
+    echo "gtk: $theme ($scheme, $icons; settings.ini + xsettingsd + .gtkrc follow)"
     record_applied gtk immediate
 }
 
@@ -437,19 +475,35 @@ apply_wlogout() {
     record_applied wlogout immediate
 }
 
-# Zen reads user.js once at launch, so this lands on the next restart. The
-# accent is the only per-palette value; content-override follows the system so
-# chrome and page content cannot disagree, which is what made a light palette
-# look broken rather than light.
+# Zen reads user.js once at launch, so the prefs land on the next restart.
+# The chrome CSS is also read at launch, but `,theme.sh` keeps the runtime
+# palette file (`zen-palette.css`) in sync and overwrites the main CSS files
+# from the repo assets so light/dark blocks are always present. A running Zen
+# still needs a restart to pick up CSS changes, but the files are correct
+# immediately.
 apply_zen() {
-    local palette=$1 js="$CONFIG/zen-chezmoi/user.js" accent
+    local palette=$1 accent
+    local zen_dir="$CONFIG/zen-chezmoi"
+    local js="$zen_dir/user.js"
     [ -f "$js" ] || return 0
     accent=$(accent_hex "$palette")
+
     sed -i "s|^user_pref(\"zen.theme.accent-color\".*|user_pref(\"zen.theme.accent-color\", \"$accent\");|" "$js"
     sed -i "s|^user_pref(\"layout.css.prefers-color-scheme.content-override\".*|user_pref(\"layout.css.prefers-color-scheme.content-override\", 3); // follow system|" "$js"
     sed -i "s|^user_pref(\"theme-better_find_bar-enable_custom_background\".*|user_pref(\"theme-better_find_bar-enable_custom_background\", false);|" "$js"
-    echo "zen: $accent (applies on next launch)"
-    record_pending zen next-launch "user.js is read once at launch"
+
+    # Overwrite the CSS from the repo assets so both light and dark blocks are
+    # present and the accent is controlled by the runtime palette file.
+    local asset_dir="$SCRIPT_DIR/../assets/zen"
+    if [ -d "$asset_dir" ]; then
+        install -m 644 "$asset_dir/userChrome.css" "$zen_dir/userChrome.css"
+        install -m 644 "$asset_dir/userContent.css" "$zen_dir/userContent.css"
+        printf '@media (prefers-color-scheme: light) { :root { --qf-accent: %s; } }\n@media (prefers-color-scheme: dark) { :root { --qf-accent: %s; } }\n' "$accent" "$accent" >"$zen_dir/zen-palette.css"
+        chmod 644 "$zen_dir/zen-palette.css"
+    fi
+
+    echo "zen: $accent (user.js + CSS written; Zen restart required to see CSS)"
+    record_pending zen next-launch "Zen reads user.js and CSS at launch"
 }
 
 # Obsidian reads its vault's appearance.json at launch, so this lands on the
@@ -808,6 +862,8 @@ cmd_status() {
     printf 'resolved  %s\n' "$(resolve)"
     printf 'kitty     %s\n' "$(readlink "$CONFIG/kitty/current-theme.conf" 2>/dev/null || echo unset)"
     have gsettings && printf 'gtk       %s\n' "$(gsettings get org.gnome.desktop.interface gtk-theme)"
+    printf 'gtk3      %s\n' "$(sed -n 's|^gtk-theme-name=||p' "$CONFIG/gtk-3.0/settings.ini" 2>/dev/null || echo unset)"
+    printf 'xsettingsd %s\n' "$(sed -n 's|^Net/ThemeName "\(.*\)"$|\1|p' "$CONFIG/xsettingsd/xsettingsd.conf" 2>/dev/null || echo unset)"
     printf 'qt6ct     %s\n' "$(sed -n 's/^color_scheme_path=.*\///p' "$CONFIG/qt6ct/qt6ct.conf" 2>/dev/null || echo unset)"
     printf 'kvantum   %s\n' "$(sed -n 's/^theme=//p' "$CONFIG/Kvantum/kvantum.kvconfig" 2>/dev/null || echo unset)"
     # Which wallpaper is bound, resolved the same way apply_wallpaper resolves

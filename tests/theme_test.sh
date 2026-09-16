@@ -114,6 +114,54 @@ setup
 contains "a dark palette asks for prefer-dark" "color-scheme prefer-dark" "$(gsettings_log)"
 teardown
 
+echo "GTK declaration files follow the palette too"
+setup
+# Seed the same shapes the theming role renders, pinned at the night palette.
+mkdir -p "$XDG_CONFIG_HOME/gtk-3.0" "$XDG_CONFIG_HOME/gtk-4.0" "$XDG_CONFIG_HOME/xsettingsd"
+printf '[Settings]\ngtk-theme-name=catppuccin-macchiato-mauve-standard+default\ngtk-icon-theme-name=Papirus-Dark\ngtk-cursor-theme-name=catppuccin-macchiato-mauve-cursors\ngtk-application-prefer-dark-theme=1\n' >"$XDG_CONFIG_HOME/gtk-3.0/settings.ini"
+printf '[Settings]\ngtk-theme-name=catppuccin-macchiato-mauve-standard+default\n' >"$XDG_CONFIG_HOME/gtk-4.0/settings.ini"
+printf 'Net/ThemeName "catppuccin-macchiato-mauve-standard+default"\nNet/IconThemeName "Papirus-Dark"\n' >"$XDG_CONFIG_HOME/xsettingsd/xsettingsd.conf"
+
+"$THEME" set latte >/dev/null
+gtk3=$(cat "$XDG_CONFIG_HOME/gtk-3.0/settings.ini")
+contains "a light apply rewrites the gtk3 theme name" "gtk-theme-name=catppuccin-latte-mauve-standard+default" "$gtk3"
+contains "and its icon pack" "gtk-icon-theme-name=Papirus-Light" "$gtk3"
+contains "and clears prefer-dark" "gtk-application-prefer-dark-theme=0" "$gtk3"
+contains "a key the adapter does not own is left alone" "gtk-cursor-theme-name=catppuccin-macchiato-mauve-cursors" "$gtk3"
+contains "gtk4 settings follow too" "gtk-theme-name=catppuccin-latte-mauve-standard+default" "$(cat "$XDG_CONFIG_HOME/gtk-4.0/settings.ini")"
+xss=$(cat "$XDG_CONFIG_HOME/xsettingsd/xsettingsd.conf")
+contains "xsettingsd announces the light theme to XWayland" 'Net/ThemeName "catppuccin-latte-mauve-standard+default"' "$xss"
+contains "and the light icon pack" 'Net/IconThemeName "Papirus-Light"' "$xss"
+teardown
+
+setup
+mkdir -p "$XDG_CONFIG_HOME/gtk-3.0"
+printf '[Settings]\ngtk-theme-name=catppuccin-latte-mauve-standard+default\ngtk-application-prefer-dark-theme=0\n' >"$XDG_CONFIG_HOME/gtk-3.0/settings.ini"
+"$THEME" set macchiato >/dev/null
+contains "a dark apply re-raises prefer-dark" "gtk-application-prefer-dark-theme=1" "$(cat "$XDG_CONFIG_HOME/gtk-3.0/settings.ini")"
+contains "and darkens the theme" "gtk-theme-name=catppuccin-macchiato-mauve-standard+default" "$(cat "$XDG_CONFIG_HOME/gtk-3.0/settings.ini")"
+teardown
+
+echo "gtkrc-2.0.mine follows when pointed at the scratch tree"
+setup
+MINE="$ROOT/mine"
+printf 'gtk-theme-name="catppuccin-macchiato-mauve-standard+default"\ngtk-icon-theme-name="Papirus-Dark"\n' >"$MINE"
+export THEME_GTKRC_MINE="$MINE"
+"$THEME" set latte >/dev/null
+contains "the .mine theme follows the palette" 'gtk-theme-name="catppuccin-latte-mauve-standard+default"' "$(cat "$MINE")"
+contains "and its icons" 'gtk-icon-theme-name="Papirus-Light"' "$(cat "$MINE")"
+unset THEME_GTKRC_MINE
+teardown
+
+echo "the home .mine is outside the sandbox and stays untouched"
+setup
+home_mine="$HOME/.gtkrc-2.0.mine"
+before=$([ -f "$home_mine" ] && cat "$home_mine" || echo "<absent>")
+"$THEME" set mocha >/dev/null
+after=$([ -f "$home_mine" ] && cat "$home_mine" || echo "<absent>")
+check "a sandboxed run leaves the home .mine alone" "$before" "$after"
+teardown
+
 echo "nothing reaches the live session"
 setup
 "$THEME" set mocha >/dev/null
