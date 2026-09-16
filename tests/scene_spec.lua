@@ -20,17 +20,17 @@ local GAMING = {
   barred = { "steam_app_default" },
 }
 
----The scenes document lives in the state store now; the stub hands it over
----the same shape the real store handle answers.
+---The scenes live in the declaration's `base.scenes`; the stub hands them
+---over in the shape the real store handle answers.
 local function define_store(scenes)
   package.loaded["hypr.lib.store"] = {
     define = function()
       return {
         get = function()
-          return { version = require("hypr.scene.defaults").version, scenes = scenes }
+          return { base = { scenes = scenes } }
         end,
         put = function(_, doc)
-          scenes = doc.scenes
+          scenes = doc.base.scenes
         end,
       }
     end,

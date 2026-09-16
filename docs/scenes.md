@@ -77,8 +77,7 @@ is explicit. `barred` and `spawn.class` are not claims. Overlapping regexes
 Known gap: `dofus` and `pokemon` both used `zen-gaming-media`. Until launch
 identity stamping lands, pokemon's browser blocks claim the tag strings
 `slot:pokemon/chat` and `slot:pokemon/stream`; no window carries those yet, so
-the declaration's pokemon browsers are unplaced by the declaration (the scenes
-store's layout still matches by class).
+the pokemon browsers are unplaced.
 
 ### Gaming
 
@@ -124,7 +123,15 @@ The recovery fallback, reached from a submap and never listed as a peer mode
 
 `creative` and `misc` are retired: no host, mode or scene declares them.
 
-Source of truth: `$XDG_STATE_HOME` scenes store (`scenes.json`). Lua consumes that document and seeds it on first run from `hypr/scene/defaults.lua`; the host fork is gone. The full editor contract (members, gaps, layout options) is LEO-239 and widens this document in place — do not start a second one.
+### Source of truth
+
+The declaration's `base.scenes` (`$QF_STORE/hyprfocus.json`) is the only scene table. `hypr/scene/spec.lua` normalizes it for geometry, compile and companions; `hypr/hyprfocus/` reads the same entries for scene bindings and mode validation. The shipped seed is quickshell `assets/hyprfocus.default.json`, installed with `,hyprfocus seed`.
+
+- **Missing or unreadable declaration:** the scene engine is inert (no placement, no grouping), emits `admit/scenes_missing` and sends a notification.
+- **Legacy `scenes.json`:** folded once on load by `hypr/scene/migrate.lua`. A scene still equal to the retired seed (compared by fingerprint) is dropped; an edited or unknown scene overwrites its `base.scenes` entry. The file is then renamed to `scenes.json.migrated` and `admit/scenes_migrated` is logged.
+- `tests/hyprfocus_declaration_spec.lua` pins every `base.scenes` key to a `default_name` on every host and fails if a second scene table reader returns.
+
+The full editor contract (members, gaps, layout options) widens this document in place — do not start a second one.
 
 ## Split
 

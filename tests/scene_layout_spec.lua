@@ -17,15 +17,14 @@ local function scene(blocks, over)
   package.loaded["hypr.scene.layout"] = nil
   package.loaded["hypr.lib.store"] = nil
   over = over or {}
-  -- The scenes document lives in the state store; the stub hands it over the
-  -- same shape the real store handle answers.
+  -- The scenes live in the declaration's `base.scenes`; the stub hands them
+  -- over in the shape the real store handle answers.
   package.loaded["hypr.lib.store"] = {
     define = function()
       return {
         get = function()
           return {
-            version = require("hypr.scene.defaults").version,
-            scenes = { code = { blocks = blocks, strays = over.strays, solo_frame = over.solo_frame } },
+            base = { scenes = { code = { blocks = blocks, strays = over.strays, solo_frame = over.solo_frame } } },
           }
         end,
         put = function() end,
@@ -302,40 +301,6 @@ t.describe("ambiguity", function()
     local spec = scene({ TERMINALS, BROWSER })
     local spec_lib = require("hypr.scene.spec")
     t.eq(0, #spec_lib.ambiguous_classes(spec))
-  end)
-
-  t.it("the shipped defaults' ambiguities are exactly the known pokemon duplicate", function()
-    package.loaded["hypr.scene.spec"] = nil
-    package.loaded["hypr.lib.store"] = nil
-    local defaults = require("hypr.scene.defaults")
-    package.loaded["hypr.lib.store"] = {
-      define = function()
-        return {
-          get = function()
-            return { version = defaults.version, scenes = defaults.scenes }
-          end,
-          put = function() end,
-        }
-      end,
-    }
-    local spec_lib = require("hypr.scene.spec")
-    local scenes = spec_lib.load()
-
-    local ambiguous = {}
-    for name, s in pairs(scenes) do
-      local classes = spec_lib.ambiguous_classes(s)
-      if #classes > 0 then
-        ambiguous[name] = classes
-      end
-    end
-
-    local names = {}
-    for name in pairs(ambiguous) do
-      names[#names + 1] = name
-    end
-    t.eq(1, #names, "exactly one scene is ambiguous: " .. table.concat(names, ","))
-    t.eq("pokemon", names[1])
-    t.eq("zen-gaming-media", table.concat(ambiguous.pokemon, ","))
   end)
 end)
 

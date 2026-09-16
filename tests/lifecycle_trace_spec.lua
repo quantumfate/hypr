@@ -32,10 +32,10 @@ t.describe("scene.lua wiring", function()
       define = function()
         return {
           get = function()
-            return { version = require("hypr.scene.defaults").version, scenes = scenes }
+            return { base = { scenes = scenes } }
           end,
           put = function(_, doc)
-            scenes = doc.scenes
+            scenes = doc.base.scenes
           end,
         }
       end,

@@ -98,3 +98,51 @@ t.describe("the shipped declaration agrees with every host", function()
     end)
   end
 end)
+
+-- The declaration's `base.scenes` is the only scene table (docs/scenes.md,
+-- "Source of truth"): the engine normalizes it, and no second copy returns.
+t.describe("base.scenes is the single scene table", function()
+  t.it("no seed module or scenes store reader remains", function()
+    t.eq(nil, io.open("hypr/scene/defaults.lua", "r"), "hypr/scene/defaults.lua is retired")
+    local p = assert(io.popen([[grep -rln 'define("scenes")\|scene\.defaults' hypr conf 2>/dev/null]]))
+    local hits = {}
+    for path in p:lines() do
+      -- The loader names the legacy store only to fold and retire it once.
+      if path ~= "hypr/scene/spec.lua" then
+        hits[#hits + 1] = path
+      end
+    end
+    p:close()
+    t.eq("", table.concat(hits, ","), "a second scene table reader")
+  end)
+
+  local raw = read_file(declaration_path)
+  if not raw then
+    return
+  end
+
+  t.it("the shipped scenes normalize with no ambiguous block classes", function()
+    local declaration = json.decode(raw)
+    package.loaded["hypr.scene.spec"] = nil
+    package.loaded["hypr.lib.store"] = {
+      define = function()
+        return {
+          get = function()
+            return declaration
+          end,
+          put = function() end,
+        }
+      end,
+    }
+    local spec_lib = require("hypr.scene.spec")
+    local ambiguous = {}
+    for name, scene in pairs(spec_lib.load()) do
+      if #spec_lib.ambiguous_classes(scene) > 0 then
+        ambiguous[#ambiguous + 1] = name
+      end
+    end
+    package.loaded["hypr.scene.spec"] = nil
+    package.loaded["hypr.lib.store"] = nil
+    t.eq("", table.concat(ambiguous, ","))
+  end)
+end)

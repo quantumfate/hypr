@@ -27,8 +27,8 @@ local SPEC = {
   },
 }
 
----The scenes document lives in the state store now; the stub hands the
----fixture over the same shape the real store handle answers, and the engine
+---The scenes live in the declaration's `base.scenes`; the stub hands the
+---fixture over in the shape the real store handle answers, and the engine
 ---reads it the way the running config does.
 local function scene_spec(with)
   package.loaded["hypr.lib.store"] = nil
@@ -38,7 +38,7 @@ local function scene_spec(with)
     define = function()
       return {
         get = function()
-          return { scenes = with or { gaming = SPEC } }
+          return { base = { scenes = with or { gaming = SPEC } } }
         end,
         put = function() end,
       }

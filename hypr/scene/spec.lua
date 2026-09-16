@@ -1,10 +1,10 @@
 -- Scene declarations, normalized (LEO-245).
 --
--- The declaration is a document in the state store ($XDG_STATE_HOME
--- scenes.json, seeded on first run from `hypr/scene/defaults.lua`) — this is
--- the shape the engine reads. Normalizing here means every other layer can
--- assume blocks are order-sorted, flags are booleans, and class lists are
--- arrays — none of them re-validates.
+-- The declaration is the hyprfocus store's `base.scenes` ($QF_STORE
+-- hyprfocus.json, the one scene table) — this is the shape the engine reads.
+-- Normalizing here means every other layer can assume blocks are
+-- order-sorted, flags are booleans, and class lists are arrays — none of them
+-- re-validates.
 local M = {}
 
 ---@class Scene.Companion
@@ -80,41 +80,69 @@ end
 ---@type table<string, Scene.Spec>?
 local cache
 
----The raw document: the store's, or the seed's if the store does not say.
----
----Migration is one step back and one step forward: a store absent at
----$QF_STORE adopts the legacy document (the previous generation's location)
----and WRITES it forward, so moving the collection needs no tooling and no
----second read path afterwards. A store still carrying an older seed
----generation is re-seeded, because "declared" cannot mean a document that
----predates the features it governs — that is how a shipped default idea was
----born before part of it existed. Emptying the store stays a declaration
----(absent = seed, present = truth, once the version agrees).
+---Fold a surviving legacy `scenes.json` into the declaration once, then move
+---it aside so the fold never runs twice. Unedited scenes are dropped.
+---@param store table the store module
+---@param handle Store.Handle the declaration's handle
+---@param declaration table
+local function migrate_legacy(store, handle, declaration)
+  local legacy = store.define("scenes")
+  local path = legacy.path
+  local file = path and io.open(path, "r")
+  if not file then
+    return
+  end
+  file:close()
+  local _, folded = require("hypr.scene.migrate").fold(declaration, legacy:get())
+  if #folded > 0 then
+    handle:put(declaration)
+  end
+  os.rename(path, path .. ".migrated")
+  require("hypr.lib.trace").emit({
+    stage = "admit",
+    event = "scenes_migrated",
+    decision = "fold",
+    reason = #folded > 0 and table.concat(folded, ",") or "unedited",
+  })
+end
+
+---Report that no scene table could be read. The engine stays inert: no
+---placement and no grouping until the declaration is seeded.
+---@param reason string
+local function report_missing(reason)
+  require("hypr.lib.trace").emit({
+    stage = "admit",
+    event = "scenes_missing",
+    decision = "inert",
+    reason = reason,
+  })
+  pcall(function()
+    require("hypr.lib.notify"):notify(
+      "hyprfocus: no scene declaration (" .. reason .. "); run ,hyprfocus seed",
+      0,
+      "ERROR"
+    )
+  end)
+end
+
+---The raw scene table: the hyprfocus declaration's `base.scenes`, the only
+---stored scene document (docs/scenes.md, "Source of truth").
 ---@return table raw scenes keyed by default_name
 local function document()
   local store = require("hypr.lib.store")
-  local defaults = require("hypr.scene.defaults")
-  local handle = store.define("scenes")
-  local data = handle:get()
-  if type(data) == "table" then
-    -- A store written before the current seed (or migrated without exactly
-    -- the version key from an older file that never wore one) re-seeds once,
-    -- which is the cheapest way to adopt additively without renegotiating
-    -- every field the user may have touched.
-    if (data.version or 0) < defaults.version then
-      pcall(handle.put, handle, defaults)
-      data = handle:get()
-    end
-    if type(data) == "table" and next(data.scenes or {}) then
-      return data.scenes
-    end
-    return defaults.scenes
+  local ok, handle = pcall(store.define, "hyprfocus")
+  local declaration = ok and handle:get() or nil
+  if type(declaration) ~= "table" or not declaration.base then
+    report_missing(ok and "no declaration in the store" or tostring(handle))
+    return {}
   end
-  -- Nothing at the new location at all: seed (and the store grows on the
-  -- first write, thinking regardless of whether the store write lands).
-  pcall(handle.put, handle, defaults)
-  local seeded = handle:get()
-  return (type(seeded) == "table") and seeded.scenes or defaults.scenes
+  pcall(migrate_legacy, store, handle, declaration)
+  local scenes = declaration.base.scenes
+  if type(scenes) ~= "table" or not next(scenes) then
+    report_missing("declaration has no base.scenes")
+    return {}
+  end
+  return scenes
 end
 
 ---Every declared scene, keyed by name. Memoized: the compiler and the event

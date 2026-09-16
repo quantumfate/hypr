@@ -14,8 +14,8 @@ local t = require("tests.harness")
 local function fresh(scenes, gaps)
   local stub = require("tests.hl_stub").new()
   _G.hl = stub
-  -- The scenes document lives in the state store; the stub hands the
-  -- array-form fixtures over in the document's keyed shape.
+  -- The scenes live in the declaration's `base.scenes`; the stub hands the
+  -- array-form fixtures over in that keyed shape.
   local keyed = {}
   for _, raw in ipairs(scenes or {}) do
     keyed[raw.default_name] = raw
@@ -24,10 +24,10 @@ local function fresh(scenes, gaps)
     define = function()
       return {
         get = function()
-          return { version = require("hypr.scene.defaults").version, scenes = keyed }
+          return { base = { scenes = keyed } }
         end,
         put = function(_, doc)
-          keyed = doc.scenes
+          keyed = doc.base.scenes
         end,
       }
     end,

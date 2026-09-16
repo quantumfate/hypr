@@ -11,7 +11,7 @@
 
 ---One scene block of the temporary host fork (conf/hosts): key by
 ---`default_name` (host-independent); the long-term store is the
----$XDG_STATE_HOME scenes.json document (docs/scenes.md).
+---hyprfocus declaration's `base.scenes` (docs/scenes.md).
 ---@class SceneFork
 ---@field default_name string
 ---@field blocks SceneForkBlock[]

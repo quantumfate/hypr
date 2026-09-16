@@ -297,7 +297,7 @@ Scene.active(ws)           -- name or nil
 Scene.tile(name, match)    -- first tile of that match, or nil
 ```
 
-Long-term store is `scenes.json` under the shared quantum-store directory (`QF_STORE`, default `$XDG_STATE_HOME/quantum-store`; env-hyprland exports it) — Lua consumes it and seeds it from `hypr/scene/defaults.lua` on first run; the host files' `scenes` fork is gone (hypr `625a970`), and every other state file moved under the same directory with a one-step legacy read-back (hypr `5d5200a`).
+The one scene table is the hyprfocus declaration's `base.scenes` (`$QF_STORE/hyprfocus.json`; `QF_STORE` defaults to `$XDG_STATE_HOME/quantum-store` and env-hyprland exports it). Geometry, compile, companions, bindings and the resolver all read it. It is seeded by `,hyprfocus seed` from quickshell's `assets/hyprfocus.default.json`; hypr ships no scene seed. A missing declaration leaves the scene engine inert and sends a notification. The retired `scenes.json` is folded in once (`hypr/scene/migrate.lua`: only scenes that differ from the retired seed) and renamed to `scenes.json.migrated`.
 
 ## Hyprland primitives (do not rediscover)
 

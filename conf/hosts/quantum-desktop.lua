@@ -97,8 +97,7 @@ return {
       "bracketright",
       "asterisk",
     },
-    -- The scene document moved to the state store ($XDG_STATE_HOME
-    -- scenes.json, seeded from hypr/scene/defaults.lua on first run) — a
-    -- host file describes a machine, not how its windows sit.
+    -- Scenes live in the hyprfocus declaration's `base.scenes` — a host
+    -- file describes a machine, not how its windows sit.
   },
 }
