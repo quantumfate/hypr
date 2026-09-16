@@ -24,7 +24,46 @@ responsible for — the common mistake is to grow a scene into a mode.
 
 Config is the only declaration. No per-feature merge, `barred`, or `spawn` code.
 
-Scenes are keyed by workspace `default_name` (`code`, `gaming`). Workspace id is host data in `workspace_specs`.
+Scenes are keyed by workspace `default_name` (`code`, `dofus`). Workspace id is host data in `workspace_specs`.
+
+## Mode → workspace → scene layout
+
+Every focus mode admits exactly the workspaces it needs, and only while it
+runs. Special workspaces are retired (LEO-265/330); every scene that used to
+live in `special:*` is now an ordinary workspace admitted per mode.
+
+### Gaming
+
+| Monitor   | Workspace         | Scene       | Split                      |
+| --------- | ----------------- | ----------- | -------------------------- |
+| primary   | `dofus`           | dofus       | 0.67 group / 0.33 browser  |
+| primary   | `pokemon`         | pokemon     | 0.30 emulator / 0.65 media |
+| primary   | `steam-games`     | steam-games | 1.00 fullscreen            |
+| primary   | `proton`          | proton      | 0.50 mail / 0.50 pass      |
+| secondary | `communication`   | comms       | 0.50 signal / 0.50 vesktop |
+| secondary | `lutris`          | lutris      | 1.00 fullscreen            |
+| secondary | `steam`           | steam       | 1.00 fullscreen            |
+| secondary | `media`           | media       | 1.00 fullscreen            |
+| secondary | `ankama-launcher` | (launch)    | 1.00 fullscreen            |
+
+### Work
+
+| Monitor   | Workspace         | Scene           | Split                       |
+| --------- | ----------------- | --------------- | --------------------------- |
+| primary   | `code`            | code            | 0.67 group / 0.33 browser   |
+| primary   | `proton`          | proton          | 0.50 mail / 0.50 pass       |
+| secondary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
+| secondary | `logs`            | logs            | tmux-managed                |
+
+### Study
+
+| Monitor   | Workspace         | Scene           | Split                       |
+| --------- | ----------------- | --------------- | --------------------------- |
+| primary   | `code`            | code            | 0.67 group / 0.33 browser   |
+| primary   | `proton`          | proton          | 0.50 mail / 0.50 pass       |
+| secondary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
+
+_Neutral_ is the resting mode; its workspace set is the full base.
 
 Source of truth: `$XDG_STATE_HOME` scenes store (`scenes.json`). Lua consumes that document and seeds it on first run from `hypr/scene/defaults.lua`; the host fork is gone. The full editor contract (members, gaps, layout options) is LEO-239 and widens this document in place — do not start a second one.
 
@@ -72,10 +111,13 @@ Scene.realize(name)
 Scene.tile(name, match)
 ```
 
-One engine for both scenes:
+One engine for all scenes:
 
-- `gaming` — Dofus group + `zen-gaming-media` right
+- `dofus` — Dofus group + `zen-gaming-media` right
 - `code` — `Kitty-Main` | `Proj-*` group + `zen-twilight` right
+- `pokemon` — RetroArch emulator + flanking streaming browsers
+- `obsidian-linear` — Obsidian + Linear side by side
+- `proton` — Proton Mail + Proton Pass companion
 
 Mood reachability ("focus scene") is a different word. It is not this document.
 
@@ -87,16 +129,16 @@ the contract below is the schema it edits against.
 
 ### Scene fields
 
-| Field        | Type                  | Meaning                                                                          |
-| ------------ | --------------------- | -------------------------------------------------------------------------------- |
-| `name`       | string                | workspace `default_name` (`code`, `gaming`). This is the key; ids are host data. |
-| `blocks`     | Block[]               | the ordered tiles of the scene                                                   |
-| `barred`     | string[]              | classes that may land here but must never join a group                           |
-| `strays`     | `"slot"` \| `"float"` | how unmatched tiled windows are treated                                          |
-| `solo_frame` | boolean?              | opt-out of the lone-tile decorative frame                                        |
-| `bindings`   | string[]?             | binding trees this scene admits while active                                     |
-| `moods`      | string[]?             | mood tags that select this scene when the mode does not                          |
-| `machines`   | table?                | machine-specific geometry overrides                                              |
+| Field        | Type                  | Meaning                                                                         |
+| ------------ | --------------------- | ------------------------------------------------------------------------------- |
+| `name`       | string                | workspace `default_name` (`code`, `dofus`). This is the key; ids are host data. |
+| `blocks`     | Block[]               | the ordered tiles of the scene                                                  |
+| `barred`     | string[]              | classes that may land here but must never join a group                          |
+| `strays`     | `"slot"` \| `"float"` | how unmatched tiled windows are treated                                         |
+| `solo_frame` | boolean?              | opt-out of the lone-tile decorative frame                                       |
+| `bindings`   | string[]?             | binding trees this scene admits while active                                    |
+| `moods`      | string[]?             | mood tags that select this scene when the mode does not                         |
+| `machines`   | table?                | machine-specific geometry overrides                                             |
 
 ### Block fields
 
@@ -117,17 +159,17 @@ A workspace's scene is its `default_name` entry in the store. The host's
 the name. `Scene.active(ws)` returns the scene name for a workspace if one
 exists, and `Scene.realize(name)` runs its layout.
 
-There is no per-workscene indirection: `gaming` is both the workspace name and
+There is no per-workspace indirection: `dofus` is both the workspace name and
 the scene name. A mode admits the workspace; the workspace admits the scene.
-This keeps the editor path single: changing the `gaming` scene changes the
-gaming workspace everywhere.
+This keeps the editor path single: changing the `dofus` scene changes the
+dofus workspace everywhere.
 
-### Gaming is a workspace scene
+### Dofus is a workspace scene
 
-The `gaming` scene uses the same fields as every other scene. Its Dofus block
+The `dofus` scene uses the same fields as every other scene. Its Dofus block
 has `group = true` and a `zen-gaming-media` companion with `guard = "deny"`;
 `barred` lists Steam and Ankama launcher classes. Nothing in the schema is
-gaming-specific — the same contract serves `code`, `creative`, or any future
+gaming-specific — the same contract serves `code`, `pokemon`, or any future
 workspace.
 
 ### Machine-specific geometry
@@ -219,21 +261,30 @@ Hide: focus-dance, settle/verify timers, the `follow = false` on a collecting mo
 ## Example
 
 ```lua
-gaming = {
-  layout_opts = { dwindle = { default_split_ratio = 0.67 } },
-  members = {
-    { match = { class = "Dofus.x64" }, group = true, collect = true, spawn = "zen-gaming-media" },
-    { match = { class = "zen-gaming-media" }, guard = "deny" },
+dofus = {
+  blocks = {
+    { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true,
+      spawn = { class = "zen-gaming-media", command = "zen-twilight -P GamingMedia --name zen-gaming-media" } },
+    { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
   },
   barred = { "steam_app_default", "steam_app_\\d+", "Ankama Launcher" },
-  bindings = { "gaming" },
+  strays = "float",
+  moods = { "gaming" },
 },
 code = {
-  layout_opts = { dwindle = { default_split_ratio = 0.67 } },
-  members = {
-    { match = { class = "Kitty-Main|Proj-*" }, group = true },
-    { match = { class = "zen-twilight" } },
+  blocks = {
+    { classes = { "Kitty-Main", "Proj-[A-Za-z0-9_-]+" }, group = true, order = 1, share = 0.67 },
+    { classes = { "zen-twilight", "firefox-developer-edition" }, order = 2, share = 0.33 },
   },
-  bindings = { "code" },
+  strays = "float",
+  moods = { "work", "study" },
+},
+["obsidian-linear"] = {
+  blocks = {
+    { classes = { "md.obsidian.Obsidian" }, order = 1, share = 0.5 },
+    { classes = { "linear" }, order = 2, share = 0.5 },
+  },
+  strays = "float",
+  moods = { "work", "study" },
 },
 ```
