@@ -24,7 +24,6 @@ return {
   workspaces = {
     workspace_specs = {
       { workspace = "1", default = true, default_name = "code" },
-      { workspace = "2", default_name = "creative" },
       { workspace = "3", default_name = "proton" },
       { workspace = "4", default_name = "dofus" },
       { workspace = "5", default_name = "pokemon" },
@@ -35,7 +34,6 @@ return {
       { workspace = "10", default_name = "steam" },
       { workspace = "11", default_name = "media", monitor = "secondary" },
       { workspace = "12", default_name = "logs", monitor = "secondary" },
-      { workspace = "13", default_name = "misc", monitor = "secondary" },
       { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
     workspace_keys = {

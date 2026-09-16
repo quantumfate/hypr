@@ -6,9 +6,9 @@
 -- still agree. When they drift, the resolver's unknown-name rule refuses a
 -- mode transition at runtime (fixture `07-unknown-name-refuses.json`), which
 -- is the failure this spec exists to catch before it reaches a desk: every
--- workspace the declaration names (`base.workspaces`, every mode's
--- `workspaces.only`/`remove`) must exist as a `default_name` on every host,
--- and every `default_name` a host declares must be named somewhere in the
+-- workspace the declaration names (every `base.scenes` catalog entry and every
+-- mode's `scenes[].name`) must exist as a `default_name` on every host, and
+-- every `default_name` a host declares must be named somewhere in the
 -- declaration.
 local t = require("tests.harness")
 local json = require("hypr.lib.json")
@@ -37,29 +37,19 @@ local function host_workspaces()
   return hosts
 end
 
----Every workspace name the declaration mentions anywhere: the base set plus
----whatever each mode's `only`/`remove` delta names — a delta may reference a
----workspace the base itself forgot to list, and that is exactly the drift
----this spec is for.
+---Every workspace name the declaration mentions anywhere: the scene catalog
+---plus every mode's scene set — a mode may list a scene the catalog forgot,
+---and that is exactly the drift this spec is for.
 ---@param declaration table
 ---@return table<string, boolean>
 local function declared_workspaces(declaration)
   local names = {}
-  for _, name in ipairs((declaration.base or {}).workspaces or {}) do
+  for name in pairs((declaration.base or {}).scenes or {}) do
     names[name] = true
   end
   for _, mode in pairs(declaration.modes or {}) do
-    local delta = mode.workspaces
-    if delta then
-      for _, name in ipairs(delta.only or {}) do
-        names[name] = true
-      end
-      for _, name in ipairs(delta.remove or {}) do
-        names[name] = true
-      end
-      for _, name in ipairs(delta.add or {}) do
-        names[name] = true
-      end
+    for _, placement in ipairs(mode.scenes or {}) do
+      names[placement.name] = true
     end
   end
   return names

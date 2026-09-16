@@ -26,7 +26,6 @@ return {
         -- registered either way and nothing else depends on it.
         layout = "scene",
       },
-      { workspace = "2", default_name = "creative" },
       { workspace = "3", default_name = "proton" },
       {
         workspace = "4",
@@ -54,7 +53,6 @@ return {
         engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
       },
       { workspace = "12", default_name = "logs", monitor = "secondary" },
-      { workspace = "13", default_name = "misc", monitor = "secondary" },
       { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
     workspace_keys = {

@@ -5,9 +5,8 @@
 --
 -- Special workspaces are retired (LEO-265/330): every scene that used to live
 -- in `special:*` is now an ordinary workspace admitted per mode. The monitor
--- field pins gaming-side scenes to the secondary display; work/study scenes
--- stay on primary. Scenes shared across modes (proton, obsidian-linear) keep
--- whichever monitor the host declares — the mode does not move them.
+-- field is only the load-time default: each mode places its scenes by monitor
+-- role (hyprfocus `scenes[].monitor`), and that placement wins on entry.
 -- Hosts shape (hypr/types.lua); workspace_specs entries are HL.WorkspaceRuleSpec.
 ---@type Hosts
 return {
@@ -38,14 +37,6 @@ return {
             scrolling = { column_width = 0.67 },
           },
         },
-      },
-      -- Creative is not admitted by any mode in LEO-330's spec yet; kept as
-      -- a named workspace for future modes or neutral. No engine block means
-      -- it falls back to the global layout (dwindle).
-      {
-        workspace = "2",
-        default_name = "creative",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
       },
       -- Proton shared across gaming + work + study modes. The 50/50 split
       -- (mail left, pass companion right) is declared by the scene.
@@ -91,13 +82,6 @@ return {
       },
       -- Logs: tmux log workspace, secondary.
       { workspace = "12", default_name = "logs", monitor = "secondary" },
-      -- Misc: catch-all for uncategorized windows.
-      {
-        workspace = "13",
-        default_name = "misc",
-        monitor = "secondary",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 1.25, special_scale_factor = 1 } } },
-      },
       -- Ankama launcher: fullscreen, secondary. Retired from special:ankama.
       { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },

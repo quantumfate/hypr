@@ -54,10 +54,6 @@ windowrule.tag_props({
   { initial_class = apps.package_manager_ui.class },
 }, "misc")
 
-windowrule.tag_set_effects("misc", {
-  static = { workspace = "name:misc" },
-})
-
 windowrule.tag_props({
   { initial_class = "(Alacritty|kitty|ghostty|foot)" },
 }, "+terminal")
