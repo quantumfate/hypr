@@ -10,6 +10,11 @@
 --
 -- This is also the model for a real host file: data first, comments only
 -- where a number would otherwise justify itself.
+--
+-- Special workspaces are retired (LEO-265/330): every scene is now an
+-- ordinary workspace admitted per mode. The fallback carries all named
+-- workspaces so any mode can resolve; monitors are not pinned (the default
+-- machine has no secondary to pin to).
 -- Hosts shape (hypr/types.lua); workspace_specs entries are HL.WorkspaceRuleSpec.
 ---@type Hosts
 return {
@@ -21,13 +26,17 @@ return {
       { workspace = "1", default = true, default_name = "code" },
       { workspace = "2", default_name = "creative" },
       { workspace = "3", default_name = "proton" },
-      { workspace = "4", default_name = "gaming" },
-      { workspace = "5", default_name = "media", monitor = "secondary" },
-      { workspace = "6", default_name = "logs", monitor = "secondary" },
-      { workspace = "7", default_name = "misc", monitor = "secondary" },
-      { workspace = "special:comms" },
-      { workspace = "special:music" },
-      { workspace = "special:launcher" },
+      { workspace = "4", default_name = "dofus" },
+      { workspace = "5", default_name = "pokemon" },
+      { workspace = "6", default_name = "steam-games" },
+      { workspace = "7", default_name = "communication" },
+      { workspace = "8", default_name = "obsidian-linear" },
+      { workspace = "9", default_name = "lutris" },
+      { workspace = "10", default_name = "steam" },
+      { workspace = "11", default_name = "media", monitor = "secondary" },
+      { workspace = "12", default_name = "logs", monitor = "secondary" },
+      { workspace = "13", default_name = "misc", monitor = "secondary" },
+      { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
     workspace_keys = {
       "plus",

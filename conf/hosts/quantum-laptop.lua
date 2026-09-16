@@ -2,6 +2,11 @@
 -- the primary; the spec defaults (persistent, the scene layout, primary
 -- monitor) are filled by conf/host.lua — a file spells a field only to
 -- deviate.
+--
+-- Special workspaces are retired (LEO-265/330): every scene that used to live
+-- in `special:*` is now an ordinary workspace admitted per mode. On the
+-- laptop, secondary-pinned scenes use HDMI-A-1 when an external monitor is
+-- connected; otherwise they fall back to primary.
 -- Hosts shape (hypr/types.lua); workspace_specs entries are HL.WorkspaceRuleSpec.
 ---@type Hosts
 return {
@@ -23,36 +28,34 @@ return {
       },
       { workspace = "2", default_name = "creative" },
       { workspace = "3", default_name = "proton" },
-      { workspace = "4", default_name = "media" },
       {
-        workspace = "5",
-        default_name = "gaming",
-        -- No hardcoded gaps (LEO-190): the profile fills them per monitor
-        -- like any other workspace, and solo_gaps frames the lone Dofus
-        -- group when nothing else is open (LEO-191). The old gaps_out = 0
-        -- meant edge-to-edge clients; the group rule already makes this a
-        -- single tile, so the workspace is shaped by the system, not by a
-        -- "zero means special" sentinel.
-        --
-        -- Opt out of solo framing (LEO-190/191): this scene is a fixed
-        -- capture region, not a lone window that wants breathing room.
-        -- With framing on, the gaps flipped between the base profile and
-        -- the +180 widen every time the tile count changed (group alone
-        -- vs group + scene browser), which moves the OBS crop under you.
+        workspace = "4",
+        default_name = "dofus",
         engine = {
-          -- Two-tile ratio declaration; see docs/scenes.md. A resize loop
-          -- may correct drift internally; it is not this field.
           layout_opts = { dwindle = { default_split_ratio = 0.67 } },
           solo_gaps = "none",
         },
       },
-      -- Same workspace arrangement as the desktop: every named workspace
-      -- sits on primary (the fill default), no override spelled.
-      { workspace = "6", default_name = "logs" },
-      { workspace = "special:comms" },
-      { workspace = "special:music" },
-      { workspace = "special:launcher" },
-      { workspace = "special:ankama", on_created_empty = "uwsm-app -- ,ankama-launcher.sh" },
+      { workspace = "5", default_name = "pokemon" },
+      { workspace = "6", default_name = "steam-games" },
+      { workspace = "7", default_name = "communication", monitor = "secondary" },
+      {
+        workspace = "8",
+        default_name = "obsidian-linear",
+        monitor = "secondary",
+        engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
+      },
+      { workspace = "9", default_name = "lutris", monitor = "secondary" },
+      { workspace = "10", default_name = "steam", monitor = "secondary" },
+      {
+        workspace = "11",
+        default_name = "media",
+        monitor = "secondary",
+        engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
+      },
+      { workspace = "12", default_name = "logs", monitor = "secondary" },
+      { workspace = "13", default_name = "misc", monitor = "secondary" },
+      { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
     workspace_keys = {
       "plus",

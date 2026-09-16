@@ -2,6 +2,12 @@
 -- skeleton as every host; the deltas are the engine blocks (split ratios the
 -- panels ask for — 1.25 on the widescreen primary, 1.0 on normal-aspect
 -- monitors) and this host's scene document.
+--
+-- Special workspaces are retired (LEO-265/330): every scene that used to live
+-- in `special:*` is now an ordinary workspace admitted per mode. The monitor
+-- field pins gaming-side scenes to the secondary display; work/study scenes
+-- stay on primary. Scenes shared across modes (proton, obsidian-linear) keep
+-- whichever monitor the host declares — the mode does not move them.
 -- Hosts shape (hypr/types.lua); workspace_specs entries are HL.WorkspaceRuleSpec.
 ---@type Hosts
 return {
@@ -15,16 +21,16 @@ return {
   -- differ per layout on a workspace; see that file's header.
   workspaces = {
     workspace_specs = {
+      -- Shared across work + study modes. The scene layout: this workspace's
+      -- arrangement is declared (hyprfocus scenes, see docs/scenes.md) rather
+      -- than corrected after the fact. The terminals are one group, so there
+      -- are two tiles however many project windows are open — the group left,
+      -- the browser right, and the groupbar saying which terminal you are
+      -- looking at.
       {
         workspace = "1",
         default = true,
         default_name = "code",
-        -- The scene layout: this workspace's arrangement is declared
-        -- (hyprfocus scenes, see docs/scenes.md) rather than corrected after
-        -- the fact. The terminals are one group, so there are two tiles
-        -- however many project windows are open — the group left, the
-        -- browser right, and the groupbar saying which terminal you are
-        -- looking at.
         engine = {
           -- Two-tile ratio declaration; see docs/scenes.md.
           layout_opts = {
@@ -33,63 +39,67 @@ return {
           },
         },
       },
+      -- Creative is not admitted by any mode in LEO-330's spec yet; kept as
+      -- a named workspace for future modes or neutral. No engine block means
+      -- it falls back to the global layout (dwindle).
       {
         workspace = "2",
         default_name = "creative",
         engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
       },
+      -- Proton shared across gaming + work + study modes. The 50/50 split
+      -- (mail left, pass companion right) is declared by the scene.
       {
         workspace = "3",
         default_name = "proton",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
+        engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
       },
+      -- Dofus: the primary gaming workspace. Opt out of solo framing
+      -- (LEO-190/191) — the tile geometry is a fixed capture region, and
+      -- framing gaps would move the OBS crop under you.
       {
         workspace = "4",
-        default_name = "gaming",
-        -- No hardcoded gaps (LEO-190): the profile fills them per monitor
-        -- like any other workspace, and solo_gaps frames the lone Dofus
-        -- group when nothing else is open (LEO-191). The old gaps_out = 0
-        -- meant edge-to-edge clients; the group rule already makes this a
-        -- single tile, so the workspace is shaped by the system, not by a
-        -- "zero means special" sentinel.
-        --
-        -- Opt out of solo framing (LEO-190/191): this scene's tile geometry
-        -- is a fixed capture region. With framing on, the gaps flipped
-        -- between the base profile and the +180 widen every time the tile
-        -- count changed (group alone vs group + scene browser), which moves
-        -- the OBS crop under you.
+        default_name = "dofus",
         engine = {
-          -- Two-tile ratio declaration; see docs/scenes.md. A resize loop
-          -- may correct drift internally; it is not this field.
           layout_opts = { dwindle = { default_split_ratio = 0.67 } },
           solo_gaps = "none",
         },
       },
+      -- Pokemon: emulator + streaming media. On primary beside dofus.
+      { workspace = "5", default_name = "pokemon" },
+      -- Steam games: fullscreen proton/steam windows, no split.
+      { workspace = "6", default_name = "steam-games" },
+      -- Communication: signal + vesktop, 50/50 split.
+      { workspace = "7", default_name = "communication", monitor = "secondary" },
+      -- Obsidian + Linear side-by-side. Shared by work + study modes.
       {
-        workspace = "5",
+        workspace = "8",
+        default_name = "obsidian-linear",
+        monitor = "secondary",
+        engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
+      },
+      -- Lutris: game launcher, fullscreen.
+      { workspace = "9", default_name = "lutris", monitor = "secondary" },
+      -- Steam client: small floating window.
+      { workspace = "10", default_name = "steam", monitor = "secondary" },
+      -- Media: fullscreen media player.
+      {
+        workspace = "11",
         default_name = "media",
         monitor = "secondary",
         engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
       },
-      { workspace = "6", default_name = "logs", monitor = "secondary" },
+      -- Logs: tmux log workspace, secondary.
+      { workspace = "12", default_name = "logs", monitor = "secondary" },
+      -- Misc: catch-all for uncategorized windows.
       {
-        workspace = "7",
+        workspace = "13",
         default_name = "misc",
         monitor = "secondary",
         engine = { layout_opts = { dwindle = { default_split_ratio = 1.25, special_scale_factor = 1 } } },
       },
-
-      -- #special-workspaces: no monitor, no persistence — a special's
-      -- lifetime is its open windows.
-      { workspace = "special:comms" },
-      { workspace = "special:music" },
-      { workspace = "special:launcher" },
-      {
-        workspace = "special:ankama",
-        -- Through the gate: focus mode refuses to START a game. An already
-        -- running one is never touched (see ,focus-guard.sh).
-        on_created_empty = "sh -c ',focus-guard.sh game && uwsm-app -- lutris lutris:rungameid/2'",
-      },
+      -- Ankama launcher: fullscreen, secondary. Retired from special:ankama.
+      { workspace = "14", default_name = "ankama-launcher", monitor = "secondary" },
     },
     workspace_keys = {
       "plus",
