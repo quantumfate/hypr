@@ -102,12 +102,10 @@ t.describe("compiled rules", function()
   ---@return string? group, string? on_workspace
   local function group_for(rules, scene, class)
     for _, tag_rule in ipairs(rules) do
-      if tag_rule.match.class == class and tag_rule.tag and tag_rule.tag:find("scene:" .. scene, 1, true) then
-        -- A block class stamps both tags; a barred class stamps only the
-        -- scene tag. The group rule depends on whichever is more specific.
-        local applied_tag = tag_rule.tag:match("%+(block:[^%s]+)") or tag_rule.tag:match("%+(scene:[^%s]+)")
+      local applied_tag = tag_rule.tag and tag_rule.tag:sub(2)
+      if tag_rule.match.class == class and applied_tag and applied_tag:find(":" .. scene, 1, true) then
         for _, group_rule in ipairs(rules) do
-          if group_rule.match.tag == applied_tag then
+          if group_rule.group and group_rule.match.tag == applied_tag then
             return group_rule.group, tag_rule.match.workspace
           end
         end
@@ -130,6 +128,29 @@ t.describe("compiled rules", function()
     t.eq("set always", (group_for(rules, "gaming", "Dofus.x64")))
     t.eq("deny", (group_for(rules, "gaming", "zen-gaming-media")), "the block's own guard, not the default bar")
     t.eq("barred", (group_for(rules, "gaming", "steam_app_default")))
+  end)
+
+  -- Hyprland's `tag` effect takes one tag: "+a +b" stamps a single tag
+  -- literally named "a +b", so no group rule matching "b" ever fired.
+  t.it("stamps exactly one tag per rule, and never bars on the scene tag", function()
+    local rules = compile.plan({
+      dofus = {
+        name = "dofus",
+        blocks = { { classes = { "Dofus.x64" }, group = true, order = 1 } },
+        barred = { "steam_app_default" },
+      },
+    })
+    local stamped = {}
+    for _, rule in ipairs(rules) do
+      if rule.tag then
+        t.ok(rule.tag:match("^%+[^%s+]+$"), "one tag in " .. rule.name .. ": " .. rule.tag)
+        stamped[rule.tag] = true
+      end
+      if rule.group then
+        t.ok(rule.match.tag ~= "scene:dofus", rule.name .. " must not match the scene tag")
+      end
+    end
+    t.ok(stamped["+scene:dofus"] and stamped["+block:dofus/1"], "block windows get both tags")
   end)
 
   -- The cross-scene bug (LEO-354): two scenes declaring the same class used

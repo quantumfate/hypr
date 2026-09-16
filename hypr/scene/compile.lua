@@ -30,7 +30,7 @@ local M = {}
 ---@class Scene.CompiledRule
 ---@field name string
 ---@field match table<string, string>
----@field tag string? Hyprland tag-assignment effect, e.g. "+scene:code +block:code/1"
+---@field tag string? Hyprland tag-assignment effect, one tag, e.g. "+block:code/1"
 ---@field group string? Hyprland group effect, e.g. "set always", "barred", "deny"
 
 ---Scene and block tag names, shared by the tagging rule and the group rule
@@ -67,15 +67,21 @@ function M.plan(specs)
     for _, block in ipairs(spec.blocks) do
       local scene_tag, block_tag = tags_for(name, block.order)
       for _, class in ipairs(block.classes) do
-        -- Identify: stamp the scene/block tags, but only for a window of
-        -- this class that is actually on the scene's own workspace.
-        -- Named "-1-tag" / "-2-group" so that sorting rule names (required
-        -- for deterministic config-load order) also keeps the tagging rule
-        -- ahead of the group rule that depends on its tag.
+        -- Identify: stamp the scene and block tags, but only for a window
+        -- of this class that is actually on the scene's own workspace. One
+        -- tag per rule: the `tag` effect takes a single tag, and "+a +b"
+        -- would stamp one tag literally named "a +b". Named "-1a"/"-1b"/
+        -- "-2-group" so sorting rule names keeps both tagging rules ahead of
+        -- the group rule that depends on them.
         rules[#rules + 1] = {
-          name = ("scene-%s-%d-%s-1-tag"):format(name, block.order, class),
+          name = ("scene-%s-%d-%s-1a-scene"):format(name, block.order, class),
           match = { class = class, workspace = on_workspace },
-          tag = ("+%s +%s"):format(scene_tag, block_tag),
+          tag = "+" .. scene_tag,
+        }
+        rules[#rules + 1] = {
+          name = ("scene-%s-%d-%s-1b-block"):format(name, block.order, class),
+          match = { class = class, workspace = on_workspace },
+          tag = "+" .. block_tag,
         }
         -- Arrange: the group decision matches the block tag, not the bare
         -- class, so it only ever fires for a window already confirmed to be
@@ -97,16 +103,18 @@ function M.plan(specs)
     -- than left alone because `auto_group` grabs whatever opens while a group
     -- has focus, and these open into a workspace whose main tile is a group.
     -- Scoped the same way: tag on the scene's workspace, then match the tag.
+    -- The tag is `barred:<name>`, never the scene tag: every block window
+    -- carries `scene:<name>` too, and a bar on it would fight the group.
     for _, class in ipairs(spec.barred) do
-      local scene_tag = tags_for(name)
+      local barred_tag = ("barred:%s"):format(name)
       rules[#rules + 1] = {
         name = ("scene-%s-barred-%s-1-tag"):format(name, class),
         match = { class = class, workspace = on_workspace },
-        tag = ("+%s"):format(scene_tag),
+        tag = "+" .. barred_tag,
       }
       rules[#rules + 1] = {
         name = ("scene-%s-barred-%s-2-group"):format(name, class),
-        match = { tag = scene_tag },
+        match = { tag = barred_tag },
         group = "barred",
       }
     end
