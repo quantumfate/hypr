@@ -338,6 +338,65 @@ def scalar(value) -> str:
     return text
 
 
+_YAML_QUOTE_RE = re.compile(
+    r":\s"  # embedded mapping key (colon + space)
+    r"|:\s*$"  # trailing colon (bare key indicator)
+    r"|^[{\[!&*|%@`]"  # flow/alias indicators
+    r"|^'[^']*$|^\"[^\"]*$"  # unbalanced quotes
+    r"|^-$|^\? "  # block sequence / explicit key
+)
+
+
+def yaml_line(value: str) -> str:
+    """Wrap *value* in single quotes when it could be misread as a YAML mapping."""
+    if not value or _YAML_QUOTE_RE.search(value):
+        escaped = value.replace("'", "''")
+        return f"'{escaped}'"
+    return value
+
+
+def _strip_yaml_quotes(value: str) -> str:
+    """Decode one layer of YAML quoting, so Obsidian's re-serialization round-trips."""
+    if len(value) < 2 or value[0] != value[-1] or value[0] not in "'\"":
+        return value
+    inner = value[1:-1]
+    return inner.replace("''", "'") if value[0] == "'" else inner
+
+
+def repair_managed_frontmatter(path: Path) -> bool:
+    """Quote ambiguous linear_* scalar lines an older sync wrote raw.
+
+    A value like `linear_labels: Frontier, Rice: Quickshell` reads as a nested
+    compact mapping to Obsidian's YAML parser, which makes every later CLI
+    property write on that note fail. Only the linear_* keys this script owns
+    are touched; user keys, lists, and nested values stay verbatim.
+    """
+    text = path.read_text(encoding="utf-8")
+    match = FRONTMATTER_RE.match(text)
+    if not match:
+        return False
+
+    out, changed = [], False
+    for line in match.group(2).split("\n"):
+        head = re.match(r"^(linear_\w+):\s*(.*)$", line)
+        if head and head.group(2).strip():
+            raw = head.group(2).strip()
+            fixed = yaml_line(_strip_yaml_quotes(raw))
+            if fixed != raw:
+                out.append(f"{head.group(1)}: {fixed}")
+                changed = True
+                continue
+        out.append(line)
+
+    if not changed:
+        return False
+    path.write_text(
+        f"{match.group(1)}{chr(10).join(out)}{match.group(3)}{text[match.end() :]}",
+        encoding="utf-8",
+    )
+    return True
+
+
 HEADING_RE = re.compile(r"^(#{1,6})(\s+\S)")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 MIN_SYNCED_LEVEL = 3
@@ -445,7 +504,7 @@ def merge_frontmatter(text: str, fields: dict) -> str:
     """
     match = FRONTMATTER_RE.match(text)
     if not match:
-        block = "".join(f"{k}: {v}\n" for k, v in fields.items())
+        block = "".join(f"{k}: {yaml_line(v)}\n" for k, v in fields.items())
         return f"---\n{block}---\n\n{text}"
 
     remaining = dict(fields)
@@ -454,10 +513,10 @@ def merge_frontmatter(text: str, fields: dict) -> str:
         key = re.match(r"^(\w+):", line)
         name = key.group(1) if key else None
         if name in remaining:
-            out.append(f"{name}: {remaining.pop(name)}")
+            out.append(f"{name}: {yaml_line(remaining.pop(name))}")
         else:
             out.append(line)
-    out.extend(f"{k}: {v}" for k, v in remaining.items())
+    out.extend(f"{k}: {yaml_line(v)}" for k, v in remaining.items())
     return f"{match.group(1)}{chr(10).join(out)}{match.group(3)}{text[match.end() :]}"
 
 
@@ -930,6 +989,12 @@ def apply_plan(cfg: Config, plan: Plan) -> None:
         raise RuntimeError(
             "Obsidian is not running; note creation needs Templater via its CLI"
         )
+
+    # Notes written before the quoting fix carry raw values Obsidian's parser
+    # rejects; repair every synced note before any CLI property op reads one.
+    for path in sorted(cfg.vault_root.rglob("*.md")):
+        if repair_managed_frontmatter(path):
+            print(f"  repair  {path.name}")
 
     if plan.migrations:
         for old, new in plan.migrations:
