@@ -65,15 +65,6 @@ local function declared_workspaces(declaration)
   return names
 end
 
-local function sorted_keys(set)
-  local out = {}
-  for k in pairs(set) do
-    table.insert(out, k)
-  end
-  table.sort(out)
-  return out
-end
-
 local function read_file(path)
   local handle = io.open(path, "r")
   if not handle then

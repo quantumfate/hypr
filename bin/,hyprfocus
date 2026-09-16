@@ -236,7 +236,9 @@ def seed(source: Path, force: bool) -> None:
             and shipped_version is not None
             and stored_version < shipped_version
         ):
-            reseed_reason = f"stored version {stored_version} < shipped version {shipped_version}"
+            reseed_reason = (
+                f"stored version {stored_version} < shipped version {shipped_version}"
+            )
         else:
             sys.exit(f"{target} already exists; pass --force to replace it")
 
