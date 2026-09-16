@@ -98,6 +98,13 @@ Workspaces are managed in the background; Quickshell presents them.
 - Navigation keys address the engine's ordered structure of active workspaces
   and of windows within a workspace (counted left to right), per monitor, so a
   window is reached by position instead of searched for.
+- The bar's side insets mirror each monitor's base tiled outer gap (LEO-340),
+  published to the `geometry` store by `conf/host.lua`'s `build()` and read
+  off resolved geometry, not a layout-specific option — workspace layouts are
+  headed to `scene`/`columns` only. This is the base gap only: the transient
+  solo widen (`hypr/events/solo_gaps.lua` framing a lone tile) is a
+  per-workspace correction, not part of a monitor's resting geometry, so the
+  bar never follows it.
 
 ## Observability
 

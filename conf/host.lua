@@ -15,8 +15,21 @@
 -- primary/secondary monitor sentinels, the fingerprint profile and its gaps.
 local geometry = require("hypr.lib.geometry")
 local profile = require("hypr.lib.profile")
+local Store = require("hypr.lib.store")
 
 local M = {}
+
+-- Mirrors hypr/conf.lua's `general.gaps_out`: the fallback for a monitor role
+-- geometry_profiles never overrides. Read live via hl.get_config where
+-- possible so a future edit to conf.lua can't silently drift from this
+-- default; this literal only backs the case hl has no value loaded yet.
+local DEFAULT_GAPS_OUT = { top = 8, right = 40, bottom = 40, left = 40 }
+
+-- LEO-340: the bar's side insets follow each monitor's tiled outer gap, base
+-- gap only (never the solo widen from hypr/events/solo_gaps.lua). Quickshell
+-- reads this store and falls back to Theme.barInset*2 when a monitor has no
+-- entry.
+local geometry_store = Store.define("geometry")
 
 ---@param hostname string
 ---@return Hosts
@@ -82,6 +95,13 @@ function M.build()
     { primary = config.host.primary_monitor, secondary = config.host.secondary_monitor },
     (config.geometry_profiles[config.profile] or {}).gaps_by_monitor
   )
+
+  geometry_store:put({
+    monitors = geometry.monitor_gaps(
+      config.host.workspaces.workspace_specs,
+      hl.get_config("general.gaps_out") or DEFAULT_GAPS_OUT
+    ),
+  })
 end
 
 return M
