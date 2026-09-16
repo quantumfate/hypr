@@ -210,11 +210,35 @@ def seed(source: Path, force: bool) -> None:
     place from either side.
 
     It refuses to overwrite by default: the store is edited at runtime, so a
-    seed that clobbered it would throw away whatever was tuned by hand.
+    seed that clobbered it would throw away whatever was tuned by hand. The one
+    exception is a version-keyed migration (LEO-337): a stored declaration
+    whose `version` is lower than the one being seeded is stale by
+    construction — nothing could have hand-tuned a field the shipped grammar
+    didn't have yet — so it is replaced once, without `--force`. This is
+    strictly one-way: equal or higher stored versions still require
+    `--force`, so a hand-edited store at the current version is never
+    silently clobbered.
     """
     target = state_dir() / "hyprfocus.json"
+    reseed_reason = None
     if target.exists() and not force:
-        sys.exit(f"{target} already exists; pass --force to replace it")
+        try:
+            stored = json.loads(target.read_text())
+        except json.JSONDecodeError:
+            stored = None
+        try:
+            shipped_version = json.loads(source.read_text()).get("version", 0)
+        except (FileNotFoundError, json.JSONDecodeError):
+            shipped_version = None
+        stored_version = stored.get("version", 0) if isinstance(stored, dict) else None
+        if (
+            stored_version is not None
+            and shipped_version is not None
+            and stored_version < shipped_version
+        ):
+            reseed_reason = f"stored version {stored_version} < shipped version {shipped_version}"
+        else:
+            sys.exit(f"{target} already exists; pass --force to replace it")
 
     try:
         declaration = json.loads(source.read_text())
@@ -231,6 +255,8 @@ def seed(source: Path, force: bool) -> None:
 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(declaration, indent=2) + "\n")
+    if reseed_reason:
+        print(f"reseeded {target} ({reseed_reason})")
     print(f"seeded {target} ({len(declaration.get('modes', {}))} modes)")
 
 

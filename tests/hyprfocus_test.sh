@@ -94,6 +94,36 @@ else
     fail=1
 fi
 
+# Version-keyed migration (LEO-337): a store stamped with a lower version than
+# the shipped declaration is stale by construction, so it reseeds once with no
+# --force. A sandboxed store, never the machine's real $QF_STORE.
+migrate_scratch=$(mktemp -d)
+trap 'rm -rf "$scratch" "$migrate_scratch"' EXIT
+stale=$migrate_scratch/stale.json
+jq '.version = 1' "$declaration" >"$stale"
+
+QF_STORE=$migrate_scratch/quantum-store "$cli" seed "$stale" --force >/dev/null 2>&1
+
+migrate_out=$(QF_STORE=$migrate_scratch/quantum-store "$cli" seed "$declaration" 2>&1)
+if [[ $migrate_out == *"reseeded"* ]]; then
+    echo "  ok   a stale-version store reseeds without --force"
+else
+    echo "  FAIL a stale-version store should reseed without --force"
+    fail=1
+fi
+check "the stale store now equals the shipped declaration exactly" \
+    "$(jq -S . "$declaration")" \
+    "$(jq -S . "$migrate_scratch/quantum-store/hyprfocus.json")"
+
+# One-way: seeding again at the now-current version still refuses without
+# --force, so a store at the shipped version is never silently clobbered.
+if QF_STORE=$migrate_scratch/quantum-store "$cli" seed "$declaration" >/dev/null 2>&1; then
+    echo "  FAIL seeding again at the current version should refuse"
+    fail=1
+else
+    echo "  ok   a store already at the shipped version still refuses without --force"
+fi
+
 # A declaration that cannot resolve is one the desk would fail on at the next
 # mode change; failing at seed time is the cheaper place to find out.
 broken=$scratch/broken.json
