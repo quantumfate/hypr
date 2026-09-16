@@ -301,12 +301,9 @@ local function cycle_workspace_layout()
     hl.workspace_rule({ workspace = tostring(workspace.id), layout = rule_layout })
   end
 
-  -- Cycling back is an engine event no compositor occurrence announces, so
-  -- the scene is realized here: it is owed the arrangement the moments it
-  -- was behind another layout let drift.
-  if next_layout == "scene" and workspace.name then
-    require("hypr.events.scene").realize(workspace.name)
-  end
+  -- Cycling back to "scene" needs no manual re-arrange: the compositor calls
+  -- the registered layout provider's `recalculate` on every change, scene
+  -- layout switch included (see "Hyprland primitives" in AGENTS.md).
 end
 
 -- Repeatable on purpose: cycling layouts is a "try it and see" action, and

@@ -84,15 +84,13 @@ The two-tile split is `layout_opts.dwindle.default_split_ratio` (`0.67`). That i
 
 ## Group
 
-`group = true` on a member match set means one Hyprland group containing **only** those classes. Fold matching windows in; eject foreigners.
+`group = true` on a member match set means one Hyprland group containing **only** those classes. The declaration is compiled to static rules; join and eviction are **not executed today**.
 
-Do not use Hyprland `lock` — it rejects later same-class members. `hypr/scene/compile.lua` emits `set always` on the match and the guard on every other class that can land on the workspace. Runtime still ejects, because `auto_group` can still swallow.
+`hypr/scene/compile.lua` emits `set always` on the match and the `barred`/`deny` guard on every other class that can land on the workspace, at config load. Do not use Hyprland `lock` — it rejects later same-class members.
 
-Grouping is decided **once**, by the scene. Do not also write a `group` key in `windowrules.lua` for a class a block names; the compiler emits it and the runtime holds it.
+The corrective engine that used to derive a block's dominant group each pass, fold stragglers into it, and eject foreigners `auto_group` swallowed (`schedule.lua` + `model.lua` + `actuator.lua`, `HL.Group:add`/`:remove`) is retired (LEO-261). Group membership becomes **open-time rules**, scoped to the scene's workspace by tags (LEO-354); until that lands, a block that `auto_group` splits, or a foreigner it swallows, is not corrected.
 
-The runtime never remembers which group is the block's. It derives it each pass: whichever group already holds the most of the block's tiles wins, and the rest fold into it. A remembered set cannot recover from `auto_group` splitting a block in two — it declares one half authoritative and fights the other forever.
-
-Joining goes through `HL.Group:add`, which names the window it acts on. There is no adjacency search and no `moveintogroup` hop chain.
+Grouping is decided **once**, by the scene. Do not also write a `group` key in `windowrules.lua` for a class a block names; the compiler emits it.
 
 ## Guard
 
@@ -102,9 +100,9 @@ Joining goes through `HL.Group:add`, which names the window it acts on. There is
 
 ## Collect
 
-`collect = true` on a member: a window that drifted to another workspace comes home. Off by default.
+`collect = true` on a member: declares that a window which drifted to another workspace should come home. **Not executed today** — the corrective engine that read this flag (`schedule.lua` + `model.lua` + `actuator.lua`) is retired (LEO-261). Collection becomes a **route decision** instead (LEO-353): the routing step sends a member's window to its scene's workspace at open/move time, rather than a pass that watches for drift and moves it back.
 
-Ownership is earned by **mapping into the scene**, never by matching its classes — otherwise a terminal you deliberately moved elsewhere gets dragged back. A dormant scene (no member home) collects nothing, and a member parked on a special workspace is hidden on purpose.
+Ownership was earned by **mapping into the scene**, never by matching its classes — otherwise a terminal you deliberately moved elsewhere gets dragged back. A dormant scene (no member home) collected nothing, and a member parked on a special workspace was hidden on purpose. LEO-353's route decision keeps that distinction.
 
 ## Companions
 
@@ -118,7 +116,6 @@ Scene and member `bindings` tags are buffer-local. Which-key already filters `wo
 
 ```lua
 Scene.active(ws)
-Scene.realize(name)
 Scene.tile(name, match)
 ```
 
@@ -209,7 +206,8 @@ the same class fills both the left and right slot).
 A workspace's scene is its `default_name` entry in the store. The host's
 `workspace_specs` bind ids and monitors; the scene document binds behavior to
 the name. `Scene.active(ws)` returns the scene name for a workspace if one
-exists, and `Scene.realize(name)` runs its layout.
+exists; the layout runs from the registered provider, not a call this module
+makes.
 
 There is no per-workspace indirection: `dofus` is both the workspace name and
 the scene name. A mode admits the workspace; the workspace admits the scene.
@@ -259,56 +257,30 @@ Registered with `hl.layout.register`: `recalculate(ctx)` receives the work area
 and the tiled targets, and places each one. The compositor asks; the scene
 answers.
 
-This replaces a corrective loop that measured another layout's output and
-dispatched fixes at it. What the inversion removes, structurally: settle and
-verify timers, geometry digests, turn budgets, the focus-dance (positioning
-dispatchers act on the focused window, so every correction had to steal and
-restore focus), ordering via `movewindow` (at a monitor edge it moves the window
-to the next monitor), and the event subscriptions an engine has to guess
-at. Single-tile gaps and per-workspace layout options become branches in the
-same function.
+This replaced a corrective loop that measured another layout's output and
+dispatched fixes at it (`hypr/scene/schedule.lua` + `model.lua` +
+`actuator.lua`, retired in LEO-261 — see "Hyprland primitives" in
+`AGENTS.md`). Arrange is now the layout provider's alone: it never dispatches,
+and needs no event subscription, settle/verify timers, turn budget, or
+focus-dance. Single-tile gaps and per-workspace layout options become
+branches in the same function.
 
 Grouping stays separate and declarative: a group is a compositor concept and
 arrives at the layout as one target.
 
-The engine's corrections are gated on the workspace running the scene layout:
-the same declaration on dwindle or master — where another layout owns the
-geometry — asks for nothing (`model.intent` checks `tiled_layout`; cycling
-back re-realizes through the layout-cycle bind). The compiled group rules stay
-layout-independent; the gate is the engine's, not the rules'.
+The layout only runs on the workspace running the scene layout: the same
+declaration on dwindle or master — where another layout owns the geometry —
+is inert there, because nothing asks the scene layout provider to place
+anything on a workspace it does not own. The compiled group rules stay
+layout-independent.
 
 ## Engine layers
 
-| File                      | Owns                                               |
-| ------------------------- | -------------------------------------------------- |
-| `hypr/scene/spec.lua`     | the declaration, normalized                        |
-| `hypr/scene/compile.lua`  | declaration → static window rules, at config load  |
-| `hypr/scene/snapshot.lua` | the compositor's state, flattened to plain tables  |
-| `hypr/scene/registry.lua` | which windows a scene owns                         |
-| `hypr/scene/model.lua`    | snapshot + spec → the one correction wanted (pure) |
-| `hypr/scene/actuator.lua` | one correction → compositor calls                  |
-| `hypr/scene/schedule.lua` | when acting is allowed at all                      |
-| `hypr/events/scene.lua`   | wiring to Hyprland events                          |
-
-`model.lua` touches no `hl` and no timers, so every arrangement decision is testable with fixtures — `tests/scene_model_spec.lua`. `tests/scene_spec.lua` covers the rest end to end.
-
-## The three scheduling rules
-
-1. **Only the visible scene is corrected.** Reaching a hidden workspace means focusing a window there, which carries the user with it and fires `workspace.active`, which arms the next scene. A scene behind the user is realized when they come back.
-2. **Never act on a single reading.** Hyprland animates every correction; geometry sampled once is mid-flight. A pass acts only when two reads agree.
-3. **Never repeat a correction that changed nothing.** Otherwise the pass oscillates. It ends instead, and the user's arrangement stands.
-
-Turn-bounded on top of all three.
-
-## Intent priority
-
-`collect → evict → join → reorder → resize`. Causal, not cosmetic: collection decides which windows are in play, grouping decides how many tiles there are, and only then can order and share mean anything — both are measured in tiles.
-
-One intent per pass, never a plan: each correction changes the geometry the next decision depends on.
-
-## Inside engines (not config)
-
-Hide: focus-dance, settle/verify timers, the `follow = false` on a collecting move, group-object vs dispatcher.
+| File                     | Owns                                              |
+| ------------------------ | ------------------------------------------------- |
+| `hypr/scene/spec.lua`    | the declaration, normalized                       |
+| `hypr/scene/compile.lua` | declaration → static window rules, at config load |
+| `hypr/events/scene.lua`  | wiring to Hyprland events                         |
 
 ## Example
 

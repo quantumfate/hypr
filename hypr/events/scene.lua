@@ -5,32 +5,30 @@
 -- match lives in one Hyprland group, so the block is a single tile however
 -- many windows it has), `order` (where its tile sits left-to-right), `share`
 -- (how much of the tiled span it holds), `collect` (whether members that
--- wandered to another workspace are brought home).
+-- wandered to another workspace are brought home — not executed today, see
+-- docs/scenes.md#collect).
 --
--- The work is split so each part can be read on its own, and so the decisions
--- can be tested without a compositor:
+-- Geometry is decided by the registered layout provider alone
+-- (`hl.layout.register`, `hypr/scene/provider.lua` + `layout.lua`): the
+-- compositor calls `recalculate` on every change, so this file arms nothing
+-- and corrects nothing. The corrective engine that used to sit between
+-- events and the layout (`schedule.lua` + `model.lua` + `actuator.lua`) is
+-- retired (LEO-261) — see "Hyprland primitives" in AGENTS.md.
+--
+-- The work that is left is split so each part can be read on its own:
 --
 --   hypr/scene/spec.lua      the declaration, normalized
 --   hypr/scene/compile.lua   declaration -> static window rules, at config load
---   hypr/scene/snapshot.lua  the compositor's state, flattened to plain tables
---   hypr/scene/registry.lua  which windows a scene owns
---   hypr/scene/model.lua     snapshot + spec -> the one correction wanted (pure)
---   hypr/scene/actuator.lua  one correction -> compositor calls
---   hypr/scene/schedule.lua  when acting is allowed at all
 --   hypr/scene/companion.lua the declared spawn/companion lifecycle
 --
--- This file only connects them to Hyprland's events.
+-- This file connects those to Hyprland's events, plus decision-record logging
+-- (LEO-352) and mode-scoped binding admission on workspace arrival.
 local spec_lib = require("hypr.scene.spec")
-local registry = require("hypr.scene.registry")
-local schedule = require("hypr.scene.schedule")
 local companion = require("hypr.scene.companion")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
 
 local specs = spec_lib.load()
-
-schedule.init(specs)
-registry.seed(specs)
 
 -- In-flight spawns, keyed workspace:companion-class, so a scan racing the
 -- companion's own open event never asks twice. Cleared when the companion
@@ -120,14 +118,6 @@ function M.active(ws)
   return name and specs[name] and name or nil
 end
 
----Run the realize loop for the named scene.
----@param name string
-function M.realize(name)
-  if specs[name] then
-    schedule.realize(name)
-  end
-end
-
 ---Leftmost live tile of the block matching `match`, or nil.
 ---@param name string
 ---@param match string|{ class: string }
@@ -151,12 +141,8 @@ function M.tile(name, match)
   return best
 end
 
--- Anything already open when the config (re)loads: the handlers below replay
--- no history, so a reload would otherwise leave every live scene unowned.
-for _, w in ipairs(hl.get_windows() or {}) do
-  schedule.arm(scene_for(w))
-end
--- Companions get the same treatment: a desk that reloads between "member
+-- Anything already open when the config (re)loads: companions get the same
+-- treatment a live event would, so a desk that reloads between "member
 -- opened" and "companion opened" still owes the lifecycle — presence is
 -- derived, so converging once here converges structs already on the desk.
 for scene_name, spec in pairs(specs) do
@@ -169,7 +155,6 @@ for scene_name, spec in pairs(specs) do
 end
 
 hl.on("window.open", function(w)
-  registry.claim(specs, w)
   -- A companion mapping settles its own in-flight spawn before the engine
   -- pass runs, so the lifecycle the pass sees is derived, not assumed.
   if w and w.workspace then
@@ -192,7 +177,6 @@ hl.on("window.open", function(w)
   fields.reason = scene_name and ("matched scene " .. scene_name) or "no scene claims this class"
   trace.emit(fields)
   converge_companions(scene_name)
-  schedule.arm(scene_name)
 end)
 
 hl.on("window.close", function(w)
@@ -203,7 +187,6 @@ hl.on("window.close", function(w)
   fields.decision = "leave"
   fields.reason = "window.close"
   trace.emit(fields)
-  registry.forget(w and w.address)
   -- A close event's payload may not say where the window stood, but the
   -- lifecycle is derived from live windows, so every spawn-carrying scene
   -- re-derives for free — there is no remembered book to consult.
@@ -215,15 +198,12 @@ hl.on("window.close", function(w)
       end
     end
   end
-  schedule.arm(name)
 end)
 
 -- A cross-workspace move is a map into the destination in law: the window
--- becomes the destination scene's, and the scene it left re-checks its
--- arrangement without it. Deliberately narrow — a move into one scene must
--- not re-arrange every other one.
+-- becomes the destination scene's. Deliberately narrow — a move into one
+-- scene must not re-converge companions for every other one unnecessarily.
 hl.on("window.move_to_workspace", function(w)
-  registry.claim(specs, w)
   local scene_name = scene_for(w)
   local fields = window_fields(w, scene_name)
   fields.stage = "leave"
@@ -243,17 +223,14 @@ hl.on("window.move_to_workspace", function(w)
       end
     end
   end
-  schedule.arm(scene_name)
 end)
 
--- Arriving on a workspace is the moment its scene may act: whatever drifted
--- while it was behind the user is corrected now, in front of them, where a
--- focus-dance cannot carry them anywhere they did not ask to go. The scene's
--- binding trees are also admitted or withheld here (LEO-266).
+-- Arriving on a workspace admits or withholds its scene's mode-scoped binding
+-- trees (LEO-266). Arranging the workspace is not this file's job: the scene
+-- layout provider is asked by the compositor on every change and needs no
+-- event subscription (see "Hyprland primitives" in AGENTS.md).
 hl.on("workspace.active", function()
   local ws = hl.get_active_workspace()
-  local name = ws and ws.name
-  schedule.on_enter(name)
   local scene_name = M.active(ws)
   if scene_name then
     pcall(function()

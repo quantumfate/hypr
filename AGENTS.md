@@ -294,7 +294,6 @@ Lua surface (`hypr/events/scene.lua`; the engine itself is layered under `hypr/s
 
 ```lua
 Scene.active(ws)           -- name or nil
-Scene.realize(name)
 Scene.tile(name, match)    -- first tile of that match, or nil
 ```
 
@@ -320,7 +319,7 @@ Only if none of the above fits:
 ```sh
 just check                         # fmt + tests + luacheck (the gate)
 just test                          # lua tests/run.lua + the shell helpers' tests
-TEST_SPECS='tests/scene_model_spec.lua tests/scene_spec.lua' lua tests/run.lua
+TEST_SPECS='tests/scene_layout_spec.lua tests/scene_spec.lua' lua tests/run.lua
 just fmt
 just units                         # regenerate etc/systemd targets the contract names
 ```

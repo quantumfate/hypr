@@ -44,11 +44,6 @@ t.describe("scene.lua wiring", function()
     for _, mod in ipairs({
       "hypr.lib.hypr",
       "hypr.scene.spec",
-      "hypr.scene.model",
-      "hypr.scene.snapshot",
-      "hypr.scene.registry",
-      "hypr.scene.actuator",
-      "hypr.scene.schedule",
       "hypr.events.scene",
     }) do
       package.loaded[mod] = nil
