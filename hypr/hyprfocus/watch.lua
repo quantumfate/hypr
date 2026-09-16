@@ -57,6 +57,11 @@ function M.attach()
       M.tick()
     end)
   end
+  -- A monitor coming back re-places scenes that fell back to primary while it
+  -- was gone; the mode's role, not the fallback, is where they belong.
+  hl.on("monitor.added", function()
+    hyprfocus.replace()
+  end)
   -- The desk converged at load time: boot/first converge on the pointer's
   -- answer already covers a config loading under a stale pointer.
   M.tick()

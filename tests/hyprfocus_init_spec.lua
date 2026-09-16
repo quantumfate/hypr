@@ -12,22 +12,32 @@
 local t = require("tests.harness")
 
 local DECLARATION = {
-  version = 1,
+  version = 3,
   base = {
-    workspaces = { "code", "gaming", "media", "logs" },
     bindings = { "root", "dofus", "llm", "media" },
     services = { "obsidian" },
     projects = {},
     scenes = {
       gaming = { bindings = { "dofus", "media" } },
       code = { bindings = { "llm" } },
+      media = {},
+      logs = {},
     },
   },
   modes = {
-    neutral = { name = "Neutral" },
+    neutral = {
+      name = "Neutral",
+      hidden = true,
+      scenes = {
+        { name = "code", monitor = "primary" },
+        { name = "gaming", monitor = "primary" },
+        { name = "media", monitor = "secondary" },
+        { name = "logs", monitor = "secondary" },
+      },
+    },
     game = {
       name = "Gaming",
-      workspaces = { only = { "gaming", "logs" } },
+      scenes = { { name = "gaming", monitor = "primary" }, { name = "logs", monitor = "secondary" } },
       bindings = { remove = { "llm", "media" } },
     },
   },
@@ -285,5 +295,87 @@ t.describe("entering a mode", function()
     local _, hyprfocus, rules = fresh(DECLARATION)
     hyprfocus.enter("game")
     t.eq(false, rules.code.enabled)
+  end)
+end)
+
+t.describe("scene-set refusal", function()
+  t.it("refuses a class conflict with a structured record and changes nothing", function()
+    local emitted = {}
+    local real_trace = package.loaded["hypr.lib.trace"]
+    package.loaded["hypr.lib.trace"] = {
+      emit = function(record)
+        emitted[#emitted + 1] = record
+      end,
+    }
+    local declaration = {
+      version = 3,
+      base = {
+        bindings = {},
+        scenes = {
+          gaming = { blocks = { { classes = { "zen-gaming-media" }, order = 1 } } },
+          logs = { blocks = { { classes = { "zen-gaming-media" }, order = 1 } } },
+          code = {},
+          media = {},
+        },
+      },
+      modes = DECLARATION.modes,
+    }
+    local _, hyprfocus, rules = fresh(declaration)
+    local report, err = hyprfocus.apply("game")
+    package.loaded["hypr.lib.trace"] = real_trace
+
+    t.eq(nil, report)
+    t.ok(tostring(err):find("^class_conflict"), tostring(err))
+    t.eq(true, rules.code.enabled, "a refused mode withdraws nothing")
+    t.eq(1, #emitted, "one refusal record")
+    t.eq("mode_refused", emitted[1].event)
+    t.eq("zen-gaming-media", emitted[1].class)
+    t.eq("gaming,logs", table.concat(emitted[1].scenes, ","))
+  end)
+end)
+
+t.describe("monitor placement", function()
+  local function with_host(monitors, on)
+    local saved = rawget(_G, "config")
+    _G.config = { host = { primary_monitor = "DP-1", secondary_monitor = "DP-2" } }
+    local stub, hyprfocus = fresh(DECLARATION)
+    stub.monitors = monitors
+    stub.get_workspace = function()
+      return { monitor = { name = on } }
+    end
+    return stub, hyprfocus, function()
+      _G.config = saved
+    end
+  end
+
+  local function moves(stub)
+    local out = {}
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.workspace.move" then
+        out[#out + 1] = d.args[1].workspace .. ">" .. d.args[1].monitor
+      end
+    end
+    return table.concat(out, ",")
+  end
+
+  t.it("moves a scene's workspace to its role's output", function()
+    local stub, hyprfocus, restore = with_host({ { name = "DP-1" }, { name = "DP-2" } }, "DP-1")
+    local report = hyprfocus.apply("game")
+    restore()
+    t.eq("name:logs>DP-2", moves(stub), "the mode's role wins over where it stands")
+    t.eq("DP-2", report.placements[2].output)
+  end)
+
+  t.it("falls back to primary when the role's output is missing, and moves back on return", function()
+    local stub, hyprfocus, restore = with_host({ { name = "DP-1" } }, "DP-1")
+    local report = hyprfocus.apply("game")
+    t.eq("", moves(stub), "already on primary, nothing to move")
+    t.eq("monitor_missing", report.placements[2].reason)
+    t.eq("DP-1", report.placements[2].output)
+
+    stub.monitors = { { name = "DP-1" }, { name = "DP-2" } }
+    hyprfocus.replace()
+    restore()
+    t.eq("name:logs>DP-2", moves(stub), "re-placed once the monitor returned")
   end)
 end)

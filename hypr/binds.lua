@@ -528,8 +528,12 @@ local function mode_entries()
   end
 
   local ids = {}
-  for id in pairs(declaration.modes or {}) do
-    ids[#ids + 1] = id
+  for id, spec in pairs(declaration.modes or {}) do
+    -- Hidden modes (neutral) are the fallback, reached by the way-out bind
+    -- below, never offered as a peer.
+    if not spec.hidden then
+      ids[#ids + 1] = id
+    end
   end
   table.sort(ids)
 

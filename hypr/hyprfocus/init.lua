@@ -45,6 +45,11 @@ local POINTER = "focus"
 -- no compositor, and hardcoding a location here would undo that.
 local CLI = ",hyprfocus"
 
+--- The desk this runtime last applied, so a returning monitor can re-place
+--- its scenes without resolving again.
+---@type Hyprfocus.Desk?
+local applied_desk = nil
+
 ---@return table? declaration, string? error
 function M.declaration()
   local ok, handle = pcall(store.define, DECLARATION)
@@ -65,6 +70,101 @@ function M.active()
     return "neutral"
   end
   return handle:get("mode") or "neutral"
+end
+
+---Resolve a mode, emitting a structured refusal when its scene set is
+---invalid. The whole mode is refused: nothing is applied and the caller
+---returns the reason.
+---@param declaration table
+---@param mode string
+---@param emit boolean? emit the refusal record (once per transition)
+---@return Hyprfocus.Desk?, string? error
+local function desk_for(declaration, mode, emit)
+  local refused = resolve.validate(declaration, mode)
+  if refused and refused.refusal ~= "unknown_mode" then
+    if emit then
+      trace.emit(refused)
+    end
+    return nil, refused.reason
+  end
+  local ok, desk = pcall(resolve.resolve, declaration, mode)
+  if not ok then
+    return nil, tostring(desk)
+  end
+  return desk, nil
+end
+
+---The output a host monitor role names, and whether it had to fall back.
+---A role whose output is not connected lands on primary (reason
+---`monitor_missing`); `monitor.added` re-places it once it returns.
+---@param role string
+---@return string? output, string? fallback reason
+local function output_for(role)
+  local host = (rawget(_G, "config") or {}).host or {}
+  local wanted = host[role .. "_monitor"]
+  local connected = {}
+  for _, monitor in ipairs(hl.get_monitors() or {}) do
+    connected[monitor.name] = true
+  end
+  if wanted and connected[wanted] then
+    return wanted, nil
+  end
+  return host.primary_monitor, "monitor_missing"
+end
+
+---The output a workspace currently stands on, or nil when it does not exist.
+---@param name string
+---@return string?
+local function current_output(name)
+  local ok, workspace = pcall(hl.get_workspace, "name:" .. name)
+  if ok and workspace and workspace.monitor then
+    return workspace.monitor.name
+  end
+  return nil
+end
+
+---Put each active scene's workspace on the output its monitor role resolves
+---to. The mode's role wins over the host file's workspace pin, which is only
+---the load-time default.
+---@param desk Hyprfocus.Desk
+---@return { scene: string, role: string, output: string?, moved: boolean, reason: string? }[]
+function M.place(desk)
+  local placed = {}
+  for _, placement in ipairs(desk.scenes or {}) do
+    local output, fallback = output_for(placement.monitor)
+    local current = current_output(placement.name)
+    local moved = output ~= nil and current ~= nil and current ~= output
+    if moved then
+      hl.dispatch(hl.dsp.workspace.move({ workspace = "name:" .. placement.name, monitor = output }))
+    end
+    trace.emit({
+      stage = "admit",
+      event = "scene_monitor",
+      decision = moved and "move" or "keep",
+      reason = fallback or ("mode " .. desk.mode .. " places it on " .. placement.monitor),
+      mode = desk.mode,
+      scene = placement.name,
+      workspace = placement.name,
+      monitor = output,
+    })
+    placed[#placed + 1] = {
+      scene = placement.name,
+      role = placement.monitor,
+      output = output,
+      moved = moved,
+      reason = fallback,
+    }
+  end
+  return placed
+end
+
+---Re-place the last applied desk's scenes, for a monitor that came back.
+---@return table[] placements, empty before the first apply
+function M.replace()
+  if not applied_desk then
+    return {}
+  end
+  return M.place(applied_desk)
 end
 
 ---What the desk currently holds, in the shape the planner compares against.
@@ -94,11 +194,14 @@ end
 ---
 ---Order matters, and it is the order that keeps windows reachable:
 ---
+---  0. validate, so a refused scene set changes nothing (`admit/mode_refused`)
 ---  1. binding trees, because withdrawing one is instant and costs nothing
 ---  2. restore, so a workspace this mode admits gets its windows back before
 ---     anything looks at what is standing where
 ---  3. hold, emptying the workspaces about to be withdrawn
 ---  4. withdraw, which now finds them empty and can actually take them away
+---  5. place, moving each scene's workspace to its role's output
+---     (`admit/scene_monitor`; a missing output falls back to primary)
 ---
 ---Holding before withdrawing is not a preference. A workspace disabled while
 ---its windows stand on it leaves them somewhere the user cannot reach, and the
@@ -154,9 +257,9 @@ function M.apply_bindings(mode, scene)
     return {}, err
   end
 
-  local ok, desk = pcall(resolve.resolve, declaration, mode)
-  if not ok then
-    return {}, tostring(desk)
+  local desk, resolve_err = desk_for(declaration, mode)
+  if not desk then
+    return {}, resolve_err
   end
 
   -- A tree is available if the mode admits it OR the active scene admits it.
@@ -213,9 +316,10 @@ function M.apply(mode)
     return nil, err
   end
 
-  local ok, desk = pcall(resolve.resolve, declaration, mode)
-  if not ok then
-    return nil, tostring(desk)
+  -- Validate before anything moves: a refused mode changes nothing.
+  local desk, resolve_err = desk_for(declaration, mode, true)
+  if not desk then
+    return nil, resolve_err
   end
 
   local disabled, bind_err = M.apply_bindings(mode, nil)
@@ -290,7 +394,11 @@ function M.apply(mode)
     })
   end
 
+  -- Now that the workspaces exist, stand each on its role's output.
+  local placements = M.place(desk)
+
   applied = mode
+  applied_desk = desk
 
   -- Re-resolve the compositor accent now that the mode has actually
   -- transitioned (LEO-341): `colors.lua` only ran this at config load, so
@@ -315,6 +423,7 @@ function M.apply(mode)
     -- appearing here means a window resisted being parked, which is worth
     -- seeing rather than silently working around.
     workspaces_refused = refused,
+    placements = placements,
   },
     nil
 end
@@ -345,11 +454,10 @@ function M.enter(mode, source)
   end
   -- Resolve before recording. A mode that cannot resolve must not become the
   -- mode the desk believes it is in.
-  local ok, desk = pcall(resolve.resolve, declaration, mode)
-  if not ok then
-    return nil, tostring(desk)
+  local desk, resolve_err = desk_for(declaration, mode)
+  if not desk then
+    return nil, resolve_err
   end
-  local _ = desk
 
   local wrote, handle = pcall(store.define, POINTER)
   if wrote then
@@ -398,9 +506,9 @@ function M.plan(mode)
   if not declaration then
     return nil, err
   end
-  local ok, desk = pcall(resolve.resolve, declaration, mode)
-  if not ok then
-    return nil, tostring(desk)
+  local desk, resolve_err = desk_for(declaration, mode)
+  if not desk then
+    return nil, resolve_err
   end
   return plan.plan(desk, M.running()), nil
 end
