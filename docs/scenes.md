@@ -4,7 +4,7 @@ Declarative window manager. The document is the interface. Engines execute it.
 
 ## What a scene owns
 
-The target model is [desktop-model.md](desktop-model.md); this document
+The target model is [desktop-model.md](desktop-model.md) and the window lifecycle contract is [lifecycle.md](lifecycle.md); this document
 describes the scene engine as it runs today and is being brought in line with
 it. Where they disagree, desktop-model.md is the intent.
 

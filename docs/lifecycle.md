@@ -8,8 +8,8 @@ mode and use the same stages. The intent is
 `system-config/docs/hyprfocus.md`.
 
 This document has two parts. **Part A** describes what runs today. **Part B**
-is a **DRAFT contract that still needs approval**. Nothing in Part B is
-decided until the open decisions are settled.
+is the **approved contract**; it is not implemented yet. Implementation issues
+build toward Part B and update Part A as behaviour changes.
 
 ## Part A — Current behaviour
 
@@ -43,7 +43,7 @@ Line numbers refer to the commit that adds this document.
 | —   | Logging for all of the above                        | all              | **New**. See the event schema below.                                                                                                        | LEO-352          |
 | —   | Window-state behaviours and transitions             | interact         | **New**, pending design.                                                                                                                    | LEO-359          |
 
-## Part B — Proposed contract (DRAFT, pending approval)
+## Part B — Contract
 
 ### Principles
 
@@ -72,31 +72,31 @@ scene, block, workspace, workspace_id, monitor, mode, layout
 - `decision` is a short verb, for example `route`, `refuse`, `float`, `hold`.
 - `reason` is a stable machine token followed by free text.
 
-**Decision needed:** where the log goes. Option (a): append JSONL under
-`QF_STORE`, tailed by `logview` on the `logs` workspace. Option (b): the
-systemd journal with structured fields. This follows hyprfocus phase 6,
-"log every decision, appended".
+**Sink (decided):** the systemd journal, through the user manager, with the
+record fields as structured journal fields (`SYSLOG_IDENTIFIER=hyprfocus`).
+The `logs` workspace (`logview`) views it, filterable by `trace`. This is
+hyprfocus phase 6, "log every decision, appended".
 
 ### Stages
 
-| Stage    | Owner (proposed)                                              | Inputs                                                        | Output (record)                                                                                           | Failure / refusal                                                                                                                                                                                                                                                                                                                                                                                              | Events                                                                      |
-| -------- | ------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| identify | `hypr/scene/identify.lua` (new, pure) + tag executor          | window (class, initial_class, title, role); active scene set  | `{scene, block, tags=[scene:<n>, block:<n>/<b>]}` or `{scene=nil}`                                        | **No match**: the window gets no scene tag and goes to the float default. **Ambiguous within one scene**: a declaration error that validation refuses; the runtime keeps first-match and logs `identify.ambiguous`. **Claimed by several scenes**: only scenes in the active set count, and validation guarantees at most one. **Decision needed:** whether matching uses `initial_class` or the live `class`. | `identify.matched`, `identify.unmatched`, `identify.ambiguous`              |
-| route    | `hypr/scene/route.lua` (new)                                  | identify record; mode's scene→monitor map; workspace registry | `{workspace, workspace_id, monitor}`                                                                      | Scene not active: **Decision needed:** leave the window where it opened, or send it to the nameless workspace (LEO-329). Static targets are compiled at load for fixed workspaces. Dynamic instances are routed at runtime.                                                                                                                                                                                    | `route.static`, `route.dynamic`, `route.none`                               |
-| admit    | `hypr/hyprfocus/` (`resolve` + `workspaces` + `validate`)     | mode declaration; route record; scene state (lock)            | `{admitted: bool}` for the window. For a mode: `{scenes:[{name,monitor}], refused:[…]}`                   | **Mode validation**: two active scenes claiming one class means the whole mode is refused before anything changes (`admit.mode_refused`). **Window**: a locked scene refuses the window, which is routed to float or the hold area (see interact). **Workspace withdraw with windows**: refused, as today.                                                                                                     | `admit.mode_refused`, `admit.window`, `admit.window_refused`                |
-| arrange  | `hypr/scene/provider.lua` + `layout.lua` (`scene`), `columns` | layout targets with tags; scene spec; machine profile         | one box per target, including strays and every window of a block. Logged once per change, not every frame | Target without a block tag: `strays` decides (`slot` \| `float`). A layout that is not `scene`/`columns`: refused at load. It never dispatches.                                                                                                                                                                                                                                                                | `arrange.placed`, `arrange.stray`                                           |
-| interact | scene window-state machine (new, LEO-359)                     | admitted open/close events on the scene's workspace; tags     | `{from, to, trigger}` transition, or `none`                                                               | No behaviour defined for the window: **float**. A transition target that is not in the finite table is a declaration error.                                                                                                                                                                                                                                                                                    | `interact.transition`, `interact.hold`, `interact.return`, `interact.float` |
-| leave    | scene state machine + registry                                | close / move-out event; address                               | `{scene, block, released, returns:[address]}`                                                             | A held window whose origin scene is gone falls back to float on its current workspace, and this is logged.                                                                                                                                                                                                                                                                                                     | `leave.closed`, `leave.moved`                                               |
+| Stage    | Owner                                                         | Inputs                                                        | Output (record)                                                                                           | Failure / refusal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Events                                                                               |
+| -------- | ------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| identify | `hypr/scene/identify.lua` (new, pure) + tag executor          | window (class, initial_class, title, role); active scene set  | `{scene, block, tags=[scene:<n>, block:<n>/<b>]}` or `{scene=nil}`                                        | **No match**: the window gets no scene tag and goes to the float default. **Ambiguous within one scene**: a declaration error that validation refuses; the runtime keeps first-match and logs `identify.ambiguous`. **Claimed by several scenes**: only scenes in the active set count, and validation guarantees at most one. Matching uses **`initial_class`** (what map-time rules see). If the live `class` later differs, the window is re-identified once and `identify.reclassed` is logged. | `identify.matched`, `identify.unmatched`, `identify.ambiguous`, `identify.reclassed` |
+| route    | `hypr/scene/route.lua` (new)                                  | identify record; mode's scene→monitor map; workspace registry | `{workspace, workspace_id, monitor}`                                                                      | Scene not active, or no scene claims the window: the **class permission catalog** decides at runtime (allow here, send to the nameless workspace, or refuse the launch). An **unclassified** class is allowed, floated, and sent to the nameless workspace, and this is logged. Static targets are compiled at load for fixed workspaces. Dynamic instances are routed at runtime.                                                                                                                  | `route.static`, `route.dynamic`, `route.none`                                        |
+| admit    | `hypr/hyprfocus/` (`resolve` + `workspaces` + `validate`)     | mode declaration; route record; scene state (lock)            | `{admitted: bool}` for the window. For a mode: `{scenes:[{name,monitor}], refused:[…]}`                   | **Mode validation**: two active scenes claiming one class means the whole mode is refused before anything changes (`admit.mode_refused`). **Window**: a locked scene refuses the window, which is routed to float or the hold area (see interact). **Workspace withdraw with windows**: refused, as today.                                                                                                                                                                                          | `admit.mode_refused`, `admit.window`, `admit.window_refused`                         |
+| arrange  | `hypr/scene/provider.lua` + `layout.lua` (`scene`), `columns` | layout targets with tags; scene spec; machine profile         | one box per target, including strays and every window of a block. Logged once per change, not every frame | Target without a block tag: `strays` decides (`slot` \| `float`). A layout that is not `scene`/`columns`: refused at load. It never dispatches.                                                                                                                                                                                                                                                                                                                                                     | `arrange.placed`, `arrange.stray`                                                    |
+| interact | scene window-state machine (new, LEO-359)                     | admitted open/close events on the scene's workspace; tags     | `{from, to, trigger}` transition, or `none`                                                               | No behaviour defined for the window: **float**. A transition target that is not in the finite table is a declaration error.                                                                                                                                                                                                                                                                                                                                                                         | `interact.transition`, `interact.hold`, `interact.return`, `interact.float`          |
+| leave    | scene state machine + registry                                | close / move-out event; address                               | `{scene, block, released, returns:[address]}`                                                             | A held window whose origin scene is gone falls back to float on its current workspace, and this is logged.                                                                                                                                                                                                                                                                                                                                                                                          | `leave.closed`, `leave.moved`                                                        |
 
 ### Scene bring-up / teardown (mode-driven sub-stages of admit and leave)
 
-| Call                      | Caller     | Returns                                     | Refusal                                                                                                                                                                                                                                                                                  | Events                                     |
-| ------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `scene.up(name, monitor)` | mode enter | `ok \| partial{missing} \| refused{reason}` | `partial` means the mode is still entered and the missing launches are logged. The companion `spawn` moves here.                                                                                                                                                                         | `admit.scene_up`, `admit.scene_up_refused` |
-| `scene.down(name)`        | mode exit  | `ok \| veto{reason}`                        | Cooperative: windows are never killed. A veto leaves the scene up and recorded, and the mode is still entered (hyprfocus phase 3). Held windows and locks must resolve first. **Decision needed:** whether a vetoed scene keeps its workspace admitted in the new mode, or is only held. | `leave.scene_down`, `leave.scene_veto`     |
+| Call                      | Caller     | Returns                                     | Refusal                                                                                                                                                                                                                                                                                                    | Events                                     |
+| ------------------------- | ---------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `scene.up(name, monitor)` | mode enter | `ok \| partial{missing} \| refused{reason}` | `partial` means the mode is still entered and the missing launches are logged. The companion `spawn` moves here.                                                                                                                                                                                           | `admit.scene_up`, `admit.scene_up_refused` |
+| `scene.down(name)`        | mode exit  | `ok \| veto{reason}`                        | Cooperative: windows are never killed. A veto leaves the scene up and recorded, and the mode is still entered (hyprfocus phase 3). Held windows and locks must resolve first. A vetoed scene's workspace is **withdrawn**; its windows go to the hold area until the work finishes, then teardown retries. | `leave.scene_down`, `leave.scene_veto`     |
 
-**Decision needed:** whether bring-up launches apps missing from the usual set,
-or only arranges windows that already exist.
+Bring-up **launches every declared app that is not running**, then arranges.
+A failed launch is logged and never blocks the mode.
 
 ### Window-state transitions (within interact)
 
@@ -108,24 +108,24 @@ or only arranges windows that already exist.
 | hold-and-return | declared window needs the space | the displaced window goes to the hold area | trigger closes → the window returns |
 | float (default) | no behaviour matches            | window floats                              | —                                   |
 
-**Decision needed:** whether the hold area is a per-scene special workspace or
-the shared `special:hyprfocus-held`.
+The hold area is the **shared** engine-owned `special:hyprfocus-held`. Each
+held window records its origin scene and returns there.
 
-### Open question — arrival as intent (NOT decided here)
+### Arrival as intent (decided: declared edges only)
 
 When a window arrives that another scene claims, is that arrival intent to
-evolve the workspace into that scene? A naive rule recurses. Two finite options
-are proposed below; this draft picks neither. The final decision belongs to
-LEO-359.
+evolve the workspace into that scene? A naive rule recurses. **Option 1 is
+chosen**: arrival is never intent by itself; only declared, validated edges
+change a scene. LEO-359 designs the declaration syntax.
 
 | Option                     | Rule                                                                                                                                                                                          | Why it stays finite                                                                 | Cost                                       |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------ |
 | **1. Declared edges only** | Arrival is never intent by itself. A scene lists explicit `on_open: {class → scene}` edges, and each target must name its return edge. Validation rejects any cycle longer than one A↔B pair. | The transition graph is declared, static and checked at load, so it is inspectable. | Every evolution must be written by hand.   |
 | **2. Depth-1 overlay**     | A claimed arrival can overlay **one** variant/hand-off on top of the base scene, and never a second. Closing the trigger always returns to the base scene. Further arrivals float.            | The state is `base` or `base+overlay`, two states per workspace.                    | Chained evolutions (A→B→C) are impossible. |
 
-**Decision needed:** option 1 or option 2 (or neither, to be decided in LEO-359).
+Option 2 is rejected.
 
-### Decisions carried from the issue (D1–D4, restated — confirm wording)
+### Decisions
 
 - **D1 Routing** is derived from scene declarations. Fixed workspaces get
   static rules at load. Dynamic instances get a runtime step (LEO-329).
@@ -136,6 +136,9 @@ LEO-359.
 - **D3 Layouts**: the scene is the layout. `columns` (at least 2 columns, each
   scrolling vertically) is the only other layout. dwindle, master and monocle
   are not used.
-- **D4** Every stage emits a structured event.
-
-**Decision needed:** whether the D1–D4 text above matches the approved wording.
+- **D4** Every stage emits a structured event to the journal.
+- **D5 Permissions**: a class permission catalog classifies classes; the
+  runtime consults it for windows no active scene claims (LEO-361).
+- **D6** The Quickshell focus-mode panel shrinks to what a mode controls:
+  theme, active scenes, monitors. Notification, background and launch
+  controls move out of the per-mode panel.
