@@ -60,7 +60,11 @@ setup() {
     export THEME_GSETTINGS="$ROOT/gsettings"
     : >"$GSETTINGS_LOG"
     # The script keeps its store files in the shared quantum-store directory
-    # under the redirected state home — the same layout the real desk has.
+    # under the redirected state home — the same layout the real desk has. The
+    # live session exports QF_STORE at a higher level than the redirected
+    # homes, so pin it into the scratch tree too; a script that prefers it
+    # must not leak into the real desk's store.
+    export QF_STORE="$XDG_STATE_HOME/quantum-store"
     mkdir -p "$XDG_CONFIG_HOME"/{kitty/themes,qt5ct/colors,qt6ct/colors,Kvantum} "$XDG_STATE_HOME/quantum-store"
 
     for flavour in latte frappe macchiato mocha; do

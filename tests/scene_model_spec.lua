@@ -71,7 +71,7 @@ t.describe("the store document", function()
     -- how many times the config reloads. The version check is the seed's
     -- one-way upgrade path.
     local saved = document_test({ version = 1, scenes = {} })
-    t.eq(2, saved.version, "the store was written at the current generation")
+    t.eq(defaults.version, saved.version, "re-seeded to the current generation")
   end)
 
   t.it("a version-less document is a stale seed, not present truth", function()

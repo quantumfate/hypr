@@ -34,9 +34,10 @@ check() {
 run() { "$cli" --declaration "$declaration" "$@"; }
 
 # Game mode is the sharpest case: it is the only one using `only`, and the one
-# whose whole point is giving things up.
-check "gaming admits only its four workspaces" \
-    "gaming, comms, ankama, logs" \
+# whose whole point is giving things up. Special workspaces are retired (LEO-330):
+# every gaming surface is now an ordinary mode-admitted workspace.
+check "gaming admits only its declared workspaces" \
+    "dofus, pokemon, steam-games, communication, lutris, steam, media, ankama-launcher" \
     "$(run resolve gaming | awk '/^workspaces/ {sub(/^workspaces */, ""); print}')"
 
 check "gaming stops the Obsidian suite" \
@@ -44,12 +45,12 @@ check "gaming stops the Obsidian suite" \
     "$(run resolve gaming | awk '/^services/ {sub(/^services */, ""); print}')"
 
 # A scene is geometry for a workspace; one whose workspace is gone must go too.
-check "gaming carries only the gaming scene" \
-    "gaming" \
+check "gaming carries only its own scenes" \
+    "communication, dofus, lutris, media, pokemon, steam, steam-games" \
     "$(run resolve gaming | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
-check "neutral carries both scenes" \
-    "code, gaming" \
+check "neutral carries every base scene" \
+    "code, communication, dofus, logs, lutris, media, obsidian-linear, pokemon, proton, steam, steam-games" \
     "$(run resolve neutral | awk '/^scenes/ {sub(/^scenes */, ""); print}')"
 
 # Dependency closure: nothing names the indexer, it arrives via `wants`.
