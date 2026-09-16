@@ -166,7 +166,7 @@ main() {
     while IFS=$'\t' read -r name path; do
         [[ -n $name && -d $path ]] || continue
         fp=$(repo_fingerprint "$path")
-        if ((!FULL)); then
+        if ((! FULL)); then
             prev_fp=$(previous_fingerprint "$name")
             if [[ -n $fp && $fp == "$prev_fp" ]]; then
                 entry=$(previous_entry "$name")
