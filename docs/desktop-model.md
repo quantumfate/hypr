@@ -40,7 +40,21 @@ A scene is a plug-in unit that maps to one workspace. It owns:
   or `columns` (at least two columns, each scrolling vertically); not dwindle,
   master or monocle.
 - **Bring-up / teardown** — what it launches so the usual windows are in place
-  without manual work, and how it releases them.
+  without manual work, and how it releases them. Bring-up launches missing
+  apps only on mode entry; a scene binding "complete the scene" relaunches
+  what is missing mid-mode. Teardown happens only on a mode switch, for
+  scenes the new mode does not include, and **closes** the scene's
+  applications to free resources. Close is a cooperative request; a window
+  that survives it (an unsaved-changes dialog, a scene veto) is a **veto**:
+  the window is held and reported, never killed.
+- **Drawers** — apps a scene depends on but that must not take a tile
+  (Ankama launcher, Lutris, Steam, Signal, Vesktop). They are a distinct kind
+  of resource living on engine-managed special workspaces that slide in over
+  the scene, may run in the background, and may carry a launch command. A
+  drawer is either **global** or **assigned to scenes** and then never
+  reachable outside them. Every drawer gets the same reserved default binding
+  inside the owning scope's submap, so drawers behave consistently across
+  scopes. A locked scene still admits its drawers.
 - **Window-state behaviour** — what happens when a window opens or closes:
   - a scene may **lock** its layout so no additional window may join (Dofus:
     the Dofus group left, `zen-gaming-media` right, never disturbed);
@@ -56,13 +70,30 @@ A class may be claimed by several scenes as long as no two of them are active
 in the same mode. Two active scenes in one mode claiming the same class is a
 declaration error, refused when the mode is validated.
 
-### Open design question
+### Window identity
 
-When a window arrives that another scene would claim, is that arrival intent —
-should the workspace evolve into that scene? A naive rule makes scene
-definitions recursive (scene A on open of X becomes B, B on close of X becomes
-A, B on open of Y …). The transition model must stay finite and inspectable.
-Undecided.
+Apps set their own class; the compositor cannot rewrite it. Two windows of the
+same class are told apart by **identity stamped at launch**: the engine
+launches the window, records its pid, address and `stable_id`, and assigns a
+tag (`hl.dsp.window.tag`, e.g. `slot:pokemon/chat`). Scene claims may match on
+that tag as well as `initial_class` and title. This replaces separate app
+profiles per window. Whether every rule effect re-evaluates when a tag is added
+after mapping must be verified live.
+
+### Transitions
+
+Arrival is never intent by itself; only declared edges change a workspace.
+Two kinds, both supported from the start:
+
+- **Variant** — same scene, different layout (claims, bindings and drawers
+  unchanged).
+- **Hand-off** — the workspace switches to another named scene: its claims,
+  layout, lock, bindings and drawers apply. Windows stay; a declared return
+  edge switches back when the trigger window closes.
+
+A window moved in by hand never fires an edge. When a declared slot is taken by
+a newer window of the same kind, the older one is held and returns when the
+newer closes; scrolling through the slot updates recency.
 
 ## Bindings
 
