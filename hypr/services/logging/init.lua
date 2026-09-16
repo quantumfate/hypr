@@ -22,6 +22,22 @@ local function open(spec)
   end
 end
 
+-- `logview`'s spec vocabulary has no generic "journal filtered by
+-- SYSLOG_IDENTIFIER" source (its specs are `unit:`/`user:` — a systemd unit —
+-- or the fixed severity/boot views), and the hyprfocus lifecycle log
+-- (LEO-352) isn't a unit: it's `trace.lua` writing journal entries tagged
+-- `SYSLOG_IDENTIFIER=hyprfocus` directly. So this raises a plain kitty on the
+-- logs workspace running the query command instead of going through
+-- `logview`, same class tag and workspace rule as the viewer itself.
+local function open_hyprfocus()
+  local cmd = "uwsm app -- kitty --class logviewer --title hyprfocus -e ,hyprfocus log --follow"
+  local exec = hl.dsp.exec_cmd(cmd)
+  return function()
+    hl.dispatch(hl.dsp.focus({ workspace = WORKSPACE }))
+    hl.dispatch(exec)
+  end
+end
+
 windowrule.tag_props({
   { initial_class = "(logviewer)" },
 }, "+logs")
@@ -55,6 +71,7 @@ submap.tree({
     { key = "b", desc = "This boot, from the top", action = open("boot") },
     { key = "p", desc = "Previous boot", action = open("prev") },
     { key = "a", desc = "Audit / denials", action = open("audit") },
+    { key = "h", desc = "hyprfocus decisions", action = open_hyprfocus() },
     {
       key = "g",
       desc = "Go to the logs workspace",

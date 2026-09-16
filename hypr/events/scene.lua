@@ -25,6 +25,7 @@ local registry = require("hypr.scene.registry")
 local schedule = require("hypr.scene.schedule")
 local companion = require("hypr.scene.companion")
 local hyprfocus = require("hypr.hyprfocus")
+local trace = require("hypr.lib.trace")
 
 local specs = spec_lib.load()
 
@@ -37,6 +38,25 @@ registry.seed(specs)
 -- arms it, because the events are what a companion's presence rides anyway.
 local pending = {}
 
+---Decision-record fields common to every window-keyed log line: `trace` is
+---the window address (docs/lifecycle.md Part B), so every stage for one
+---window's lifetime is queryable by the same key.
+---@param w HL.Window?
+---@param scene_name string?
+---@return table
+local function window_fields(w, scene_name)
+  return {
+    trace = w and w.address,
+    address = w and w.address,
+    class = w and w.class,
+    initial_class = w and w.initial_class,
+    title = w and w.title,
+    pid = w and w.pid,
+    scene = scene_name,
+    workspace = w and w.workspace and w.workspace.name,
+  }
+end
+
 ---Run the companion lifecycle for the named scene against live windows.
 ---Presence is derived, so this is safe at any time from any caller.
 ---@param name string?
@@ -48,9 +68,25 @@ local function converge_companions(name)
   for _, decision in ipairs(companion.filter(companion.decisions(spec, name, hl.get_windows() or {}), pending)) do
     if decision.action == "spawn" then
       companion.expire(decision.pending_key, pending)
+      trace.emit({
+        stage = "interact",
+        event = "companion_spawn",
+        decision = "spawn",
+        reason = decision.command,
+        scene = name,
+      })
       hl.dispatch(hl.dsp.exec_cmd(("uwsm app -- %s"):format(decision.command)))
     elseif decision.addresses then
       for _, address in ipairs(decision.addresses) do
+        trace.emit({
+          stage = "interact",
+          event = "companion_close",
+          decision = "close",
+          reason = "companion reconverge",
+          scene = name,
+          trace = address,
+          address = address,
+        })
         hl.dispatch(hl.dsp.window.close({ window = "address:" .. address }))
       end
       pending[decision.pending_key] = nil
@@ -146,12 +182,27 @@ hl.on("window.open", function(w)
       end
     end
   end
-  converge_companions(scene_for(w))
-  schedule.arm(scene_for(w))
+  local scene_name = scene_for(w)
+  -- identify/route as they exist today: a class either matches a scene's
+  -- block (routed to it) or matches none (no scene claim, LEO-354 territory).
+  local fields = window_fields(w, scene_name)
+  fields.stage = "identify"
+  fields.event = scene_name and "matched" or "unmatched"
+  fields.decision = scene_name and "route" or "none"
+  fields.reason = scene_name and ("matched scene " .. scene_name) or "no scene claims this class"
+  trace.emit(fields)
+  converge_companions(scene_name)
+  schedule.arm(scene_name)
 end)
 
 hl.on("window.close", function(w)
   local name = w and scene_for(w)
+  local fields = window_fields(w, name)
+  fields.stage = "leave"
+  fields.event = "closed"
+  fields.decision = "leave"
+  fields.reason = "window.close"
+  trace.emit(fields)
   registry.forget(w and w.address)
   -- A close event's payload may not say where the window stood, but the
   -- lifecycle is derived from live windows, so every spawn-carrying scene
@@ -173,19 +224,26 @@ end)
 -- not re-arrange every other one.
 hl.on("window.move_to_workspace", function(w)
   registry.claim(specs, w)
+  local scene_name = scene_for(w)
+  local fields = window_fields(w, scene_name)
+  fields.stage = "leave"
+  fields.event = "moved"
+  fields.decision = "move"
+  fields.reason = "window.move_to_workspace"
+  trace.emit(fields)
   -- A move flies two scenes: the destination gains a member and the origin
   -- may have lost its last, and the event's payload cannot say where from.
   -- The lifecycle re-derives from live windows like everything else here.
-  converge_companions(scene_for(w))
-  for scene_name, spec in pairs(specs) do
+  converge_companions(scene_name)
+  for other_scene, spec in pairs(specs) do
     for _, block in ipairs(spec.blocks) do
       if block.spawn then
-        converge_companions(scene_name)
+        converge_companions(other_scene)
         break
       end
     end
   end
-  schedule.arm(scene_for(w))
+  schedule.arm(scene_name)
 end)
 
 -- Arriving on a workspace is the moment its scene may act: whatever drifted

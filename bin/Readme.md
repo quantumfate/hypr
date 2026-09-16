@@ -84,6 +84,23 @@ integrate with the shared state / UI:
   delivery rule: each repo delivers its own role/data; quickshell never reads
   `etc/scene-managed.json` — it asks the same policy Focus reads).
 
+- `bin/,hyprfocus` — reads and applies the hyprfocus declaration (see
+  `hypr/hyprfocus/`); `log` also queries the window lifecycle journal
+  (LEO-352, [docs/lifecycle.md](../docs/lifecycle.md) Part B). Every
+  identify/leave/admit/interact decision the compositor makes is written by
+  `hypr/lib/trace.lua` to the systemd journal (`SYSLOG_IDENTIFIER=hyprfocus`,
+  never a file), keyed by `TRACE` (the window address).
+
+  ```
+  ,hyprfocus log                       # recent scene-policy rows (background work)
+  ,hyprfocus log --trace 0x55f3...     # one window's whole lifecycle
+  ,hyprfocus log --follow              # live lifecycle journal
+  ```
+
+  The `logs` workspace's `h` entry (`hypr/services/logging/init.lua`) opens
+  `,hyprfocus log --follow` in a kitty window, since `logview`'s spec
+  vocabulary has no generic "journal filtered by `SYSLOG_IDENTIFIER`" source.
+
 How the shared state + IPC bridges work:
 [quickshell/ARCHITECTURE.md](https://github.com/quantumfate/quickshell/blob/main/ARCHITECTURE.md).
 

@@ -17,6 +17,11 @@ enter it.
   ,hyprfocus modes            every declared mode
   ,hyprfocus seed <file>      install a declaration into the store
   ,hyprfocus apply <mode>     bring background work in line with a mode
+  ,hyprfocus log              recent scene-policy rows (background work)
+  ,hyprfocus log --trace <address> [--follow]
+                              the window lifecycle journal (LEO-352), filtered
+                              by window address; wraps `journalctl --user -t
+                              hyprfocus -o json`
 
 `apply` covers background work only. Workspaces, binding trees and window
 geometry belong to the compositor, which acts on the same declaration from its
@@ -344,6 +349,24 @@ def active(declaration: dict) -> dict:
         return {"mode": "neutral"}
 
 
+def lifecycle_log(trace: str | None, follow: bool) -> int:
+    """Query the window lifecycle log (LEO-352).
+
+    The sink is the systemd journal, not a file: `hypr/lib/trace.lua` writes
+    one journal entry per decision, tagged `SYSLOG_IDENTIFIER=hyprfocus` and
+    carrying the decision record's fields (`TRACE` is the window address).
+    This just wraps the journalctl query the lifecycle contract names, so
+    finding one window's whole lifecycle is one command rather than a
+    hand-typed filter.
+    """
+    cmd = ["journalctl", "--user", "-t", "hyprfocus", "-o", "json"]
+    if follow:
+        cmd.append("-f")
+    if trace:
+        cmd.append(f"TRACE={trace}")
+    return subprocess.run(cmd, check=False).returncode
+
+
 def log_read(state: Path, count: int) -> int:
     """The recent decisions, one JSON row per line (LEO-241).
 
@@ -542,8 +565,26 @@ def main() -> None:
         "conform", help="run shared resolver conformance fixtures"
     )
     conform_parser.add_argument("source", type=Path)
-    log_parser = sub.add_parser("log", help="print the scene-policy log's recent rows")
-    log_parser.add_argument("count", nargs="?", type=int, default=20)
+    log_parser = sub.add_parser(
+        "log", help="print the scene-policy log's recent rows, or the lifecycle journal"
+    )
+    log_parser.add_argument(
+        "count",
+        nargs="?",
+        type=int,
+        default=20,
+        help="scene-policy rows (ignored with --trace/--follow)",
+    )
+    log_parser.add_argument(
+        "--trace",
+        metavar="ADDRESS",
+        help="filter the lifecycle journal by window address",
+    )
+    log_parser.add_argument(
+        "--follow",
+        action="store_true",
+        help="follow the lifecycle journal instead of scene-policy",
+    )
     for verb, help_text in (
         ("resolve", "the desk a mode means"),
         ("plan", "what would change"),
@@ -570,6 +611,8 @@ def main() -> None:
         return conform(args.source)
 
     if args.verb == "log":
+        if args.trace or args.follow:
+            return lifecycle_log(args.trace, args.follow)
         return log_read(state_dir(), args.count)
 
     declaration = load(args.declaration)

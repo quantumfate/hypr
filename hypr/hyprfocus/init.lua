@@ -18,6 +18,7 @@ local binds = require("hypr.hyprfocus.binds")
 local workspaces = require("hypr.hyprfocus.workspaces")
 local hold = require("hypr.hyprfocus.hold")
 local whichkey = require("hypr.lib.whichkey")
+local trace = require("hypr.lib.trace")
 
 local M = {}
 
@@ -178,6 +179,16 @@ function M.apply_bindings(mode, scene)
   end
   table.sort(withheld)
   local disabled = binds.admit(withheld)
+  for _, name in ipairs(disabled) do
+    trace.emit({
+      stage = "interact",
+      event = "binding_withheld",
+      decision = "withhold",
+      reason = ("tree %s not admitted by mode %s%s"):format(name, mode, scene and (" or scene " .. scene) or ""),
+      mode = mode,
+      scene = scene,
+    })
+  end
 
   -- Re-dump the cheatsheet against what is now loaded. A filtered list can
   -- disagree with what the keys actually do; a list derived from the enabled
@@ -247,6 +258,37 @@ function M.apply(mode)
   end
 
   local withdrawn, refused = workspaces.admit(desk.workspaces, occupied)
+
+  for _, name in ipairs(desk.workspaces) do
+    trace.emit({
+      stage = "admit",
+      event = "workspace_admitted",
+      decision = "admit",
+      reason = "mode " .. mode,
+      mode = mode,
+      workspace = name,
+    })
+  end
+  for _, name in ipairs(withdrawn) do
+    trace.emit({
+      stage = "admit",
+      event = "workspace_withdrawn",
+      decision = "withhold",
+      reason = "mode " .. mode .. " does not admit this workspace",
+      mode = mode,
+      workspace = name,
+    })
+  end
+  for _, name in ipairs(refused) do
+    trace.emit({
+      stage = "admit",
+      event = "workspace_refused",
+      decision = "refuse",
+      reason = "occupied",
+      mode = mode,
+      workspace = name,
+    })
+  end
 
   applied = mode
 

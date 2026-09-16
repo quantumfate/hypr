@@ -178,6 +178,20 @@ local function named(stub, name)
   return out
 end
 
+---Dispatches that are the arrangement engine acting, excluding the
+---identify/leave decision log (LEO-352): `trace.emit` fires unconditionally
+---on window.open/close/move regardless of visibility, so "nothing dispatched"
+---in these specs means "nothing arranged", not "nothing logged".
+local function arranged(stub)
+  local out = {}
+  for _, d in ipairs(stub.dispatched) do
+    if not (d.name == "dsp.exec_cmd" and tostring(d.args[1]):match("logger %-%-journald")) then
+      out[#out + 1] = d
+    end
+  end
+  return out
+end
+
 t.describe("visibility", function()
   t.it("dispatches nothing while its workspace is behind the user", function()
     -- The regression this pins: corrections reach a hidden workspace only by
@@ -190,7 +204,7 @@ t.describe("visibility", function()
     require("hypr.events.scene")
     emit(stub, "window.open", a)
     t.ok(drain(stub), "the engine settled")
-    t.eq(0, #stub.dispatched, "nothing dispatched for a scene the user cannot see")
+    t.eq(0, #arranged(stub), "nothing dispatched for a scene the user cannot see")
   end)
 
   t.it("realizes the scene when the user arrives on it", function()
@@ -216,7 +230,7 @@ t.describe("visibility", function()
     emit(stub, "window.open", a)
     world.active = "code"
     t.ok(drain(stub), "the engine settled")
-    t.eq(0, #stub.dispatched)
+    t.eq(0, #arranged(stub))
   end)
 
   t.it("asks for nothing on a workspace running another layout", function()
@@ -231,7 +245,7 @@ t.describe("visibility", function()
     require("hypr.events.scene")
     emit(stub, "window.open", a)
     t.ok(drain(stub), "the engine settled")
-    t.eq(0, #stub.dispatched, "no join was ever dispatched onto master")
+    t.eq(0, #arranged(stub), "no join was ever dispatched onto master")
   end)
 
   t.it("resumes arrange on a workspace cycled back to the scene layout", function()

@@ -38,6 +38,7 @@ test:
 	./tests/theme_test.sh
 	./tests/scene_apply_test.sh
 	./tests/hyprfocus_test.sh
+	./tests/hyprfocus_log_test.sh
 	./tests/hyprfocus_units_test.sh
 	./tests/notify_source_test.sh
 	./bin/,hyprfocus conform tests/fixtures/hyprfocus/resolver
