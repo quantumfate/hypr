@@ -91,15 +91,103 @@ t.describe("public surface", function()
 end)
 
 t.describe("compiled rules", function()
-  t.it("declares grouping once, from the scene", function()
-    local stub = fresh()
-    require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
-    local by_class = {}
-    for _, rule in ipairs(stub.window_rules) do
-      by_class[rule.match.class] = rule.group
+  local compile = require("hypr.scene.compile")
+
+  ---Group rules match a block/scene tag, not a bare class, so a spec
+  ---resolves group/guard by walking tag -> group through the tagging rule
+  ---that feeds it, the same way the runtime would.
+  ---@param rules Scene.CompiledRule[]
+  ---@param scene string
+  ---@param class string
+  ---@return string? group, string? on_workspace
+  local function group_for(rules, scene, class)
+    for _, tag_rule in ipairs(rules) do
+      if tag_rule.match.class == class and tag_rule.tag and tag_rule.tag:find("scene:" .. scene, 1, true) then
+        -- A block class stamps both tags; a barred class stamps only the
+        -- scene tag. The group rule depends on whichever is more specific.
+        local applied_tag = tag_rule.tag:match("%+(block:[^%s]+)") or tag_rule.tag:match("%+(scene:[^%s]+)")
+        for _, group_rule in ipairs(rules) do
+          if group_rule.match.tag == applied_tag then
+            return group_rule.group, tag_rule.match.onworkspace
+          end
+        end
+      end
     end
-    t.eq("set always", by_class["Dofus.x64"])
-    t.eq("deny", by_class["zen-gaming-media"], "the block's own guard, not the default bar")
-    t.eq("barred", by_class["steam_app_default"])
+    return nil, nil
+  end
+
+  t.it("declares grouping once, from the scene", function()
+    local rules = compile.plan({ gaming = {
+      name = "gaming",
+      blocks = {
+        { classes = { "Dofus.x64" }, group = true, order = 1 },
+        { classes = { "zen-gaming-media" }, order = 2, guard = "deny" },
+      },
+      barred = { "steam_app_default" },
+    } })
+    t.eq("set always", (group_for(rules, "gaming", "Dofus.x64")))
+    t.eq("deny", (group_for(rules, "gaming", "zen-gaming-media")), "the block's own guard, not the default bar")
+    t.eq("barred", (group_for(rules, "gaming", "steam_app_default")))
+  end)
+
+  -- The cross-scene bug (LEO-354): two scenes declaring the same class used
+  -- to compile to one global `match = { class = class }` group rule, so a
+  -- Kitty-Main opened on either workspace joined the same class-wide group.
+  t.it("groups a shared class only on its own scene's workspace", function()
+    local specs = {
+      code = { name = "code", blocks = { { classes = { "Kitty-Main" }, group = true, order = 1 } }, barred = {} },
+      other = { name = "other", blocks = { { classes = { "Kitty-Main" }, group = true, order = 1 } }, barred = {} },
+    }
+    local rules = compile.plan(specs)
+
+    local code_group, code_ws = group_for(rules, "code", "Kitty-Main")
+    local other_group, other_ws = group_for(rules, "other", "Kitty-Main")
+    t.eq("set always", code_group)
+    t.eq("set always", other_group)
+    t.eq("name:code", code_ws, "the code scene's tagging rule is scoped to the code workspace")
+    t.eq("name:other", other_ws, "the other scene's tagging rule is scoped to the other workspace")
+
+    -- Distinct block tags mean distinct group rules: a window tagged
+    -- `block:code/1` (because it opened on the code workspace) never
+    -- satisfies `match = { tag = "block:other/1" }`, and a Kitty-Main opened
+    -- on a third, undeclared workspace matches neither tagging rule at all,
+    -- so it is never tagged and never reaches a group rule — "gets none".
+    local group_rule_tags = {}
+    for _, rule in ipairs(rules) do
+      if rule.group then
+        t.ok(rule.match.class == nil, "group rule " .. rule.name .. " must match a tag, not a class")
+        group_rule_tags[rule.match.tag] = true
+      end
+    end
+    t.ok(group_rule_tags["block:code/1"], "code scene has its own group rule")
+    t.ok(group_rule_tags["block:other/1"], "other scene has its own, distinct group rule")
+  end)
+
+  t.it("plan is pure and deterministically sorted", function()
+    local specs = {
+      code = { name = "code", blocks = { { classes = { "Kitty-Main" }, group = true, order = 1 } }, barred = {} },
+      dofus = {
+        name = "dofus",
+        blocks = { { classes = { "Dofus.x64" }, group = true, order = 1 } },
+        barred = { "steam_app_default" },
+      },
+    }
+    local plan = compile.plan(specs)
+    t.eq(plan, compile.plan(specs), "plan is pure: same input, same output")
+
+    local names = {}
+    for _, rule in ipairs(plan) do
+      names[#names + 1] = rule.name
+    end
+    local sorted = {}
+    for i, name in ipairs(names) do
+      sorted[i] = name
+    end
+    table.sort(sorted)
+    t.eq(sorted, names, "rule names are emitted in sorted order")
+
+    local stub = fresh()
+    compile.emit(specs)
+    t.eq(#plan, #stub.window_rules, "emit registers exactly the planned rules")
   end)
 end)

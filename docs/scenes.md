@@ -90,13 +90,15 @@ The two-tile split is `layout_opts.dwindle.default_split_ratio` (`0.67`). That i
 
 The corrective engine that used to derive a block's dominant group each pass, fold stragglers into it, and eject foreigners `auto_group` swallowed (`schedule.lua` + `model.lua` + `actuator.lua`, `HL.Group:add`/`:remove`) is retired (LEO-261). Group membership becomes **open-time rules**, scoped to the scene's workspace by tags (LEO-354); until that lands, a block that `auto_group` splits, or a foreigner it swallows, is not corrected.
 
+**Grouping is scoped to the scene's own workspace, not the class globally** ([lifecycle.md](lifecycle.md) D2). A class shared by two scenes — `Kitty-Main` in `code`, say, opened again on an unrelated workspace — must group only where its scene runs. `compile.lua` compiles each block class to two rules: first a tagging rule, matched on `class` _and_ `onworkspace = "name:<scene>"`, that stamps the Hyprland tags `scene:<name>` and `block:<name>/<order>`; then the group rule itself, matched on the `block:<name>/<order>` tag rather than the bare class. A window of that class elsewhere never receives the tag, so it never reaches the group rule. `onworkspace` is Hyprland's window-rule _matcher_ for "currently on this workspace" — plain `workspace` in a `match` table is the _effect_ that assigns a window to a workspace, not a matcher, and would silently match nothing.
+
 Grouping is decided **once**, by the scene. Do not also write a `group` key in `windowrules.lua` for a class a block names; the compiler emits it.
 
 ## Guard
 
 `guard` on a non-group member: `barred` (default) keeps `auto_group` from swallowing it; `deny` also refuses a deliberate toggle, for a tile whose job is to be a fixed region beside a group.
 
-`barred` at scene level lists classes that legitimately open on the workspace without belonging to any block — a game, a launcher overlay.
+`barred` at scene level lists classes that legitimately open on the workspace without belonging to any block — a game, a launcher overlay. Scope is the same as `Group` above: `compile.lua` tags a barred class only when it opens on the scene's own workspace (`scene:<name>`), then bars on that tag — so a barred class does not reach across scenes either.
 
 ## Collect
 
