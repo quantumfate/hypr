@@ -28,8 +28,7 @@ sibling `system-config` repo.
 | contextual binds                  | focused window, never the scene    |
 | theme                             | mode                               |
 
-Today's gap: modes still admit workspaces by name rather than scene sets, and
-scenes have no bring-up/teardown or window-state behaviour.
+Today's gap: scenes have no bring-up/teardown or window-state behaviour yet.
 
 ## Declaration
 
@@ -37,44 +36,93 @@ Config is the only declaration. No per-feature merge, `barred`, or `spawn` code.
 
 Scenes are keyed by workspace `default_name` (`code`, `dofus`). Workspace id is host data in `workspace_specs`.
 
-## Mode → workspace → scene layout
+## Scene sets: mode → scene → monitor
 
-Every focus mode admits exactly the workspaces it needs, and only while it
-runs. Special workspaces are retired (LEO-265/330); every scene that used to
-live in `special:*` is now an ordinary workspace admitted per mode.
+A mode names its active scene set outright in the hyprfocus declaration
+(`modes.<id>.scenes: [{ name, monitor }]`, schema version 3). The workspaces a
+mode admits are derived from that set: a scene's name is its workspace's
+`default_name`. `monitor` is a host monitor **role** (`primary`, `secondary`),
+never an output name; `conf/hosts/*.lua` maps roles to outputs.
+
+Placement on mode entry (`hypr/hyprfocus/init.lua` `apply`): validate → binding
+trees → restore → hold → withdraw → place. Placing moves each scene's workspace
+to its role's output (`admit/scene_monitor`). The mode's role wins over the
+host file's `workspace_specs[].monitor`, which is only the load-time default. A
+role whose output is not connected falls back to primary
+(`reason=monitor_missing`); `monitor.added` re-places the last applied desk, so
+the scene moves back when the monitor returns.
+
+### Validation (refuses the whole mode)
+
+`resolve.validate` (Lua) and `validate` (`bin/,hyprfocus`) are pure and agree
+through `tests/fixtures/hyprfocus/resolver`. A refusal is an
+`admit/mode_refused` record carrying `mode`, `refusal` (token), `reason`
+(token first), and for conflicts `class` and the two `scenes`. Nothing is
+applied and the pointer is not written.
+
+| Token             | Rule                                                             |
+| ----------------- | ---------------------------------------------------------------- |
+| `missing_scenes`  | mode has no `scenes` list (a pre-v3 store)                       |
+| `hidden_required` | `neutral` is not `hidden: true`                                  |
+| `unknown_scene`   | `scenes[].name` not in `base.scenes`                             |
+| `unknown_monitor` | `monitor` is not a host role                                     |
+| `duplicate_scene` | a scene listed twice in one mode                                 |
+| `class_conflict`  | two listed scenes share a block `classes` string (textual match) |
+| `scene_required`  | a `requires` edge names a `scene:` the mode does not list        |
+
+`scene:` references in `requires`/`wants` are checked, never added: a scene set
+is explicit. `barred` and `spawn.class` are not claims. Overlapping regexes
+(`steam_app` vs `steam_app_\d+`) are not detected.
+
+Known gap: `dofus` and `pokemon` both used `zen-gaming-media`. Until launch
+identity stamping lands, pokemon's browser blocks claim the tag strings
+`slot:pokemon/chat` and `slot:pokemon/stream`; no window carries those yet, so
+the declaration's pokemon browsers are unplaced by the declaration (the scenes
+store's layout still matches by class).
 
 ### Gaming
 
-| Monitor   | Workspace         | Scene       | Split                      |
-| --------- | ----------------- | ----------- | -------------------------- |
-| primary   | `dofus`           | dofus       | 0.67 group / 0.33 browser  |
-| primary   | `pokemon`         | pokemon     | 0.30 emulator / 0.65 media |
-| primary   | `steam-games`     | steam-games | 1.00 fullscreen            |
-| primary   | `proton`          | proton      | 0.50 mail / 0.50 pass      |
-| secondary | `communication`   | comms       | 0.50 signal / 0.50 vesktop |
-| secondary | `lutris`          | lutris      | 1.00 fullscreen            |
-| secondary | `steam`           | steam       | 1.00 fullscreen            |
-| secondary | `media`           | media       | 1.00 fullscreen            |
-| secondary | `ankama-launcher` | (launch)    | 1.00 fullscreen            |
+| Monitor   | Workspace         | Scene           | Split                      |
+| --------- | ----------------- | --------------- | -------------------------- |
+| primary   | `dofus`           | dofus           | 0.67 group / 0.33 browser  |
+| primary   | `pokemon`         | pokemon         | 0.30 emulator / 0.70 media |
+| primary   | `steam-games`     | steam-games     | 1.00 fullscreen            |
+| secondary | `communication`   | communication   | 0.50 signal / 0.50 vesktop |
+| secondary | `lutris`          | lutris          | 1.00 fullscreen            |
+| secondary | `steam`           | steam           | 1.00 fullscreen            |
+| secondary | `media`           | media           | 1.00 fullscreen            |
+| secondary | `ankama-launcher` | ankama-launcher | empty scene (drawer later) |
 
 ### Work
 
 | Monitor   | Workspace         | Scene           | Split                       |
 | --------- | ----------------- | --------------- | --------------------------- |
 | primary   | `code`            | code            | 0.67 group / 0.33 browser   |
+| primary   | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
 | primary   | `proton`          | proton          | 0.50 mail / 0.50 pass       |
-| secondary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
 | secondary | `logs`            | logs            | tmux-managed                |
 
 ### Study
 
-| Monitor   | Workspace         | Scene           | Split                       |
-| --------- | ----------------- | --------------- | --------------------------- |
-| primary   | `code`            | code            | 0.67 group / 0.33 browser   |
-| primary   | `proton`          | proton          | 0.50 mail / 0.50 pass       |
-| secondary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
+| Monitor | Workspace         | Scene           | Split                       |
+| ------- | ----------------- | --------------- | --------------------------- |
+| primary | `code`            | code            | 0.67 group / 0.33 browser   |
+| primary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
+| primary | `proton`          | proton          | 0.50 mail / 0.50 pass       |
 
-_Neutral_ is the resting mode; its workspace set is the full base.
+### Neutral (hidden)
+
+The recovery fallback, reached from a submap and never listed as a peer mode
+(CLI `modes`, shell pickers skip `hidden`).
+
+| Monitor   | Workspace       | Scene         |
+| --------- | --------------- | ------------- |
+| primary   | `code`          | code          |
+| primary   | `proton`        | proton        |
+| secondary | `communication` | communication |
+| secondary | `logs`          | logs          |
+
+`creative` and `misc` are retired: no host, mode or scene declares them.
 
 Source of truth: `$XDG_STATE_HOME` scenes store (`scenes.json`). Lua consumes that document and seeds it on first run from `hypr/scene/defaults.lua`; the host fork is gone. The full editor contract (members, gaps, layout options) is LEO-239 and widens this document in place — do not start a second one.
 
