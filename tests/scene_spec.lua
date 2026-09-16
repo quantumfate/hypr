@@ -117,14 +117,16 @@ t.describe("compiled rules", function()
   end
 
   t.it("declares grouping once, from the scene", function()
-    local rules = compile.plan({ gaming = {
-      name = "gaming",
-      blocks = {
-        { classes = { "Dofus.x64" }, group = true, order = 1 },
-        { classes = { "zen-gaming-media" }, order = 2, guard = "deny" },
+    local rules = compile.plan({
+      gaming = {
+        name = "gaming",
+        blocks = {
+          { classes = { "Dofus.x64" }, group = true, order = 1 },
+          { classes = { "zen-gaming-media" }, order = 2, guard = "deny" },
+        },
+        barred = { "steam_app_default" },
       },
-      barred = { "steam_app_default" },
-    } })
+    })
     t.eq("set always", (group_for(rules, "gaming", "Dofus.x64")))
     t.eq("deny", (group_for(rules, "gaming", "zen-gaming-media")), "the block's own guard, not the default bar")
     t.eq("barred", (group_for(rules, "gaming", "steam_app_default")))
