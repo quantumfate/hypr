@@ -94,15 +94,16 @@ hl.config({
       render_titles = true,
       -- Only worth the vertical space once there is something to choose between.
       disable_when_only = true,
-      -- A title over an accent underline, with air between tabs and around
-      -- the strip: the look the nested e2e render showed.
-      indicator_height = 3,
-      indicator_gap = 2,
+      -- Filled tabs: the accent block is the active indicator and the title
+      -- sits on it (hypr/themes/colors.lua picks crust text for that ground),
+      -- with air between tabs and around the strip.
+      indicator_height = 0,
       gaps_in = 10,
       gaps_out = 6,
       keep_upper_gap = true,
       rounding = 2,
-      gradients = false,
+      gradients = true,
+      gradient_rounding = 2,
       -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
       scrolling = true,
     },
