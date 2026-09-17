@@ -223,6 +223,20 @@ Workspaces are managed in the background; Quickshell presents them.
   solo widen (`hypr/events/solo_gaps.lua` framing a lone tile) is a
   per-workspace correction, not part of a monitor's resting geometry, so the
   bar never follows it.
+- The same `build()` also publishes the monitor role map (LEO-368):
+  `geometry`'s `roles` key, `{ primary: "<output>", secondary: "<output>" }`,
+  built from the host's `primary_monitor`/`secondary_monitor` and which
+  outputs are actually connected and not ignored (`hl.get_monitors()` through
+  `hypr/lib/nav.lua`'s `usable_monitors`) — an unconnected or ignored output
+  is omitted, never defaulted to primary (that fallback is placement's job,
+  `hypr/hyprfocus/init.lua`'s `output_for`, not a published fact). Outputs are
+  not always enumerated yet when the config first loads (the nested e2e host
+  hits this every boot), so `monitor.added`/`monitor.removed` re-publish the
+  role map alone once connectivity is known or changes; the gaps map never
+  needs this, since it is resolved from `workspace_specs`, not live monitors.
+  The bar's `roleForScreen` (quickshell `modules/bar/WorkspaceSwitch.js`)
+  reads this map directly instead of guessing a screen's role from the gaps
+  map's key order.
 
 ## Observability
 

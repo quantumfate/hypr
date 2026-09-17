@@ -16,6 +16,7 @@
 local geometry = require("hypr.lib.geometry")
 local profile = require("hypr.lib.profile")
 local Store = require("hypr.lib.store")
+local nav = require("hypr.lib.nav")
 
 local M = {}
 
@@ -51,6 +52,30 @@ end
 ---belongs only to plain workspaces. A plain spec with no `monitor` sits on
 ---the primary: "primary" is spelled as a sentinel here so geometry.resolve()
 ---below rewrites it to the host's real output name.
+---LEO-368: the `primary`/`secondary` role -> real output map, published
+---alongside geometry so the shell can read a monitor's role instead of
+---guessing it from key order. An unconnected or ignored output is omitted,
+---never falls back to primary (that fallback belongs to placement, in
+---hyprfocus/init.lua's `output_for`, not to this published fact).
+---@param host Hosts
+---@return table<string, string>
+local function monitor_roles(host)
+  local connected = {}
+  for _, monitor in ipairs(nav.usable_monitors(hl.get_monitors() or {}, host.ignored_monitors)) do
+    if monitor.name then
+      connected[monitor.name] = true
+    end
+  end
+  local roles = {}
+  for _, role in ipairs({ "primary", "secondary" }) do
+    local output = host[role .. "_monitor"]
+    if output and connected[output] then
+      roles[role] = output
+    end
+  end
+  return roles
+end
+
 ---@param specs HL.WorkspaceRuleSpec[]
 local function fill_spec_defaults(specs)
   for _, spec in ipairs(specs) do
@@ -103,7 +128,21 @@ function M.build()
       config.host.workspaces.workspace_specs,
       hl.get_config("general.gaps_out") or DEFAULT_GAPS_OUT
     ),
+    roles = monitor_roles(config.host),
   })
+
+  -- LEO-368: outputs are not always enumerated yet when the config first
+  -- loads (hit on every nested e2e boot), so the role map above can start
+  -- empty; monitor.added/removed re-publish it alone once connectivity is
+  -- known or changes, the same race hyprfocus's own `output_for` fallback
+  -- exists for. The gaps map above never needs this: it is resolved from
+  -- workspace_specs, not from live monitors.
+  hl.on("monitor.added", function()
+    geometry_store:set({ roles = monitor_roles(config.host) })
+  end)
+  hl.on("monitor.removed", function()
+    geometry_store:set({ roles = monitor_roles(config.host) })
+  end)
 end
 
 return M
