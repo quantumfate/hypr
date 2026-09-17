@@ -86,10 +86,10 @@ hl.config({
       -- Hyprland reserves exactly `height` inside the group's own box (see
       -- hypr/scene/layout.lua), so a group's box stays identical to an
       -- ungrouped tile's — only its content shrinks by this much.
-      height = 20,
+      height = 22,
       font_family = "JetBrainsMono Nerd Font",
-      font_size = 10,
-      font_weight_active = 600,
+      font_size = 11,
+      font_weight_active = 700,
       font_weight_inactive = 400,
       render_titles = true,
       -- Only worth the vertical space once there is something to choose between.
@@ -101,9 +101,11 @@ hl.config({
       gaps_in = 10,
       gaps_out = 6,
       keep_upper_gap = true,
-      rounding = 2,
+      -- Pill tabs: every tab is rounded on its own, not one segmented strip.
+      gradient_round_only_edges = false,
+      rounding = 6,
       gradients = true,
-      gradient_rounding = 2,
+      gradient_rounding = 6,
       -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
       scrolling = true,
     },

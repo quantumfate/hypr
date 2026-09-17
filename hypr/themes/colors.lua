@@ -72,16 +72,17 @@ function M.apply_colors(palette_name, mode)
       groupbar = {
         col = {
           active = accent,
-          inactive = theme.base,
+          inactive = theme.surface1,
           locked_active = theme.red,
-          locked_inactive = theme.base,
+          locked_inactive = theme.surface1,
         },
         -- The title has to read against both of those grounds, so it is not
-        -- one colour: crust on the accent, text on the base.
+        -- one colour: crust on the accent, a quieter subtext on the surface
+        -- so the active tab stays the one that draws the eye.
         text_color = theme.crust,
-        text_color_inactive = theme.text,
+        text_color_inactive = theme.subtext0,
         text_color_locked_active = theme.crust,
-        text_color_locked_inactive = theme.text,
+        text_color_locked_inactive = theme.subtext0,
       },
     },
   })
