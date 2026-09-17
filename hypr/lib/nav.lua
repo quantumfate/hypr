@@ -39,55 +39,56 @@ end
 ---@field addresses string[] every window in this tile, left-to-right/top-to-bottom
 ---@field group boolean whether this tile is one Hyprland group
 
----A group's members, current/visible one first. "Current" is the member with
----the lowest `focus` (Hyprland's `focusHistoryID`: 0 is the most recently
----focused window overall) — the same member Hyprland itself keeps showing in
----the group's tab stack. A tile whose members carry no `focus` field (the
----nav spec fixtures) keeps arrival order, so this is a no-op where the field
----is absent.
+---A group's member addresses, the chosen entry address first (if it is
+---actually one of `members`), the rest in arrival order behind it. `chosen`
+---is the caller's policy decision — this function only places it; it has no
+---opinion on how it was picked. `chosen == nil` (no policy applies: an
+---untouched group, no adapter, nothing recorded yet) leaves arrival order
+---untouched.
 ---@param members Scene.Tile[]
----@return Scene.Tile[]
-local function by_recency(members)
+---@param chosen string?
+---@return string[]
+function M.group_entry_order(members, chosen)
   local out = {}
-  for i, m in ipairs(members) do
-    out[i] = m
+  if chosen then
+    for _, m in ipairs(members) do
+      if m.address == chosen then
+        out[#out + 1] = m.address
+      end
+    end
   end
-  table.sort(out, function(a, b)
-    local fa, fb = a.focus, b.focus
-    if fa == nil and fb == nil then
-      return false
+  for _, m in ipairs(members) do
+    if m.address ~= chosen then
+      out[#out + 1] = m.address
     end
-    if fa == nil then
-      return false
-    end
-    if fb == nil then
-      return true
-    end
-    return fa < fb
-  end)
+  end
   return out
 end
 
 ---The scene's tiles, left to right, in exactly the order
 ---`hypr/scene/layout.lua` places them (declared blocks by `order`, then
 ---strays in arrival order) — so `mod+h/l` always agrees with what is on
----screen. A group tile's `addresses` lead with its current/visible member
----(`by_recency`), not just whichever member the compositor happened to list
----first, so crossing INTO a group tile lands on what the user was already
----looking at (LEO-380).
+---screen. A group tile's `addresses` lead with `opts.enter`'s pick
+---(`group_entry_order`), not just whichever member the compositor happened
+---to list first, so crossing INTO a group tile lands on what the user was
+---already looking at (LEO-380) — or arrival order when there is no `opts`,
+---no `enter`, or `enter` returns nil (nothing to prefer).
 ---@param scene Scene.Spec
 ---@param tiles Scene.Tile[] tiled windows present on the scene's workspace
+---@param opts { enter: (fun(members: Scene.Tile[], group_key: string): string?)? }?
+---enter picks a group's entry member; the caller supplies the policy
+---(`hypr/scene/group_adapters.lua`'s adapter registry) so this stays pure.
 ---@return Nav.Tile[]
-function M.tile_order(scene, tiles)
+function M.tile_order(scene, tiles, opts)
   local representatives, members = layout.collapse_groups(tiles)
   local sequenced = layout.sequence(scene, representatives)
   local out = {}
   for _, entry in ipairs(sequenced) do
     local addresses = {}
     if entry.tile.group and members[entry.tile.group] then
-      for _, member in ipairs(by_recency(members[entry.tile.group])) do
-        addresses[#addresses + 1] = member.address
-      end
+      local group_members = members[entry.tile.group]
+      local chosen = opts and opts.enter and opts.enter(group_members, entry.tile.group)
+      addresses = M.group_entry_order(group_members, chosen)
     else
       for _, tile in ipairs(entry.tiles) do
         addresses[#addresses + 1] = tile.address

@@ -77,6 +77,38 @@ t.describe("default adapter: stable join order", function()
   end)
 end)
 
+t.describe("default adapter: enter picks the last-focused member", function()
+  t.it("is nil with nothing recorded", function()
+    local address = group_adapters.default.enter({ member("0x1"), member("0x2") }, { group_key = "e1" })
+    t.eq(nil, address)
+  end)
+
+  t.it("picks the recorded member if it is still present", function()
+    group_adapters.record_focus("e2", "0x2")
+    local address = group_adapters.default.enter({ member("0x1"), member("0x2") }, { group_key = "e2" })
+    t.eq("0x2", address)
+  end)
+
+  t.it("is nil once the recorded member has left", function()
+    group_adapters.record_focus("e3", "0x2")
+    local address = group_adapters.default.enter({ member("0x1") }, { group_key = "e3" })
+    t.eq(nil, address)
+  end)
+
+  t.it("forget drops the recorded focus along with the join order", function()
+    group_adapters.record_focus("e4", "0x1")
+    group_adapters.forget("e4")
+    local address = group_adapters.default.enter({ member("0x1"), member("0x2") }, { group_key = "e4" })
+    t.eq(nil, address)
+  end)
+end)
+
+t.describe("Dofus adapter: enter keeps the default (no obvious override)", function()
+  t.it("is the same function as the default adapter's", function()
+    t.eq(group_adapters.default.enter, group_adapters.for_class("Dofus.x64").enter)
+  end)
+end)
+
 t.describe("Dofus adapter: team roster order", function()
   local store = Store.define("dofus/team")
 

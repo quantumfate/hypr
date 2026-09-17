@@ -99,18 +99,48 @@ t.describe("nav.window_neighbor", function()
   end)
 end)
 
-t.describe("nav.tile_order picks a group's visible member first", function()
-  t.it("orders group addresses by focus recency (lowest focusHistoryID first)", function()
-    local spec = scene({ TERMINALS })
-    local a = tile("0x1", "Kitty-Main", "g1")
-    local b = tile("0x2", "Kitty-Main", "g1")
-    local c = tile("0x3", "Kitty-Main", "g1")
-    a.focus, b.focus, c.focus = 2, 0, 1
-    local tiles = nav.tile_order(spec, { a, b, c })
-    t.eq({ "0x2", "0x3", "0x1" }, tiles[1].addresses)
+t.describe("nav.group_entry_order", function()
+  t.it("puts the chosen address first, rest in arrival order", function()
+    local members =
+      { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1"), tile("0x3", "Kitty-Main", "g1") }
+    t.eq({ "0x2", "0x1", "0x3" }, nav.group_entry_order(members, "0x2"))
   end)
 
-  t.it("keeps arrival order when no member carries a focus field", function()
+  t.it("keeps arrival order when there is nothing to prefer", function()
+    local members = { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1") }
+    t.eq({ "0x1", "0x2" }, nav.group_entry_order(members, nil))
+  end)
+
+  t.it("keeps arrival order when the chosen address is not a member", function()
+    local members = { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1") }
+    t.eq({ "0x1", "0x2" }, nav.group_entry_order(members, "0x9"))
+  end)
+end)
+
+t.describe("nav.tile_order picks a group's entry member via opts.enter", function()
+  t.it("leads with opts.enter's pick (LEO-380 follow-up)", function()
+    local spec = scene({ TERMINALS })
+    local a, b, c = tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1"), tile("0x3", "Kitty-Main", "g1")
+    local tiles = nav.tile_order(spec, { a, b, c }, {
+      enter = function()
+        return "0x2"
+      end,
+    })
+    t.eq({ "0x2", "0x1", "0x3" }, tiles[1].addresses)
+  end)
+
+  t.it("hands the group's own key to opts.enter", function()
+    local spec = scene({ TERMINALS })
+    local seen
+    nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1") }, {
+      enter = function(_, group_key)
+        seen = group_key
+      end,
+    })
+    t.eq("g1", seen)
+  end)
+
+  t.it("keeps arrival order with no opts, or opts.enter returning nil", function()
     local spec = scene({ TERMINALS })
     local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1") })
     t.eq({ "0x1", "0x2" }, tiles[1].addresses)
@@ -133,11 +163,14 @@ t.describe("nav.decide (LEO-380: mod+h/l as one pure decision)", function()
     t.eq({ kind = "window", address = "0x2" }, action)
   end)
 
-  t.it("a group tile focuses its current member, not the first address", function()
+  t.it("a group tile focuses opts.enter's pick, not the first address", function()
     local spec = scene({ TERMINALS, BROWSER })
     local a, b = tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1")
-    a.focus, b.focus = 5, 0
-    local tiles = nav.tile_order(spec, { a, b, tile("0x3", "zen-twilight") })
+    local tiles = nav.tile_order(spec, { a, b, tile("0x3", "zen-twilight") }, {
+      enter = function()
+        return "0x2"
+      end,
+    })
     local action = nav.decide({ monitors = MONITORS, focused = "DP-1", tiles = tiles, active = "0x3", dir = "left" })
     t.eq({ kind = "window", address = "0x2" }, action)
   end)

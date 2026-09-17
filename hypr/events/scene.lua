@@ -379,6 +379,17 @@ hl.on("window.move_to_workspace", function(w)
   keep_off_ignored(w)
 end)
 
+-- A group member gaining focus (tab cycle, `mod+j/k`, a click on the
+-- groupbar) records it as the group's entry member (LEO-380 follow-up):
+-- `hypr/lib/nav.lua`'s `mod+h/l` reads this back, through
+-- `group_adapters`'s default `enter`, so entering a group next time lands
+-- here again instead of always on its first member.
+hl.on("window.active", function(w)
+  if w and w.group then
+    group_adapters.record_focus(grouping.group_key(w), w.address)
+  end
+end)
+
 -- Arriving on a workspace admits or withholds its scene's mode-scoped binding
 -- trees (LEO-266). Arranging the workspace is not this file's job: the scene
 -- layout provider is asked by the compositor on every change and needs no

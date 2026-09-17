@@ -146,17 +146,30 @@ Workspaces are managed in the background; Quickshell presents them.
   nothing that way on this monitor — it crosses to the adjacent monitor the
   same way, so a `master`/`dwindle`/`scrolling` workspace at a monitor's edge
   does not strand focus there.
+  Entering a group tile (crossing into it with `mod+h/l`, or landing on it as
+  a monitor's edge tile) focuses its most recently focused member, not
+  reliably its first: Hyprland's Lua binding never exposes `focusHistoryID`
+  on the windows `hl.get_windows()` returns, so the executor
+  (`hypr/events/scene.lua`) tracks it itself on `window.active` via
+  `hypr/scene/group_adapters.lua`'s `record_focus`, keyed by group like the
+  existing join-order tracking. Each adapter can override the choice with its
+  own `enter(members, ctx) -> address?` (nil defers to the fallback); the
+  default adapter's `enter` returns the recorded member, and Dofus keeps that
+  default — team order has no obvious reason to prefer a different entry
+  member. `hypr/lib/nav.lua`'s `tile_order` stays pure: it takes the entry
+  address a caller already decided (`opts.enter`) and only places it first
+  (`group_entry_order`), falling back to arrival order with no `opts`, no
+  adapter override, or nothing recorded yet.
   `mod+j/k` moves within the focused tile: on a group, next/prev in that
-  group's **adapter** order, wrapping, focusing by address — a registry in
-  `hypr/scene/group_adapters.lua` keyed by class picks the adapter (Dofus:
-  team roster order from `hypr/services/dofus/team.lua`; everything else: a
-  stable join-order list, updated as members join/leave
-  (`hypr/events/scene.lua`), falling back to arrival order); on a stacked
-  non-group block, next/prev window in that block (no wrap). A stale
-  `hypr/services/dofus/dofus.lua` bind used to register `mod+h/l` before
-  `hypr/binds.lua` ever loads and silently shadowed it for every Dofus
-  session (Hyprland keeps the first registration for a chord) — retired in
-  favor of the one decision above.
+  group's **adapter** order, wrapping, focusing by address — the same
+  registry keyed by class picks the adapter (Dofus: team roster order from
+  `hypr/services/dofus/team.lua`; everything else: a stable join-order list,
+  updated as members join/leave (`hypr/events/scene.lua`), falling back to
+  arrival order); on a stacked non-group block, next/prev window in that
+  block (no wrap). A stale `hypr/services/dofus/dofus.lua` bind used to
+  register `mod+h/l` before `hypr/binds.lua` ever loads and silently
+  shadowed it for every Dofus session (Hyprland keeps the first registration
+  for a chord) — retired in favor of the one decision above.
   `mod+shift+h/l` swaps a tile with its neighbour
   (session-only, `hypr/scene/order.lua` — never written to the scene
   declaration); `mod+shift+j/k` moves the focused window forward/back within

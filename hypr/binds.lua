@@ -237,6 +237,17 @@ do
   local group_adapters = require("hypr.scene.group_adapters")
   local grouping = require("hypr.scene.grouping")
 
+  ---`nav.tile_order`'s `opts.enter`: the group's adapter picks the entry
+  ---member (LEO-380 follow-up), by the class any member already names.
+  ---@param members Scene.Tile[]
+  ---@param group_key string
+  ---@return string?
+  local function group_enter(members, group_key)
+    local class = members[1] and members[1].class
+    return group_adapters.for_class(class).enter(members, { group_key = group_key })
+  end
+  local tile_opts = { enter = group_enter }
+
   ---@return HL.Window?, Scene.Spec?
   local function focused_scene()
     local w = hl.get_active_window()
@@ -296,7 +307,7 @@ do
       return
     end
 
-    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
+    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
     local monitors = hl.get_monitors() or {}
     local ordered = nav.monitor_order(nav.usable_monitors(monitors, config.host.ignored_monitors))
     local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
@@ -309,7 +320,9 @@ do
       local active = adjacent.activeWorkspace
       local other_scene = active and active.name and scene_spec.load()[active.name]
       target = {
-        tiles = other_scene and nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name)) or {},
+        tiles = other_scene
+            and nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name), tile_opts)
+          or {},
       }
     end
 
@@ -380,7 +393,7 @@ do
       focus_in_group(w, dir)
       return
     end
-    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
+    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
     local index = nav.tile_index(tiles, w.address)
     local tile = index and tiles[index]
     if not tile then
@@ -402,7 +415,7 @@ do
       layout_lib.dispatch(dir == "left" and "swap_left" or "swap_right")
       return
     end
-    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
+    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
     local index = nav.tile_index(tiles, w.address)
     if not index then
       return
