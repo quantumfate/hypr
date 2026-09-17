@@ -58,22 +58,6 @@ windowrule.tag_props({
   { initial_class = "(Alacritty|kitty|ghostty|foot)" },
 }, "+terminal")
 
--- `,proj.sh`'s picker. A terminal rather than a layer surface, so that it lands
--- where you are and takes focus by itself — which is exactly what rofi could
--- not be told to do. No workspace here on purpose: it belongs on the workspace
--- you pressed the key from, unlike the project window it goes on to open.
-windowrule.tag_props({
-  { initial_class = "(Proj-Picker)" },
-}, "+project-picker")
-
-windowrule.tag_set_effects("project-picker", {
-  static = { workspace = "name:code", float = true, center = true, fullscreen_state = "0 0" },
-  dynamic = {
-    min_size = { "monitor_w * 0.4", "monitor_h * 0.45" },
-    max_size = { "monitor_w * 0.4", "monitor_h * 0.45" },
-  },
-})
-
 windowrule.tag_props({
   { initial_title = "(Picture.?in.?[Pp]icture)" },
   { tag = "media-browser", title = "^(Picture-in-Picture)$" },

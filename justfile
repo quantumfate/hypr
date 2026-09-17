@@ -37,6 +37,7 @@ test:
 	lua tests/run.lua
 	./tests/theme_test.sh
 	./tests/scene_apply_test.sh
+	./tests/proj_pick_test.sh
 	./tests/hyprfocus_test.sh
 	./tests/hyprfocus_log_test.sh
 	./tests/hyprfocus_units_test.sh

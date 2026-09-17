@@ -13,6 +13,14 @@ integrate with the shared state / UI:
   (`qfs theme cycle`, `qfs window rename "..."`, `qfs show`, …). Zsh completion
   `_qfs` lives in the quickshell repo's `completions/`.
 
+- `bin/,proj.sh` — the tmux project manager: one entry point for "put me in
+  project X". `pick` chooses a project with fzf, never in a separate window —
+  inside tmux it's a `tmux display-popup`; from a Hyprland bind (no terminal at
+  all) it opens one project-classed kitty window whose first screen IS fzf,
+  and the same window becomes the project session once you choose
+  (`pick --inline`, used internally for that re-exec). Full reference in the
+  script's own header comment.
+
 - `bin/dofus_swap.py` — Dofus auto turn-swap detector. Reads its roster from the
   shared team source of truth (`$QF_STORE/dofus/team.json`), the same file
   the Quickshell UI edits, so team changes take effect live.

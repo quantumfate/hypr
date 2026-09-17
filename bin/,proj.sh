@@ -32,7 +32,10 @@
 # pane, and otherwise from the focused Hyprland window, by walking its process
 # tree to the tmux client and reading the -L it was started with.
 #
-#   ,proj.sh pick [window]        fzf over all projects, in its own window
+#   ,proj.sh pick [window]        fzf over all projects: a tmux popup inside
+#                                 tmux, else one project window with fzf as its
+#                                 first screen (--inline: this process IS that
+#                                 window, used internally to re-exec into it)
 #   ,proj.sh open [-n] <path> [w] open a known path (-n: always a new window)
 #   ,proj.sh ... --here           re-point THIS window at the project, instead
 #                                 of opening another one: the window drops its
@@ -87,7 +90,6 @@ TEMPLATE_WINDOWS=(nvim zsh run)
 DEFAULT_WORKSPACE=code
 CLASS_PREFIX=Proj-
 SOCKET_PREFIX=proj-
-PICKER_CLASS=Proj-Picker
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
 # One handoff file per terminal, named after the pty its tmux client sits on.
 # That pty is the one thing the pane side and the loop side both know.
@@ -454,11 +456,11 @@ hypr_dispatch() { # $1 = lua expression returning a dispatcher
     hyprctl dispatch "$1" >/dev/null
 }
 
-# The picker is a terminal, not a layer surface. A layer surface has no window
-# to place: rofi chose its output from the POINTER (its default is -m -5), and
-# when it unmapped Hyprland handed focus back to whatever held it before, which
-# raced with our own focus call. A window has neither problem — Hyprland's rules
-# place it, it takes focus on map, and closing it returns focus the normal way.
+# `confirm`'s non-tty yes/no prompt. A terminal, not a layer surface: a layer
+# surface has no window to place (rofi chose its output from the POINTER, and
+# handing focus back on unmap raced with our own focus call); a window is
+# placed by the ordinary project window rule (its class matches
+# `config.apps.project.class`) and closing it returns focus the normal way.
 # Blocking on kitty is what makes the choice a plain value again.
 menu() { # $1 = prompt, choices on stdin -> the chosen line on stdout
     local items out rc
@@ -467,7 +469,7 @@ menu() { # $1 = prompt, choices on stdin -> the chosen line on stdout
     cat >"$items"
     # `-ic`: the shell's rc is where FZF_DEFAULT_OPTS lives, so the picker looks
     # like every other fzf in this setup.
-    kitty --class "$PICKER_CLASS" --title "$1" \
+    kitty --class "$(class_for confirm)" --title "$1" \
         -o confirm_os_window_close=0 \
         -e "$SHELL" -ic "fzf --prompt='$1 ' --reverse --no-preview --height=100% <$items >$out" \
         >/dev/null 2>&1 || true
@@ -482,6 +484,73 @@ menu() { # $1 = prompt, choices on stdin -> the chosen line on stdout
     fi
     rm -f "$items" "$out"
     return "$rc"
+}
+
+# The project-pick fzf options, shared by every path below — same prompt
+# everywhere it appears.
+FZF_PICK_OPTS=(--prompt=" Project " --reverse --no-preview --height=100%)
+
+# Runs fzf over the project list right here (this shell already IS the
+# terminal): the tty and inline-picker paths in `pick` below.
+fzf_pick() { list | cut -f1 | fzf "${FZF_PICK_OPTS[@]}"; }
+
+# Inside tmux: a floating popup over the pane that asked, not a second window.
+# `-E` closes the popup and blocks the caller until the command exits, so this
+# waits for a choice exactly like `menu` used to. The answer travels through a
+# file for the same reason `menu` used one: the popup's own exit status is not
+# fzf's.
+popup_pick() {
+    local items out cmd part
+    items=$(mktemp) || return 1
+    out=$(mktemp) || return 1
+    list | cut -f1 >"$items"
+    cmd="fzf"
+    for part in "${FZF_PICK_OPTS[@]}"; do
+        cmd="$cmd $(printf '%q' "$part")"
+    done
+    cmd="$cmd <$(printf '%q' "$items") >$(printf '%q' "$out")"
+    tmux display-popup -E -w 60% -h 60% -- "$SHELL" -ic "$cmd" || true
+    local rc=1
+    if [[ -s $out ]]; then
+        cat "$out"
+        rc=0
+    fi
+    rm -f "$items" "$out"
+    return "$rc"
+}
+
+# No terminal at all (a Hyprland bind: no $TMUX, no tty). Opens exactly one
+# project-classed window — `class_for picker` matches the ordinary project rule,
+# so it tiles and places like any other project terminal, no dedicated rule
+# needed — running `pick --inline`, whose fzf IS that window's first screen.
+# `open` (reached from there) then turns this same window into the project's
+# session; never a picker window plus a second one.
+launch_inline_picker() { # $1 = window
+    local window=${1-} pick_cmd launch_cmd
+    pick_cmd=$(printf '%q pick --inline' "$SELF")
+    [[ -n $window ]] && pick_cmd="$pick_cmd $(printf '%q' "$window")"
+    launch_cmd="env -u TMUX -u TMUX_PANE"
+    if [[ ${HERE-} == 1 ]]; then
+        pick_cmd="$pick_cmd --here"
+        # capture_here already ran in THIS process, against the window the user
+        # was actually looking at — the inline window is not born yet, so its
+        # own capture_here would otherwise describe itself. Hand the answer
+        # forward instead of asking again.
+        launch_cmd="$launch_cmd HERE_TTY=$(printf '%q' "$HERE_TTY")"
+        launch_cmd="$launch_cmd HERE_SOCKET=$(printf '%q' "$HERE_SOCKET")"
+        launch_cmd="$launch_cmd HERE_CLIENT=$(printf '%q' "$HERE_CLIENT")"
+    fi
+    launch_cmd="$launch_cmd kitty --class $(printf '%q' "$(class_for picker)")"
+    launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -ic $(printf '%q' "$pick_cmd")"
+    if command -v uwsm >/dev/null 2>&1; then
+        launch_cmd="uwsm app -- $launch_cmd"
+    fi
+    if command -v hyprctl >/dev/null 2>&1; then
+        launch_cmd="[workspace name:$DEFAULT_WORKSPACE] $launch_cmd"
+        hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
+        return 0
+    fi
+    exec "$SHELL" -c "$launch_cmd"
 }
 
 # Focus one window, and make it stick. Closing the picker hands focus back to
@@ -687,10 +756,13 @@ serve() { # $1 = socket, $2 = session
 # The terminal `open --here` is going to re-point: its pty, the server it is on
 # now, and the client to detach. Captured BEFORE the picker opens, because the
 # picker takes the focus `hyprctl activewindow` would otherwise report.
-HERE_TTY=""
-HERE_SOCKET=""
-HERE_CLIENT=""
+HERE_TTY="${HERE_TTY-}"
+HERE_SOCKET="${HERE_SOCKET-}"
+HERE_CLIENT="${HERE_CLIENT-}"
 capture_here() {
+    # Already known: `launch_inline_picker` exported these from the process
+    # that captured them, before the inline window (and its own focus) existed.
+    [[ -n $HERE_TTY && -n $HERE_SOCKET && -n $HERE_CLIENT ]] && return 0
     local pid info cpid sess base
 
     # From a pane first — it knows exactly which client asked. Note that
@@ -806,6 +878,12 @@ open() { # $1 = path, $2 = window
     target=$(attach_target "$name")
     select_window "$target" "$window" "$path"
 
+    # This process IS the window `launch_inline_picker` opened: become the
+    # project's session in place, rather than spawning a second terminal for it.
+    if [[ ${INLINE-} == 1 ]]; then
+        exec "$SELF" serve "$socket" "$target"
+    fi
+
     # TMUX must not survive into the new terminal: opening project B from a pane
     # of project A would otherwise hand kitty a nested-attach refusal, and the
     # window would die on the spot.
@@ -840,7 +918,20 @@ pick() { # $1 = window
     if [[ ${HERE-} == 1 ]]; then
         capture_here
     fi
-    choice=$(list | cut -f1 | menu " Project ") || exit 0
+    if [[ ${INLINE-} == 1 ]]; then
+        # This process IS the terminal (`launch_inline_picker` spawned it): fzf
+        # is its first screen.
+        choice=$(fzf_pick) || exit 0
+    elif [[ -n ${TMUX-} ]]; then
+        choice=$(popup_pick) || exit 0
+    elif [[ -t 0 ]]; then
+        # A plain tty, no tmux: still our own terminal, run fzf right here.
+        choice=$(fzf_pick) || exit 0
+    else
+        # A Hyprland bind, no terminal in sight — hand off to one.
+        launch_inline_picker "${1-}"
+        return
+    fi
     [[ -n $choice ]] || exit 0
     # One path, even if two entries somehow share a display name — `open` takes a
     # single directory, and two lines here used to abort it.
@@ -1082,11 +1173,15 @@ FLAGS_EATEN=0
 parse_flags() {
     FLAGS_EATEN=0
     while [[ ${1-} == -y || ${1-} == --yes || ${1-} == -n || ${1-} == --new ||
-        ${1-} == --here ]]; do
+        ${1-} == --here || ${1-} == --inline ]]; do
         case $1 in
         -y | --yes) ASSUME_YES=1 ;;
         -n | --new) FORCE_NEW=1 ;;
         --here) HERE=1 ;;
+        # `pick`'s own re-exec into itself (`launch_inline_picker`): this
+        # process is already the terminal, so `pick` runs fzf right here
+        # instead of spawning another one.
+        --inline) INLINE=1 ;;
         esac
         shift
         FLAGS_EATEN=$((FLAGS_EATEN + 1))
