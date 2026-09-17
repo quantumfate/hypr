@@ -67,7 +67,9 @@ e2e_boot() {
     chmod 700 "$E2E_ROOT/run"
     # hyprland.lua finds its modules under $XDG_CONFIG_HOME/hypr.
     ln -s "$E2E_REPO" "$E2E_ROOT/config/hypr"
-    cp "$E2E_DIR/fixtures/hyprfocus.json" "$E2E_DIR/fixtures/focus.json" "$E2E_ROOT/store/"
+    cp "$E2E_DIR/fixtures/hyprfocus.json" "$E2E_ROOT/store/"
+    # Named off the store rule so the privacy gate never reads a fixture as a diary.
+    cp "$E2E_DIR/fixtures/focus.pointer.json" "$E2E_ROOT/store/focus.json"
     for name in qs notify-send uwsm systemctl setxkbmap ,hyprfocus; do
         ln -s "$E2E_DIR/stubs/stub" "$E2E_ROOT/bin/$name"
     done

@@ -127,6 +127,10 @@ def provisioned(programme: Path) -> dict[str, list[str]]:
             owners.setdefault(path.name, []).append(str(path.relative_to(programme)))
     for path in (programme / "scripts" / "etc" / "systemd" / "user").glob("*"):
         owners.setdefault(path.name, []).append(str(path.relative_to(programme)))
+    # The compositor session's own units ship from this repo (its ansible
+    # role's `hypr_custom_units` and the flake both install them).
+    for path in (programme / "hypr" / "session" / "systemd").glob("*"):
+        owners.setdefault(path.name, []).append(str(path.relative_to(programme)))
     return owners
 
 
