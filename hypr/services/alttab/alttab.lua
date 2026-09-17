@@ -8,6 +8,36 @@ M.alttab_dir = os.getenv("XDG_RUNTIME_DIR") .. "/hypr/alttab"
 M.preview_png = M.alttab_dir .. "/preview.png"
 M.filter_classes = { "Dofus.x64" }
 
+---A window's workspace is special (held windows, shelves, …) when either the
+---id Hyprland assigns it is negative or, since that id is nil after a
+---rename until the workspace is re-resolved, its name still carries the
+---"special:" prefix. Either signal alone is enough; a bare `w.workspace.id
+--->= 0` crashes on the nil case instead of reading as "not special".
+---@param ws table? `w.workspace`
+---@return boolean
+local function is_special_workspace(ws)
+  if not ws then
+    return true
+  end
+  if ws.id and ws.id < 0 then
+    return true
+  end
+  return type(ws.name) == "string" and ws.name:sub(1, #"special:") == "special:"
+end
+
+---Monitors this host withholds from the picker. Config-less specs (and a
+---host that has never named any) see an empty set rather than nil.
+---@return table<string, true>
+local function ignored_monitors()
+  local host = (rawget(_G, "config") or {}).host
+  local names = (host and host.ignored_monitors) or {}
+  local out = {}
+  for _, name in ipairs(names) do
+    out[name] = true
+  end
+  return out
+end
+
 ---@param bind boolean
 function M:bind(bind)
   if bind then
@@ -47,13 +77,18 @@ function M:alttab(direction)
   end
   ---@diagnostic disable-next-line: need-check-nil
   local windows = filter and hl.get_windows({ class = active_window.class }) or hl.get_windows()
+  -- Nil history (never focused this session, or a held/special window) sorts
+  -- last rather than crashing the `<` comparator.
   table.sort(windows, function(a, b)
-    return a.focus_history_id < b.focus_history_id
+    return (a.focus_history_id or math.huge) < (b.focus_history_id or math.huge)
   end)
 
+  local ignored = ignored_monitors()
   local lines = {}
   for _, w in ipairs(windows) do
-    if w.workspace.id >= 0 then
+    local ws = w.workspace
+    local monitor = ws and ws.monitor and ws.monitor.name
+    if not is_special_workspace(ws) and not (monitor and ignored[monitor]) then
       lines[#lines + 1] = w.address .. "\t" .. w.title
     end
   end
