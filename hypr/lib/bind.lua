@@ -190,14 +190,6 @@ function M.project_entry(key, window, description, mods, new, here)
   return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd(cmd) }
 end
 
----Toggle a special workspace.
----@param key string
----@param name string special workspace name
----@return SubmapEntry
-function M.special_ws_entry(key, name)
-  return { key = key, desc = "Toggle special workspace " .. name, action = hl.dsp.workspace.toggle_special(name) }
-end
-
 ---Relative split resize. Stays in the submap and repeats so a hold resizes
 ---continuously. Exactly one of x/y should be non-zero.
 ---@param key string

@@ -207,7 +207,6 @@ do
   for _, s in ipairs(config.shelves) do
     entries[#entries + 1] = shelf.entry(s)
   end
-  entries[#entries + 1] = bind.special_ws_entry("m", "music")
   submap.tree({ name = "shelf", desc = "Shelves", entries = entries })
 end
 

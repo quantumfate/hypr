@@ -54,6 +54,7 @@ return {
     },
     { name = "steam", key = "t", class = "steam", cmd = "steam", desc = "Steam", tree = "shelf-steam" },
     { name = "lutris", key = "l", class = "net.lutris.Lutris", cmd = "lutris", desc = "Lutris", tree = "shelf-lutris" },
+    { name = "music", key = "m", class = "([Ss]potify)", cmd = "spotify", desc = "Spotify" },
   },
   ---@type table<string, AppScope>
   apps = {

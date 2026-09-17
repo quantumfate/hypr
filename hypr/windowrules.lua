@@ -329,10 +329,10 @@ windowrule.tag_set_effects("gnome-app", {
   dynamic = { rounding = 12 },
 })
 
+-- feh opens floating in place; it no longer takes a special workspace.
 hl.window_rule({
   name = "feh",
   match = { initial_class = "feh" },
-  workspace = "special:feh",
   float = true,
   content = "photo",
   center = true,
@@ -340,8 +340,7 @@ hl.window_rule({
   opacity = "1 override 1 override",
 })
 
-windowrule.tag_props({ { initial_class = "([Ss]potify)" } }, "+music")
-windowrule.tag_set_effects("music", { static = { workspace = "special:music" } })
+-- Spotify lives on the "music" shelf (conf/base.lua shelves, hypr/lib/shelf.lua).
 
 -- Terminals stack, the browser does not.
 --

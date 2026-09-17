@@ -12,8 +12,7 @@ first implementation of the **drawers** in
 | ankama  | `a` | `Ankama Launcher`   | `,ankama-launcher.sh` | tree `shelf-ankama` |
 | steam   | `t` | `steam`             | `steam`               | tree `shelf-steam`  |
 | lutris  | `l` | `net.lutris.Lutris` | `lutris`              | tree `shelf-lutris` |
-
-`m` in the same submap still toggles the music special workspace.
+| music   | `m` | `([Ss]potify)`      | `spotify`             | always              |
 
 ## Contract
 
@@ -31,8 +30,8 @@ first implementation of the **drawers** in
   tree (`SubmapEntry.tree`), so a mode withholds that key alone and which-key
   hides it. The hyprfocus declaration lists the trees in `base.bindings`;
   every mode except `gaming` removes them.
-- Signal, Vesktop, Steam, Lutris and the Ankama Launcher are no longer scenes
-  or workspaces.
+- Signal, Vesktop, Steam, Lutris, Spotify and the Ankama Launcher are no
+  longer scenes or workspaces.
 
 ## Not yet
 

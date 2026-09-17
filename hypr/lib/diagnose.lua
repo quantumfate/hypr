@@ -341,7 +341,7 @@ end
 
 -- ---- report ---------------------------------------------------------------
 
----@param effect any rule `workspace` value (`"name:code"`, `"special:comms"`, number)
+---@param effect any rule `workspace` value (`"name:code"`, `"special:alttab"`, number)
 ---@return string
 local function describe_workspace(effect)
   if type(effect) == "number" then
