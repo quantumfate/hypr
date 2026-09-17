@@ -635,13 +635,17 @@ function M.enter(mode, source, until_at)
       }
       if until_at then
         pointer["until"] = until_at
-        -- Pointer contract: `previous` holds the mode ACTUALLY active right
-        -- now (`effective_mode` of the prior pointer, not its raw `mode`),
-        -- so a later expiry falls back to it. This is what collapses a
-        -- timed-over-timed chain to an open-ended mode on its own: an
-        -- already-expired prior pointer resolves through ITS OWN `previous`
-        -- (or `work`), never re-using a lapsed timed mode as the fallback.
-        pointer.previous = effective_mode(handle:get())
+        -- Pointer contract: `previous` is the open-ended mode to fall back
+        -- to. Layered over a still-running timed mode, carry that mode's
+        -- own `previous` forward instead of nesting; otherwise record the
+        -- mode in effect now (an expired prior resolves through its own
+        -- `previous`). Quickshell's `ModePrecedence.nextPrevious` matches.
+        local prior = handle:get() or {}
+        if prior["until"] and not expired(prior["until"]) then
+          pointer.previous = prior.previous
+        else
+          pointer.previous = effective_mode(prior)
+        end
       end
       -- A full replace, not `set`'s shallow merge: entering an open-ended
       -- mode must drop a previous timed mode's `until`/`previous`, and
