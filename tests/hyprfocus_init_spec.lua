@@ -232,6 +232,20 @@ t.describe("scene-scoped binding admission (LEO-266)", function()
     hyprfocus.apply_bindings("neutral", "gaming")
     t.eq("gaming", hyprfocus.last_applied_scene())
   end)
+
+  t.it("a mode apply admits the FOCUSED workspace's scene, not none (LEO-372)", function()
+    -- Regression: `M.apply` used to call `apply_bindings(mode, nil)`
+    -- unconditionally, so a mode switch landing on a scene workspace left
+    -- that scene's binding trees dark until the next `workspace.active`
+    -- event re-admitted them.
+    package.loaded["hypr.scene.spec"] = nil
+    local stub, hyprfocus = fresh(DECLARATION)
+    stub.get_active_workspace = function()
+      return { name = "gaming" }
+    end
+    hyprfocus.apply("game")
+    t.eq("gaming", hyprfocus.last_applied_scene())
+  end)
 end)
 
 t.describe("planning", function()

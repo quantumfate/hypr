@@ -19,6 +19,7 @@ local workspaces = require("hypr.hyprfocus.workspaces")
 local hold = require("hypr.hyprfocus.hold")
 local whichkey = require("hypr.lib.whichkey")
 local trace = require("hypr.lib.trace")
+local scene_spec = require("hypr.scene.spec")
 
 local M = {}
 
@@ -314,6 +315,19 @@ function M.apply_bindings(mode, scene)
   return disabled, nil
 end
 
+---The focused workspace's scene name, mirroring `hypr/events/scene.lua`'s
+---`M.active` (kept local rather than shared, since that module requires this
+---one). Read at mode-apply time so `apply_bindings` admits the scene actually
+---focused right now, not "no scene" — otherwise a mode switch onto a scene
+---workspace leaves its scene-scoped keys dark until the next
+---`workspace.active` event re-admits them (LEO-372).
+---@return string?
+local function focused_scene_name()
+  local ok, ws = pcall(hl.get_active_workspace)
+  local name = ok and ws and ws.name
+  return name and scene_spec.load()[name] and name or nil
+end
+
 ---@return table? report, string? error
 function M.apply(mode)
   local declaration, err = M.declaration()
@@ -327,7 +341,7 @@ function M.apply(mode)
     return nil, resolve_err
   end
 
-  local disabled, bind_err = M.apply_bindings(mode, nil)
+  local disabled, bind_err = M.apply_bindings(mode, focused_scene_name())
   if bind_err then
     return nil, bind_err
   end
