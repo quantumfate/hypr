@@ -35,6 +35,43 @@ Needs a Wayland session (the nested compositor opens a window), `foot` and
 `-i <nested signature>`. The EXIT trap kills the nested compositor and
 removes the root.
 
+## `hq`: a persistent instance for ad-hoc spikes
+
+Scenarios are fixed assertions; `hq` is a live session an agent can drive
+turn by turn, so a question ("does this window end up floated?") costs one
+command instead of a whole scenario script. It shares `lib.sh`'s safety
+contract (`hc` always `-i <nested sig>`, never the live session, never
+`$QF_STORE`).
+
+```sh
+just e2e-up [--visible]      # boot once; later commands reuse it
+tests/e2e/hq status
+tests/e2e/hq state           # one line per monitor/workspace/window
+tests/e2e/hq spawn e2e-probe loose
+tests/e2e/hq mode gaming
+tests/e2e/hq lua - <<'EOF'   # a Lua snippet, run in the nested instance
+out({ mode = require('hypr.lib.store').define('focus'):get().mode })
+EOF
+tests/e2e/hq shot            # nested output only, downscaled PNG
+just e2e-down
+```
+
+Token-saving guidance for agents:
+
+- Prefer `hq state` over `hq lua -` with a raw `hyprctl -j` dump: it is
+  already the compact summary you'd otherwise ask a snippet to produce.
+- Prefer `hq lua` with `out(tbl)` over multiple round trips: one snippet can
+  drive an action and read back the result in the same call.
+- Only reach for `hq shot` when the question is genuinely visual (layout,
+  rendering) — a screenshot costs far more tokens than `hq state`.
+- `hq up` is idempotent: call it at the start of a task and leave it running
+  across several `hq` calls rather than tearing down between them; `hq down`
+  when done (or `just e2e-down`).
+- `hq lua` never types the word the sandbox blocks — write the snippet to a
+  file or heredoc and pass it, and `hq` does the `hyprctl eval` internally.
+- `--visible` on `hq up` prints the live-session window class to float
+  yourself (`hq` can't reach into the parent compositor to place it).
+
 ## Scenarios
 
 | Script                  | Checks                                                 | Eval |

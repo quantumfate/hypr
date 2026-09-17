@@ -2,6 +2,12 @@
 -- by hostname. A nested Hyprland's own window is WAYLAND-1; `hyprctl output
 -- create headless` adds HEADLESS-2 as the secondary. Workspace names are the
 -- scenes in tests/e2e/fixtures/hyprfocus.json.
+--
+-- WAYLAND-1's mode is pinned small (1280x720) so the nested window on the
+-- live desktop, and any `hq shot` screenshot of it, stay cheap — this is a
+-- host DATA file with nowhere to call hl.monitor(), so it's set at runtime
+-- instead, right after boot: tests/e2e/lib.sh's e2e_boot (both `just e2e`
+-- scenarios and `hq up`) issues `hyprctl keyword monitor` for it.
 ---@type Hosts
 return {
   primary_monitor = "WAYLAND-1",

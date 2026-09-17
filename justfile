@@ -49,6 +49,14 @@ test:
 e2e *scenarios:
 	./tests/e2e/run.sh {{ scenarios }}
 
+# A persistent nested instance for cheap, ad-hoc live testing (agents: see
+# tests/e2e/Readme.md before probing the live session instead).
+e2e-up *args:
+	./tests/e2e/hq up {{ args }}
+
+e2e-down:
+	./tests/e2e/hq down
+
 # Regenerate the capability targets (the systemd seam bin/,hyprfocus-units
 # writes). `just check` fails if the committed ones and the contract have
 # drifted, so this is what clears that.

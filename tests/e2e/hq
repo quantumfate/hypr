@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# hq: a persistent nested-Hyprland session, driven from the shell, so agents
+# can live-test cheaply without a scenario script per question and without
+# asking the user to click anything. `hq up` boots one nested instance in the
+# background; every other subcommand reuses it via a state file. See
+# tests/e2e/Readme.md for the token-saving rationale and full usage.
+#
+# Safety contract is the same as lib.sh: every hyprctl call goes through
+# `hc` (always `-i <nested sig>`, refuses to match the parent's), nothing
+# here ever runs `hyprctl reload`, and `hq down` only ever removes the
+# sandbox root it recorded, never $QF_STORE.
+set -euo pipefail
+
+E2E_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=tests/e2e/lib.sh
+. "$E2E_DIR/lib.sh"
+
+# Computed before hq_load can repoint XDG_RUNTIME_DIR at the sandbox.
+HQ_STATE_DIR="${XDG_RUNTIME_DIR:?}/qf-e2e/session"
+HQ_STATE_FILE="$HQ_STATE_DIR/state"
+
+hq_fail() {
+    printf 'hq: %s\n' "$*" >&2
+    exit 1
+}
+
+# Load a recorded session's E2E_ROOT/E2E_SIG/E2E_WAYLAND/E2E_PID and export
+# the env lib.sh's `hc`/`clients`/etc. need. Fails (no exit) if none recorded.
+hq_load() {
+    [[ -f $HQ_STATE_FILE ]] || return 1
+    # shellcheck source=/dev/null
+    . "$HQ_STATE_FILE"
+    export XDG_RUNTIME_DIR="$E2E_ROOT/run"
+    export XDG_STATE_HOME="$E2E_ROOT/state"
+    export XDG_CACHE_HOME="$E2E_ROOT/cache"
+    export XDG_CONFIG_HOME="$E2E_ROOT/config"
+    export QF_STORE="$E2E_ROOT/store"
+    export E2E_STUB_LOG="$E2E_ROOT/stubs.log"
+}
+
+hq_alive() {
+    hq_load || return 1
+    [[ -n ${E2E_PID:-} ]] && kill -0 "$E2E_PID" 2>/dev/null &&
+        [[ -S "$XDG_RUNTIME_DIR/hypr/$E2E_SIG/.socket.sock" ]]
+}
+
+hq_require_up() {
+    hq_alive || hq_fail "no session up; run: tests/e2e/hq up"
+}
+
+cmd_up() {
+    if hq_alive; then
+        echo "hq: already up ($E2E_SIG, root $E2E_ROOT)"
+        return 0
+    fi
+    command rm -rf -- "$HQ_STATE_DIR"
+    mkdir -p "$HQ_STATE_DIR"
+    e2e_boot --detach
+    cat >"$HQ_STATE_FILE" <<EOF
+E2E_ROOT=$E2E_ROOT
+E2E_SIG=$E2E_SIG
+E2E_WAYLAND=$E2E_WAYLAND
+E2E_PID=$E2E_PID
+EOF
+    echo "hq: up ($E2E_SIG, root $E2E_ROOT, wayland $E2E_WAYLAND)"
+    if [[ ${1:-} == --visible ]]; then
+        cat >&2 <<'EOF'
+hq: the nested compositor's own window is a client of your LIVE session with
+class "Hyprland" (title carries the nested signature) — this script cannot
+place it (it doesn't control the parent compositor). Float and corner it
+yourself if you want to watch, e.g. on the live session:
+  hyprctl dispatch focuswindow class:^(Hyprland)$
+  hyprctl dispatch togglefloating
+  hyprctl dispatch moveactive exact 8 8
+EOF
+    fi
+}
+
+cmd_down() {
+    if ! hq_load; then
+        echo "hq: not up"
+        return 0
+    fi
+    E2E_KEEP=0 e2e_stop
+    command rm -rf -- "$HQ_STATE_DIR"
+    echo "hq: down"
+}
+
+cmd_status() {
+    if hq_alive; then
+        echo "hq: up ($E2E_SIG, root $E2E_ROOT, wayland $E2E_WAYLAND, pid $E2E_PID)"
+    else
+        echo "hq: down"
+        return 1
+    fi
+}
+
+# Run a Lua snippet in the nested instance and print what it wrote via
+# out(tbl), as compact JSON. Callers never type the eval word themselves.
+cmd_lua() {
+    hq_require_up
+    local src=$1 snippet
+    if [[ $src == "-" ]]; then snippet=$(cat); else snippet=$(cat "$src"); fi
+    local result="$E2E_ROOT/hq-result.json"
+    command rm -f -- "$result"
+    local wrapped="package.path = package.path .. \";$E2E_REPO/?.lua\"
+local json = require(\"hypr.lib.json\")
+-- out(tbl): the only way this snippet reports back to hq lua's caller.
+local function out(tbl)
+  local f = assert(io.open(\"$result\", \"w\"))
+  f:write(json.encode(tbl))
+  f:close()
+end
+$snippet"
+    hc eval "$wrapped" >/dev/null || hq_fail "lua snippet failed"
+    wait_until 30 test -f "$result" || true
+    if [[ -f $result ]]; then cat "$result" && echo; else echo '{}'; fi
+}
+
+# One compact line per monitor/workspace/window — never a raw -j dump.
+cmd_state() {
+    hq_require_up
+    hc -j monitors | jq -r '.[] | "MON \(.name) active=\(.activeWorkspace.name) special=\(.specialWorkspace.name)"'
+    hc -j workspaces | jq -r '.[] | "WS \(.name) monitor=\(.monitor) windows=\(.windows)"'
+    hc -j clients | jq -r '.[] |
+      "WIN \(.class) ws=\(.workspace.name) floating=\(.floating) grouped=\(.grouped | length) focused=\(.focusHistoryID == 0)"'
+}
+
+cmd_spawn() {
+    hq_require_up
+    local class=$1 ws=${2:-}
+    [[ -n $ws ]] && go_workspace "$ws"
+    spawn_test_window "$class"
+}
+
+cmd_close() {
+    hq_require_up
+    local class=$1 addr
+    addr=$(client_of "$class" | jq -r '.address // empty')
+    [[ -n $addr ]] || hq_fail "no window of class $class"
+    # hyprctl's dispatch argument is Lua on this config (see go_workspace).
+    hc dispatch "hl.dsp.window.close({ window = 'address:$addr' })" >/dev/null
+}
+
+# Enter a hyprfocus mode and wait for the pointer to name it.
+cmd_mode() {
+    hq_require_up
+    local id=$1
+    hc eval "require('hypr.hyprfocus').enter('$id')" >/dev/null || hq_fail "enter $id failed"
+    wait_until 50 sh -c "jq -e --arg m '$id' '.mode == \$m' '$QF_STORE/focus.json'" ||
+        hq_fail "pointer never named $id"
+}
+
+cmd_key() {
+    hq_require_up
+    local mods=$1 key=$2
+    hc dispatch "hl.dsp.send_shortcut({ mods = '$mods', key = '$key' })" >/dev/null ||
+        hq_fail "send_shortcut failed"
+}
+
+cmd_wait_class() {
+    hq_require_up
+    wait_for_class "$1" "${2:-100}"
+}
+
+cmd_assert() {
+    hq_require_up
+    hc -j clients | jq -e "$1" >/dev/null || hq_fail "assert failed: $1"
+    echo "hq: assert ok"
+}
+
+# Screenshot the NESTED output only (the nested instance's own WAYLAND_DISPLAY,
+# not the live desktop), downscaled to stay cheap to attach.
+cmd_shot() {
+    hq_require_up
+    local out=${1:-"$E2E_ROOT/shot.png"} raw="$E2E_ROOT/shot-raw.png"
+    WAYLAND_DISPLAY="$E2E_WAYLAND" grim "$raw" || hq_fail "grim failed"
+    magick "$raw" -resize 960x "$out" 2>/dev/null || cp "$raw" "$out"
+    echo "$out"
+}
+
+usage() {
+    cat >&2 <<'EOF'
+usage: hq <command> [args]
+  up [--visible]        boot the nested instance (idempotent)
+  down                  kill it and remove its sandbox
+  status                is it up
+  lua <file|->          run a Lua snippet, print its out(tbl) as JSON
+  state                 compact monitor/workspace/window summary
+  spawn <class> [ws]    a foot test window, optionally on a workspace
+  close <class>         close the first window of a class
+  mode <id>             enter a hyprfocus mode, wait for the pointer
+  key <mods> <key>      dispatch sendshortcut on the active window
+  wait-class <c> [t]    wait for a window of class c (tenths of a second)
+  assert <jq-expr>      jq -e over `hc -j clients`
+  shot [file]           screenshot the nested output, downscaled
+EOF
+    exit 2
+}
+
+cmd=${1:-}
+[[ -n $cmd ]] || usage
+shift || true
+case "$cmd" in
+up) cmd_up "${1:-}" ;;
+down) cmd_down ;;
+status) cmd_status ;;
+lua)
+    [[ $# -ge 1 ]] || usage
+    cmd_lua "$1"
+    ;;
+state) cmd_state ;;
+spawn)
+    [[ $# -ge 1 ]] || usage
+    cmd_spawn "$1" "${2:-}"
+    ;;
+close)
+    [[ $# -ge 1 ]] || usage
+    cmd_close "$1"
+    ;;
+mode)
+    [[ $# -ge 1 ]] || usage
+    cmd_mode "$1"
+    ;;
+key)
+    [[ $# -ge 2 ]] || usage
+    cmd_key "$1" "$2"
+    ;;
+wait-class)
+    [[ $# -ge 1 ]] || usage
+    cmd_wait_class "$1" "${2:-}"
+    ;;
+assert)
+    [[ $# -ge 1 ]] || usage
+    cmd_assert "$1"
+    ;;
+shot) cmd_shot "${1:-}" ;;
+*) usage ;;
+esac

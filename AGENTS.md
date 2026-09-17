@@ -244,10 +244,12 @@ Before marking work complete:
 - Update the Linear issue with decisions, verification evidence, changed
   dependencies, and remaining risks.
 - Compositor behaviour stubs cannot see (rule timing, groups, specials,
-  monitors, mode switches) is verified with `just e2e`: scenarios in a nested
-  Hyprland with a sandboxed store and the `e2e` host
-  ([tests/e2e/Readme.md](tests/e2e/Readme.md)). Never probe the live session
-  in its place.
+  monitors, mode switches) is verified in a nested Hyprland with a sandboxed
+  store and the `e2e` host, never by probing the live session
+  ([tests/e2e/Readme.md](tests/e2e/Readme.md)): `just e2e` runs the fixed
+  scenarios; `tests/e2e/hq` (`just e2e-up`/`e2e-down`) is a persistent nested
+  instance for cheap ad-hoc spikes — `hq state`/`hq lua`/`hq shot` instead of
+  raw `-j` dumps, and instead of asking the user to verify by hand.
 - Do not silently widen scope. Create or propose follow-up issues for
   additional work.
 

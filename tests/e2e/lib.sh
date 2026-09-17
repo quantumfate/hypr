@@ -46,16 +46,22 @@ e2e_stop() {
     fi
 }
 
-# Build the sandbox and boot the nested compositor; sets E2E_SIG.
-e2e_start() {
+# Build the sandbox and boot the nested compositor; sets E2E_ROOT/E2E_PID/
+# E2E_SIG/E2E_WAYLAND. No EXIT trap: callers that want ephemeral teardown use
+# e2e_start below; `hq up` (tests/e2e/hq) calls this directly to keep the
+# instance running past its own process.
+#
+# --detach: launch Hyprland in its own session (setsid) and disown it, so it
+# survives the launching shell exiting. Used by `hq up`; scenarios don't need
+# it since their EXIT trap (e2e_start) kills it deliberately.
+e2e_boot() {
+    local detach=${1:-}
     [[ -n ${WAYLAND_DISPLAY:-} ]] || e2e_fail "no parent WAYLAND_DISPLAY: nested Hyprland needs a Wayland session"
     local parent_rt=${XDG_RUNTIME_DIR:?}
     local parent_wl=$WAYLAND_DISPLAY
     [[ $parent_wl == /* ]] || parent_wl="$parent_rt/$parent_wl"
 
     E2E_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/qf-e2e.XXXXXX")
-    trap e2e_stop EXIT
-    trap 'exit 130' INT TERM
 
     mkdir -p "$E2E_ROOT"/{run,state,cache,config,store,bin}
     chmod 700 "$E2E_ROOT/run"
@@ -75,10 +81,20 @@ e2e_start() {
     export QF_HOST=e2e
     export E2E_STUB_LOG="$E2E_ROOT/stubs.log"
     export PATH="$E2E_ROOT/bin:$E2E_REPO/bin:$PATH"
+    # Software rendering: dmabuf screencopy from a nested Wayland-backend
+    # output is unreliable across GPUs/sandboxes ("failed to create buffer" in
+    # grim); pixman buffers are plain shm and `hq shot` needs those to work.
+    export WLR_RENDERER=pixman
     unset HYPRLAND_INSTANCE_SIGNATURE DBUS_SESSION_BUS_ADDRESS
 
-    WAYLAND_DISPLAY=$parent_wl Hyprland --config "$E2E_REPO/hyprland.lua" \
-        >"$E2E_ROOT/hyprland.log" 2>&1 &
+    if [[ $detach == --detach ]]; then
+        setsid env WAYLAND_DISPLAY="$parent_wl" Hyprland --config "$E2E_REPO/hyprland.lua" \
+            >"$E2E_ROOT/hyprland.log" 2>&1 &
+        disown
+    else
+        WAYLAND_DISPLAY=$parent_wl Hyprland --config "$E2E_REPO/hyprland.lua" \
+            >"$E2E_ROOT/hyprland.log" 2>&1 &
+    fi
     E2E_PID=$!
 
     local waited=0 dir
@@ -107,7 +123,18 @@ e2e_start() {
     done
     [[ -n $E2E_WAYLAND ]] || e2e_fail "nested compositor has no wayland socket"
     wait_until 100 hc -j monitors >/dev/null
+    # Small window: conf/hosts/e2e.lua is data and can't call hl.monitor()
+    # itself, so pin WAYLAND-1's mode here, once, for every caller.
+    hc keyword monitor "WAYLAND-1,1280x720@60,0x0,1" >/dev/null || true
     e2e_log "nested instance $E2E_SIG up (pid $E2E_PID, $E2E_WAYLAND, root $E2E_ROOT)"
+}
+
+# Ephemeral form: boot, arm the EXIT trap that tears it down. Scenarios use
+# this; `hq up` uses e2e_boot directly so the instance outlives its process.
+e2e_start() {
+    trap e2e_stop EXIT
+    trap 'exit 130' INT TERM
+    e2e_boot
 }
 
 # hyprctl against the nested instance only.
