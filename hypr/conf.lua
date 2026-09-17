@@ -94,11 +94,14 @@ hl.config({
       render_titles = true,
       -- Only worth the vertical space once there is something to choose between.
       disable_when_only = true,
-      indicator_height = 2,
+      indicator_height = 0,
       gaps_in = 2,
       gaps_out = 4,
       rounding = 2,
-      gradients = false,
+      -- Filled tabs: the accent block is the indicator, the title sits on it
+      -- (hypr/themes/colors.lua picks crust text for that ground).
+      gradients = true,
+      gradient_rounding = 2,
       -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
       scrolling = true,
     },
