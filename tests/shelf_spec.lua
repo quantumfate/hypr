@@ -43,12 +43,12 @@ t.describe("shelf decisions", function()
     t.eq("shelf-signal", d.toggle)
   end)
 
-  t.it("sends each app to its own floating shelf", function()
+  t.it("sends each app to its own floating shelf, silently (LEO-372)", function()
     local stub = require("tests.hl_stub").new()
     _G.hl = stub
     shelf.rules({ SIGNAL, STEAM })
     t.eq(2, #stub.window_rules)
-    t.eq("special:shelf-steam", stub.window_rules[2].workspace)
+    t.eq("special:shelf-steam silent", stub.window_rules[2].workspace)
     t.eq(true, stub.window_rules[2].float)
   end)
 
@@ -87,6 +87,56 @@ t.describe("shelf decisions", function()
     local d = shelf.decide(ANKAMA, {})
     t.eq(nil, d.focus)
     t.ok(d.reason, "still reports why it fell back, for the caller to log")
+  end)
+end)
+
+t.describe("shelf pending launch (LEO-372: silent rule, key press still shows it)", function()
+  local shelf = require("hypr.lib.shelf")
+
+  t.it("pending_for answers only for a class with a pending entry", function()
+    t.eq(SIGNAL, shelf.pending_for({ SIGNAL, STEAM }, { signal = SIGNAL }, "signal"))
+    t.eq(nil, shelf.pending_for({ SIGNAL, STEAM }, { signal = SIGNAL }, "steam"))
+    t.eq(nil, shelf.pending_for({ SIGNAL, STEAM }, {}, "signal"))
+  end)
+
+  t.it("show_decision toggles a global shelf that is not already showing", function()
+    local d = shelf.show_decision(SIGNAL, { monitors = {} })
+    t.eq("shelf-signal", d.toggle)
+    t.eq(nil, d.monitor)
+  end)
+
+  t.it("show_decision does not toggle a shelf already showing on any monitor", function()
+    local d = shelf.show_decision(
+      SIGNAL,
+      { monitors = { { name = "main", specialWorkspace = { name = "special:shelf-signal" } } } }
+    )
+    t.eq(nil, d.toggle)
+  end)
+
+  t.it("show_decision focuses an owned shelf's monitor first, like decide", function()
+    local d = shelf.show_decision(ANKAMA, {
+      desk = { scenes = { { name = "dofus", monitor = "game" } } },
+      output_for = function(role)
+        return role
+      end,
+      monitors = { { name = "game", activeWorkspace = { name = "code" } } },
+    })
+    t.eq("game", d.monitor)
+    t.eq("name:dofus", d.focus)
+    t.eq("shelf-ankama", d.toggle)
+  end)
+
+  t.it("show_decision does not toggle an owned shelf already showing on its monitor", function()
+    local d = shelf.show_decision(ANKAMA, {
+      desk = { scenes = { { name = "dofus", monitor = "game" } } },
+      output_for = function(role)
+        return role
+      end,
+      monitors = {
+        { name = "game", activeWorkspace = { name = "dofus" }, specialWorkspace = { name = "special:shelf-ankama" } },
+      },
+    })
+    t.eq(nil, d.toggle)
   end)
 end)
 

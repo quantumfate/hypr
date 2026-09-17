@@ -20,12 +20,22 @@ first implementation of the **drawers** in
   into a `shelf` submap key and a window rule. The submap is reached from the
   leader hub (`w`).
 - **Placement:** a window rule (`initial_class`) sends the app to
-  `special:shelf-<name>`, floating, centered, 60 % × 70 % of the monitor.
-  Rules are registered last in `hypr/windowrules.lua` so they win.
+  `special:shelf-<name> silent`, floating, centered, 60 % × 70 % of the
+  monitor. `silent` routes the window WITHOUT showing the special (verified
+  live) — an app autostarted in the background must not pop its shelf open by
+  itself. Rules are registered last in `hypr/windowrules.lua` so they win.
 - **Key press:** if a window of the class exists, toggle its shelf; otherwise
-  launch the app (`uwsm app --`), and the rule shows it on its shelf. The shelf
-  is not toggled while launching, so a late window never lands on a shelf the
-  press already closed.
+  launch the app (`uwsm app --`) and record a one-shot pending entry keyed by
+  the shelf's name (`M.mark_pending`). The shelf is not toggled while
+  launching, so a late window never lands on a shelf the press already closed.
+  Because the rule now routes silently, the launch itself would otherwise open
+  invisibly: `M.rules` also wires a `window.open` handler that checks the
+  pending set (`M.pending_for`) against the opening window's class, and — for
+  the one that matches — shows the shelf (`M.show_decision`: the same
+  owner-monitor focus `decide` uses, then a toggle only if that shelf's
+  special is not already showing on that monitor, read off
+  `hl.get_monitors()`'s `specialWorkspace`) and clears the pending entry. No
+  timer: the launch and the window's `window.open` are the only two ends.
 - **Admission:** a shelf with a `tree` is one leaf attributed to that binding
   tree (`SubmapEntry.tree`), so a mode withholds that key alone and which-key
   hides it. The hyprfocus declaration lists the trees in `base.bindings`;
@@ -53,9 +63,14 @@ scene })`), dispatched only when that workspace is not already the active
   into `special:hyprfocus-held` — the shelf, not the mode, owns that app's
   lifecycle.
 
+- **Scene-scoped keys:** Ankama's and Lutris's keys live in the `dofus`
+  scene's own binding tree, Steam's in `steam-games`'s (`conf/base.lua`
+  `base.scenes.<name>.bindings`), not in `base.bindings`. `a`/`l`/`t` are
+  reachable only while that scene's workspace is focused, same as any other
+  scene-owned key — `hypr/hyprfocus/init.lua` `apply_bindings(mode, scene)`
+  admits them. Signal, Vesktop and Spotify carry no `tree` and no owner scene:
+  always reachable, wherever the user is.
+
 ## Not yet
 
-- Scene-assigned shelves (reachable only while a scene is active) and the
-  declared `drawer` resource kind in the hyprfocus declaration.
-- The rule effect `workspace = "special:…"` shows the shelf when the app opens.
-  An app autostarted in the background will slide its shelf in once.
+- The declared `drawer` resource kind in the hyprfocus declaration.
