@@ -25,6 +25,7 @@
 -- (LEO-352) and mode-scoped binding admission on workspace arrival.
 local spec_lib = require("hypr.scene.spec")
 local companion = require("hypr.scene.companion")
+local identify = require("hypr.scene.identify")
 local grouping = require("hypr.scene.grouping")
 local group_adapters = require("hypr.scene.group_adapters")
 local strays = require("hypr.scene.strays")
@@ -86,6 +87,8 @@ local function window_fields(w, scene_name, extra)
     initial_class = w and w.initial_class,
     title = w and w.title,
     pid = w and w.pid,
+    stable_id = w and w.stable_id,
+    tags = w and w.tags,
     scene = scene_name,
     workspace = w and w.workspace and w.workspace.name,
   }
@@ -145,7 +148,29 @@ local function scene_for(w)
     return nil
   end
   local spec = w.workspace and specs[w.workspace.name]
-  return spec and spec_lib.block_for(spec, w.class) and spec.name or nil
+  return spec and spec_lib.block_for(spec, w.class, w.tags) and spec.name or nil
+end
+
+---Stamp the identity tag (LEO-364) `identify.assign` picks for `w`, if any:
+---one of several same-class windows a scene's `slot` blocks need told apart
+---(pokemon's two media browsers, `docs/scenes.md` "Ambiguous classes"). Runs
+---before `scene_for` in the `window.open` handler so the rest of this pass
+---sees the tag on `w` immediately — reading `w.tags` live, not through a
+---rule the compositor would only evaluate at open (see identify.lua header).
+---@param w HL.Window?
+local function stamp_identity(w)
+  local spec = w and w.workspace and specs[w.workspace.name]
+  local tag = spec and identify.assign(spec, w, hl.get_windows() or {})
+  if not tag then
+    return
+  end
+  hl.dispatch(hl.dsp.window.tag({ window = "address:" .. w.address, tag = "+" .. tag }))
+  trace.emit(window_fields(w, spec.name, {
+    stage = "identify",
+    event = "slot_assigned",
+    decision = "tag",
+    reason = "assigned " .. tag,
+  }))
 end
 
 ---Execute one `grouping.decide` decision (LEO-369): `hl.dispatch`/`HL.Group`
@@ -273,7 +298,7 @@ function M.tile(name, match)
   local best
   for _, w in ipairs(hl.get_windows() or {}) do
     local ws = w.workspace
-    if ws and ws.name == name and not w.floating and w.at and spec_lib.block_for(spec, w.class) == block then
+    if ws and ws.name == name and not w.floating and w.at and spec_lib.block_for(spec, w.class, w.tags) == block then
       if not best or w.at.y < best.at.y or (w.at.y == best.at.y and w.at.x < best.at.x) then
         best = w
       end
@@ -308,6 +333,10 @@ hl.on("window.open", function(w)
       end
     end
   end
+  -- Stamp identity before routing: `scene_for` and the arrange decisions
+  -- below all read `w.tags`, so a slot block can only be matched if the tag
+  -- lands first in this same pass.
+  stamp_identity(w)
   local scene_name = scene_for(w)
   -- identify/route as they exist today: a class either matches a scene's
   -- block (routed to it) or matches none (no scene claim, LEO-354 territory).
@@ -355,6 +384,10 @@ end)
 -- becomes the destination scene's. Deliberately narrow — a move into one
 -- scene must not re-converge companions for every other one unnecessarily.
 hl.on("window.move_to_workspace", function(w)
+  -- A move into a slot scene is a map into it in law (see comment below):
+  -- stamp identity here too, so a window moved in by hand still gets told
+  -- apart from its same-class siblings.
+  stamp_identity(w)
   local scene_name = scene_for(w)
   local fields = window_fields(w, scene_name)
   fields.stage = "leave"

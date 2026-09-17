@@ -38,7 +38,7 @@ function M.decide(spec, w)
   if not w or not w.workspace or not layout.floats_strays(spec) then
     return { action = "none", window = w }
   end
-  if spec_lib.block_for(spec, w.class) then
+  if spec_lib.block_for(spec, w.class, w.tags) then
     return { action = "none", window = w }
   end
   if spec_lib.class_matches(w.class, spec.barred) then

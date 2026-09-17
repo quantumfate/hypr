@@ -101,8 +101,24 @@ same class are told apart by **identity stamped at launch**: the engine
 launches the window, records its pid, address and `stable_id`, and assigns a
 tag (`hl.dsp.window.tag`, e.g. `slot:pokemon/chat`). Scene claims may match on
 that tag as well as `initial_class` and title. This replaces separate app
-profiles per window. Whether every rule effect re-evaluates when a tag is added
-after mapping must be verified live.
+profiles per window.
+
+**Verified live (LEO-364):** a tag added to an already-mapped window does
+**not** retroactively fire a compile-time Hyprland rule matched on that tag —
+a `float`/`group`/`workspace` rule keyed on `match.tag` never sees a window
+that already satisfies it once the tag lands after open, the same timing
+fact "Hyprland primitives" in AGENTS.md documents for LEO-369's tag→group
+rule chain. Repro: nested Hyprland (`tests/e2e/hq`), a `window_rule` matched
+on `tag = "spike:mark"` with a `float = true` effect, one window spawned
+before the tag existed, then `hl.dispatch(hl.dsp.window.tag(...))` on the
+already-mapped window — it stayed tiled. A control window matched on `class`
+at open time floated correctly, confirming the rule mechanism itself works
+and the gap is specifically post-map tag additions. Consequence: identity
+tags are consumed by **runtime Lua reading `w.tags` synchronously in the same
+event pass** (`hypr/scene/identify.lua`, wired into `window.open` /
+`window.move_to_workspace` before routing), never by a static rule chained
+off the tag — the same pattern grouping.lua and strays.lua already use for
+their own runtime decisions.
 
 ### Transitions
 

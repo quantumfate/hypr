@@ -292,6 +292,42 @@ t.describe("ambiguity", function()
   end)
 end)
 
+t.describe("slot blocks (LEO-364)", function()
+  local CHAT = { classes = { "zen-gaming-media" }, order = 1, slot = "pokemon/chat" }
+  local STREAM = { classes = { "zen-gaming-media" }, order = 2, slot = "pokemon/stream" }
+
+  t.it("block_for finds nothing for a slot class until the window carries its tag", function()
+    local spec = scene({ CHAT, STREAM })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq(nil, spec_lib.block_for(spec, "zen-gaming-media"))
+  end)
+
+  t.it("block_for picks the block whose slot tag the window carries", function()
+    local spec = scene({ CHAT, STREAM })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq(1, spec_lib.block_for(spec, "zen-gaming-media", { "slot:pokemon/chat" }).order)
+    t.eq(2, spec_lib.block_for(spec, "zen-gaming-media", { "slot:pokemon/stream" }).order)
+  end)
+
+  t.it("slot_candidates returns both slot blocks regardless of tags, in order", function()
+    local spec = scene({ CHAT, STREAM })
+    local spec_lib = require("hypr.scene.spec")
+    local candidates = spec_lib.slot_candidates(spec, "zen-gaming-media")
+    t.eq(2, #candidates)
+    t.eq("pokemon/chat", candidates[1].slot)
+    t.eq("pokemon/stream", candidates[2].slot)
+  end)
+
+  t.it("a slot class with no matching tag is still ambiguous by class alone", function()
+    -- Two blocks share `classes`, exactly like any other declared conflict
+    -- (docs/scenes.md "by design" case) — `slot` disambiguates live windows,
+    -- it does not change what the static declaration itself says.
+    local spec = scene({ CHAT, STREAM })
+    local spec_lib = require("hypr.scene.spec")
+    t.eq("zen-gaming-media", table.concat(spec_lib.ambiguous_classes(spec), ","))
+  end)
+end)
+
 t.describe("edges", function()
   t.it("places nothing on an empty workspace", function()
     local spec, layout = scene({ TERMINALS, BROWSER })

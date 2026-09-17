@@ -31,6 +31,7 @@ local SOLO_EXTRA = 180
 ---@class Scene.Tile
 ---@field address string
 ---@field class string
+---@field tags string[]? Hyprland tags, for slot-block matching (LEO-364)
 ---@field group string? key shared by every member of one Hyprland group
 
 ---@class Scene.Box
@@ -76,7 +77,7 @@ end
 local function sequence(scene, tiles)
   local by_block, strays = {}, {}
   for _, tile in ipairs(tiles) do
-    local block = spec_lib.block_for(scene, tile.class)
+    local block = spec_lib.block_for(scene, tile.class, tile.tags)
     if block then
       by_block[block.order] = by_block[block.order] or { block = block, tiles = {} }
       local slot = by_block[block.order].tiles

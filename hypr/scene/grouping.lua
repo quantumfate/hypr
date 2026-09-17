@@ -41,13 +41,15 @@ local function group_key(w)
 end
 M.group_key = group_key
 
----The group block `class` belongs to, or nil for a class this scene either
----does not declare or declares in a non-group block.
+---The group block `class` (and, for a slot block, `tags`) belongs to, or nil
+---for a class this scene either does not declare or declares in a
+---non-group block.
 ---@param spec Scene.Spec
 ---@param class string?
+---@param tags string[]?
 ---@return Scene.Block?
-local function group_block_for(spec, class)
-  local block = spec_lib.block_for(spec, class)
+local function group_block_for(spec, class, tags)
+  local block = spec_lib.block_for(spec, class, tags)
   return block and block.group and block or nil
 end
 
@@ -61,7 +63,7 @@ function M.decide(spec, w, live)
   if not w or not w.workspace then
     return { action = "none", window = w }
   end
-  local block = group_block_for(spec, w.class)
+  local block = group_block_for(spec, w.class, w.tags)
 
   if not block then
     -- Not a group-block class: `auto_group` can still swallow it into a
@@ -83,7 +85,7 @@ function M.decide(spec, w, live)
       other.address ~= w.address
       and other.workspace
       and other.workspace.name == ws_name
-      and group_block_for(spec, other.class) == block
+      and group_block_for(spec, other.class, other.tags) == block
     then
       peers[#peers + 1] = other
     end

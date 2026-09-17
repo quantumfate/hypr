@@ -127,10 +127,15 @@ applied and the pointer is not written.
 is explicit. `barred` and `spawn.class` are not claims. Overlapping regexes
 (`steam_app` vs `steam_app_\d+`) are not detected.
 
-Known gap: `dofus` and `pokemon` both used `zen-gaming-media`. Until launch
-identity stamping lands, pokemon's browser blocks claim the tag strings
-`slot:pokemon/chat` and `slot:pokemon/stream`; no window carries those yet, so
-the pokemon browsers are unplaced.
+`dofus` and `pokemon` both use `zen-gaming-media`; grouping and block matching
+are already scoped to a window's own workspace (`hypr/scene/grouping.lua`),
+so this alone is not a conflict. What pokemon's own two media-browser blocks
+need — telling its **left** `zen-gaming-media` window apart from its
+**right** one — is identity stamped at launch (LEO-364): each block declares
+`classes = { "zen-gaming-media" }` plus a distinct `slot` (`pokemon/chat`,
+`pokemon/stream`); `hypr/scene/identify.lua` stamps `slot:<slot>` on the
+first still-unslotted live window of that class on the workspace, in block
+declaration order, once per `window.open`/`window.move_to_workspace`.
 
 ### Gaming
 
@@ -266,15 +271,16 @@ the contract below is the schema it edits against.
 
 ### Block fields
 
-| Field     | Type                                  | Meaning                                              |
-| --------- | ------------------------------------- | ---------------------------------------------------- |
-| `classes` | string[]                              | literal class or Lua pattern, in window-rule grammar |
-| `group`   | boolean                               | one Hyprland group containing only these classes     |
-| `order`   | integer                               | left-to-right tile sequence                          |
-| `share`   | number?                               | fraction of the tiled span this block holds          |
-| `collect` | boolean                               | bring drifted members back to this workspace         |
-| `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping               |
-| `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                           |
+| Field     | Type                                  | Meaning                                                                                                  |
+| --------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `classes` | string[]                              | literal class or Lua pattern, in window-rule grammar                                                     |
+| `group`   | boolean                               | one Hyprland group containing only these classes                                                         |
+| `order`   | integer                               | left-to-right tile sequence                                                                              |
+| `share`   | number?                               | fraction of the tiled span this block holds                                                              |
+| `collect` | boolean                               | bring drifted members back to this workspace                                                             |
+| `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping                                                                   |
+| `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                                                                               |
+| `slot`    | string?                               | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
 
 ### Strays: `"slot"` executes, `"float"` floats for real (LEO-367)
 
@@ -318,13 +324,19 @@ members still collapse to one Hyprland group occupying one box.
 
 `spec.block_for` is first-match by declaration order — deterministic, but a
 class declared in two blocks of the same scene means the second block can
-never fill from that class. `spec.block_candidates(spec, class)` returns
-every matching block so a caller can see and log the ambiguity (the follow-up
-issue wires this to `identify.ambiguous`); `spec.ambiguous_classes(spec)` is a
-static validator over the declaration itself, listing every class entry
-claimed by more than one block. The shipped defaults have exactly one:
+never fill from that class **on class alone**. `spec.block_candidates(spec,
+class, tags)` returns every matching block so a caller can see and log the
+ambiguity (the follow-up issue wires this to `identify.ambiguous`);
+`spec.ambiguous_classes(spec)` is a static validator over the declaration
+itself, listing every class entry claimed by more than one block — this stays
+a class-only check, so it still flags a shared `classes` entry even when
+distinct `slot`s disambiguate it live. The shipped defaults have exactly one:
 `zen-gaming-media` in the `pokemon` scene's flanking media blocks (by design —
-the same class fills both the left and right slot).
+the same class fills both the left and right slot). A block with `slot` set
+is excluded from `block_candidates`/`block_for` until the window carries the
+Hyprland tag `slot:<slot>` (`spec.slot_candidates(spec, class)` returns the
+declared pool regardless); `hypr/scene/identify.lua` is what stamps it
+(LEO-364, "Window identity" in desktop-model.md).
 
 ### Workspace selects its scene
 

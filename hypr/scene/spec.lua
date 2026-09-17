@@ -19,6 +19,12 @@ local M = {}
 ---@field collect boolean pull members that drifted to another workspace back home
 ---@field guard "barred"|"deny" how a non-group block resists being grouped
 ---@field spawn Scene.Companion? the companion window this block's presence keeps alive
+---@field slot string? identity suffix (LEO-364): with this set, the block only
+---claims a window of `classes` that already carries the Hyprland tag
+---`slot:<slot>` — `hypr/scene/identify.lua` is what stamps it, at launch, on
+---one of several same-class windows. Two blocks may share the same `classes`
+---entry (`ambiguous_classes` still flags that, correctly, as a class-only
+---conflict) as long as each names a distinct `slot`.
 
 ---@class Scene.Spec
 ---@field name string workspace `default_name` — the scene's host-independent identity
@@ -56,6 +62,7 @@ local function normalize(name, raw)
       spawn = (type(block.spawn) == "table" and block.spawn.class and block.spawn.command)
           and { class = block.spawn.class, command = block.spawn.command }
         or nil,
+      slot = type(block.slot) == "string" and block.slot or nil,
     }
   end
   table.sort(blocks, function(a, b)
@@ -180,31 +187,70 @@ function M.class_matches(class, patterns)
   return false
 end
 
+---Whether `tags` (a live window's Hyprland tags) contains `tag`.
+---@param tags string[]?
+---@param tag string
+---@return boolean
+local function has_tag(tags, tag)
+  for _, t in ipairs(tags or {}) do
+    if t == tag then
+      return true
+    end
+  end
+  return false
+end
+
 ---Every block whose `classes` match, in declaration order. `block_for` takes
 ---the first; this exposes the rest so a caller (the identify-stage logger,
 ---LEO-355's follow-up) can see and report an ambiguous class instead of the
 ---later blocks silently never filling.
+---
+---A block with `slot` set (LEO-364) additionally requires `tags` to already
+---carry `slot:<slot>` — a bare class match is not enough to pick between two
+---same-class slot blocks. `tags` is optional so existing class-only callers
+---are unaffected.
 ---@param spec Scene.Spec
 ---@param class string?
+---@param tags string[]?
 ---@return Scene.Block[]
-function M.block_candidates(spec, class)
+function M.block_candidates(spec, class, tags)
   local out = {}
   for _, block in ipairs(spec.blocks) do
-    if M.class_matches(class, block.classes) then
+    if M.class_matches(class, block.classes) and (not block.slot or has_tag(tags, "slot:" .. block.slot)) then
       out[#out + 1] = block
     end
   end
   return out
 end
 
----The block owning `class`, or nil. First-match by declaration order: kept
----deterministic and documented rather than refused, since a scene author can
----always resolve a real ambiguity with `ambiguous_classes` below.
+---The block owning `class` (and, for a slot block, `tags`), or nil.
+---First-match by declaration order: kept deterministic and documented rather
+---than refused, since a scene author can always resolve a real ambiguity
+---with `ambiguous_classes` below.
 ---@param spec Scene.Spec
 ---@param class string?
+---@param tags string[]?
 ---@return Scene.Block?
-function M.block_for(spec, class)
-  return M.block_candidates(spec, class)[1]
+function M.block_for(spec, class, tags)
+  return M.block_candidates(spec, class, tags)[1]
+end
+
+---Every `slot`-bearing block whose `classes` match `class`, in declaration
+---order, regardless of what any window is tagged yet — the pool
+---`hypr/scene/identify.lua` picks the next free slot from. Declaration
+---order is `hypr/scene/spec.lua`'s `order`-sort, so slot assignment is
+---deterministic across a reload.
+---@param spec Scene.Spec
+---@param class string?
+---@return Scene.Block[]
+function M.slot_candidates(spec, class)
+  local out = {}
+  for _, block in ipairs(spec.blocks) do
+    if block.slot and M.class_matches(class, block.classes) then
+      out[#out + 1] = block
+    end
+  end
+  return out
 end
 
 ---Declared class entries claimed by more than one of the scene's own blocks —
