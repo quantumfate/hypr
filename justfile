@@ -43,6 +43,11 @@ test:
 	./tests/notify_source_test.sh
 	./bin/,hyprfocus conform tests/fixtures/hyprfocus/resolver
 
+# End-to-end scenarios in a nested Hyprland (needs a Wayland session; never
+# touches the live one). Not part of `check`. See tests/e2e/Readme.md.
+e2e *scenarios:
+	./tests/e2e/run.sh {{ scenarios }}
+
 # Regenerate the capability targets (the systemd seam bin/,hyprfocus-units
 # writes). `just check` fails if the committed ones and the contract have
 # drifted, so this is what clears that.

@@ -80,7 +80,9 @@ function M.build()
 
   -- A machine whose name cannot be computed has no host files to pick;
   -- config/hosts/default.lua is exactly the desk for that.
-  local hostname = assert(require("hypr.lib.util").hostname())
+  -- QF_HOST names a host file outright; the nested e2e compositor
+  -- (tests/e2e/) boots conf/hosts/e2e.lua this way on any machine.
+  local hostname = os.getenv("QF_HOST") or assert(require("hypr.lib.util").hostname())
   config.host = host_table(hostname)
   fill_spec_defaults(config.host.workspaces.workspace_specs)
 

@@ -1,0 +1,5 @@
+#!/bin/sh
+# One stub for every command the nested compositor must never run for real
+# (qs, notify-send, uwsm, systemctl, setxkbmap, ,hyprfocus): lib.sh links each
+# name here on a PATH that shadows the real one, and every call is logged.
+echo "$(basename "$0") $*" >>"${E2E_STUB_LOG:-/dev/null}"

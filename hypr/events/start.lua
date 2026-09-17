@@ -37,6 +37,12 @@ local function open_study_project()
 end
 
 hl.on("hyprland.start", function()
+  -- The nested e2e compositor (tests/e2e/) starts nothing outside itself: no
+  -- keymap, no shell, no project. The mode watcher is internal, so it stays.
+  if os.getenv("QF_E2E") == "1" then
+    watch.attach()
+    return
+  end
   hl.exec_cmd("setxkbmap dvorak-custom")
   -- Quickshell desktop shell (team panel + future widgets). Launched via
   -- `uwsm app` so it runs in its own systemd scope with the finalized session

@@ -1,0 +1,62 @@
+{
+  "version": 3,
+  "base": {
+    "bindings": [],
+    "services": [],
+    "projects": [],
+    "requires": {},
+    "wants": {},
+    "notify": { "default": "show" },
+    "scenes": {
+      "grouped": {
+        "blocks": [
+          {
+            "classes": ["e2e-grp-a", "e2e-grp-b"],
+            "group": true,
+            "order": 1,
+            "share": 1
+          }
+        ],
+        "barred": [],
+        "strays": "slot",
+        "bindings": []
+      },
+      "loose": {
+        "blocks": [{ "classes": ["e2e-tile"], "order": 1, "share": 1 }],
+        "barred": [],
+        "strays": "float",
+        "bindings": []
+      },
+      "arena": {
+        "blocks": [{ "classes": ["e2e-game"], "order": 1, "share": 1 }],
+        "barred": [],
+        "strays": "float",
+        "bindings": []
+      },
+      "aside": {
+        "blocks": [{ "classes": ["e2e-aside"], "order": 1, "share": 1 }],
+        "barred": [],
+        "strays": "slot",
+        "bindings": []
+      }
+    }
+  },
+  "modes": {
+    "neutral": {
+      "name": "Neutral",
+      "hidden": true,
+      "scenes": [
+        { "name": "grouped", "monitor": "primary" },
+        { "name": "loose", "monitor": "primary" },
+        { "name": "aside", "monitor": "secondary" }
+      ]
+    },
+    "gaming": {
+      "name": "Gaming",
+      "scenes": [
+        { "name": "arena", "monitor": "primary" },
+        { "name": "grouped", "monitor": "primary" }
+      ]
+    }
+  }
+}

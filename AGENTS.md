@@ -243,6 +243,11 @@ Before marking work complete:
 - Update module and architecture documentation.
 - Update the Linear issue with decisions, verification evidence, changed
   dependencies, and remaining risks.
+- Compositor behaviour stubs cannot see (rule timing, groups, specials,
+  monitors, mode switches) is verified with `just e2e`: scenarios in a nested
+  Hyprland with a sandboxed store and the `e2e` host
+  ([tests/e2e/Readme.md](tests/e2e/Readme.md)). Never probe the live session
+  in its place.
 - Do not silently widen scope. Create or propose follow-up issues for
   additional work.
 
