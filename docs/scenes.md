@@ -81,12 +81,12 @@ the pokemon browsers are unplaced.
 
 ### Gaming
 
-| Monitor   | Workspace         | Scene           | Split                      |
-| --------- | ----------------- | --------------- | -------------------------- |
-| primary   | `dofus`           | dofus           | 0.67 group / 0.33 browser  |
-| primary   | `pokemon`         | pokemon         | 0.30 emulator / 0.70 media |
-| primary   | `steam-games`     | steam-games     | 1.00 fullscreen            |
-| secondary | `media`           | media           | 1.00 fullscreen            |
+| Monitor   | Workspace     | Scene       | Split                      |
+| --------- | ------------- | ----------- | -------------------------- |
+| primary   | `dofus`       | dofus       | 0.67 group / 0.33 browser  |
+| primary   | `pokemon`     | pokemon     | 0.30 emulator / 0.70 media |
+| primary   | `steam-games` | steam-games | 1.00 fullscreen            |
+| secondary | `media`       | media       | 1.00 fullscreen            |
 
 Signal, Vesktop, Steam, Lutris and the Ankama Launcher are shelves, not scenes
 ([shelves.md](shelves.md)).
@@ -113,11 +113,11 @@ Signal, Vesktop, Steam, Lutris and the Ankama Launcher are shelves, not scenes
 The recovery fallback, reached from a submap and never listed as a peer mode
 (CLI `modes`, shell pickers skip `hidden`).
 
-| Monitor   | Workspace       | Scene         |
-| --------- | --------------- | ------------- |
-| primary   | `code`          | code          |
-| primary   | `proton`        | proton        |
-| secondary | `logs`          | logs          |
+| Monitor   | Workspace | Scene  |
+| --------- | --------- | ------ |
+| primary   | `code`    | code   |
+| primary   | `proton`  | proton |
+| secondary | `logs`    | logs   |
 
 `creative` and `misc` are retired: no host, mode or scene declares them.
 

@@ -5,13 +5,13 @@ and holds one app the desk depends on but that never takes a tile. It is the
 first implementation of the **drawers** in
 [desktop-model.md](desktop-model.md#scene).
 
-| Shelf  | Key | Class               | Opens with            | Admitted              |
-| ------ | --- | ------------------- | --------------------- | --------------------- |
-| signal | `s` | `signal`            | `signal-desktop`      | always                |
-| vesktop| `v` | `vesktop`           | `vesktop`             | always                |
-| ankama | `a` | `Ankama Launcher`   | `,ankama-launcher.sh` | tree `shelf-ankama`   |
-| steam  | `t` | `steam`             | `steam`               | tree `shelf-steam`    |
-| lutris | `l` | `net.lutris.Lutris` | `lutris`              | tree `shelf-lutris`   |
+| Shelf   | Key | Class               | Opens with            | Admitted            |
+| ------- | --- | ------------------- | --------------------- | ------------------- |
+| signal  | `s` | `signal`            | `signal-desktop`      | always              |
+| vesktop | `v` | `vesktop`           | `vesktop`             | always              |
+| ankama  | `a` | `Ankama Launcher`   | `,ankama-launcher.sh` | tree `shelf-ankama` |
+| steam   | `t` | `steam`             | `steam`               | tree `shelf-steam`  |
+| lutris  | `l` | `net.lutris.Lutris` | `lutris`              | tree `shelf-lutris` |
 
 `m` in the same submap still toggles the music special workspace.
 
