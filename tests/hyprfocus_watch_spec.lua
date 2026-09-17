@@ -194,3 +194,100 @@ t.describe("the watcher", function()
     t.eq("game", hyprfocus.last_applied())
   end)
 end)
+
+t.describe("a gaming -> neutral -> gaming round trip", function()
+  -- A compositor that performs the moves it is handed and raises the event a
+  -- real one does, so the watcher runs from inside an apply exactly as live.
+  local function compositor(stub, windows)
+    stub.get_windows = function()
+      return windows
+    end
+    stub.dispatch = function(action)
+      stub.dispatched[#stub.dispatched + 1] = action
+      if type(action) == "table" and action.name == "dsp.window.move" then
+        local args = action.args[1]
+        local address = args.window:match("^address:(.+)$")
+        for _, w in ipairs(windows) do
+          if w.address == address then
+            w.workspace = { name = (args.workspace:gsub("^name:", "")) }
+            for _, cb in ipairs(stub.event_handlers["window.move_to_workspace"] or {}) do
+              cb(w)
+            end
+          end
+        end
+      end
+    end
+  end
+
+  local function where(windows)
+    local out = {}
+    for _, w in ipairs(windows) do
+      out[#out + 1] = w.address .. "@" .. w.workspace.name
+    end
+    return table.concat(out, " ")
+  end
+
+  local HELD_BOTH = "0x1@special:hyprfocus-held 0x2@special:hyprfocus-held 0x3@gaming 0x4@logs"
+  local BACK = "0x1@code 0x2@code 0x3@gaming 0x4@logs"
+
+  t.it("brings every held window back and never strands one", function()
+    local stub, hyprfocus, watch, stores, rules = fresh(DECLARATION, { mode = "game" })
+    local windows = {
+      { address = "0x1", class = "kitty", workspace = { name = "code" } },
+      { address = "0x2", class = "zen", workspace = { name = "code" } },
+      { address = "0x3", class = "Dofus", workspace = { name = "gaming" } },
+      { address = "0x4", class = "logs", workspace = { name = "logs" } },
+    }
+    compositor(stub, windows)
+    watch.attach()
+    t.eq("game", hyprfocus.last_applied())
+    t.eq(HELD_BOTH, where(windows))
+    t.eq(false, rules.code.enabled)
+
+    stores.focus = { mode = "neutral" }
+    t.eq("neutral", watch.tick())
+    t.eq(BACK, where(windows))
+    t.eq(true, rules.code.enabled)
+    t.eq({}, stores["hyprfocus-held"].windows, "nothing left in the record")
+
+    stores.focus = { mode = "game" }
+    local report = hyprfocus.converge("game")
+    t.eq(HELD_BOTH, where(windows))
+    t.eq(0, report.unreachable)
+    t.eq({ ["0x1"] = "code", ["0x2"] = "code" }, stores["hyprfocus-held"].windows, "every held window has its origin")
+
+    stores.focus = { mode = "neutral" }
+    report = hyprfocus.converge("neutral")
+    t.eq(BACK, where(windows))
+    t.eq(2, report.windows_restored)
+    t.eq(0, report.unreachable)
+  end)
+
+  t.it("refuses an apply nested inside another one", function()
+    local stub, hyprfocus = fresh(DECLARATION, { mode = "game" })
+    local windows = { { address = "0x1", workspace = { name = "code" } } }
+    local nested
+    compositor(stub, windows)
+    stub.event_handlers["window.move_to_workspace"] = {
+      function()
+        nested = { hyprfocus.apply("neutral") }
+      end,
+    }
+    hyprfocus.apply("game")
+    t.eq("apply already in progress", nested[2])
+    t.eq(false, hyprfocus.applying())
+  end)
+
+  t.it("rescues a held window with no origin and logs it", function()
+    local saved = rawget(_G, "config")
+    _G.config = { host = { primary_monitor = "DP-1" } }
+    local stub, hyprfocus = fresh(DECLARATION, { mode = "neutral" })
+    stub.monitors = { { name = "DP-1", activeWorkspace = { name = "code" } } }
+    local windows = { { address = "0x9", workspace = { name = "special:hyprfocus-held" } } }
+    compositor(stub, windows)
+    local report = hyprfocus.apply("neutral")
+    _G.config = saved
+    t.eq(1, report.unreachable)
+    t.eq("0x9@code", where(windows))
+  end)
+end)

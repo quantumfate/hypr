@@ -28,6 +28,11 @@ local notified_err = nil
 ---@return string? mode the mode applied this call, or nil
 ---@return string? error
 function M.tick()
+  -- An apply's own moves raise these events; converging from inside it
+  -- would nest a second apply into the first.
+  if hyprfocus.applying() then
+    return nil, nil
+  end
   local pointer_mode = hyprfocus.active()
   if pointer_mode == hyprfocus.last_applied() then
     return nil, nil

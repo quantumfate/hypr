@@ -67,24 +67,54 @@ local function move(address, workspace)
   }))
 end
 
----Park every window standing on `workspace`.
----@param workspace string the workspace's name
----@return integer how many windows were parked
-function M.hold(workspace)
-  local recorded = origins()
-  local parked = 0
-  for _, w in ipairs(hl.get_windows() or {}) do
-    local ws = w.workspace
-    if ws and ws.name == workspace and w.address and not recorded[w.address] and not shelf.exempt(w, shelves()) then
-      recorded[w.address] = workspace
-      move(w.address, HELD)
-      parked = parked + 1
+---Drop records for addresses no live window carries. Addresses are reused,
+---so a dead entry left behind would later claim a stranger.
+---@param recorded table<string, string>
+---@param live table<string, table>
+---@return table<string, string>
+local function prune(recorded, live)
+  local out = {}
+  for address, origin in pairs(recorded) do
+    if live[address] then
+      out[address] = origin
     end
   end
-  if parked > 0 then
-    remember(recorded)
+  return out
+end
+
+---@return table<string, table> address -> live window
+local function live_windows()
+  local live = {}
+  for _, w in ipairs(hl.get_windows() or {}) do
+    if w.address then
+      live[w.address] = w
+    end
   end
-  return parked
+  return live
+end
+
+---Park every window standing on `workspace`.
+---
+---A window standing on a named workspace is not held, whatever the record
+---says: an entry for its address is stale (a reused address, or a record
+---written by an interrupted apply) and is overwritten. Skipping such a window
+---used to leave it on a workspace the caller then withdrew, which stranded it.
+---@param workspace string the workspace's name
+---@return integer parked, string[] addresses moved
+function M.hold(workspace)
+  local live = live_windows()
+  local recorded = prune(origins(), live)
+  local moved = {}
+  for _, w in ipairs(hl.get_windows() or {}) do
+    local ws = w.workspace
+    if ws and ws.name == workspace and w.address and not shelf.exempt(w, shelves()) then
+      recorded[w.address] = workspace
+      move(w.address, HELD)
+      moved[#moved + 1] = w.address
+    end
+  end
+  remember(recorded)
+  return #moved, moved
 end
 
 ---Give back every window held from `workspace`.
@@ -93,15 +123,10 @@ end
 ---restored: addresses are reused, and putting a window back by an address that
 ---now belongs to something else would move a stranger.
 ---@param workspace string
----@return integer how many windows came back
+---@return integer returned, string[] addresses moved back
 function M.restore(workspace)
+  local live = live_windows()
   local recorded = origins()
-  local live = {}
-  for _, w in ipairs(hl.get_windows() or {}) do
-    if w.address then
-      live[w.address] = w
-    end
-  end
 
   -- Sorted, so a restore moves windows in the same order every time and the
   -- decision log reads the same twice.
@@ -111,18 +136,20 @@ function M.restore(workspace)
   end
   table.sort(addresses)
 
-  local returned, remaining = 0, {}
+  local moved, remaining = {}, {}
   for _, address in ipairs(addresses) do
     local origin = recorded[address]
     if origin ~= workspace then
-      remaining[address] = origin
+      if live[address] then
+        remaining[address] = origin
+      end
     elseif live[address] and not shelf.exempt(live[address], shelves()) then
       move(address, "name:" .. origin)
-      returned = returned + 1
+      moved[#moved + 1] = address
     end
   end
   remember(remaining)
-  return returned
+  return #moved, moved
 end
 
 ---Every workspace that currently has windows held from it.
@@ -139,6 +166,77 @@ end
 ---@return string? the workspace this window was held from
 function M.origin(address)
   return origins()[address]
+end
+
+-- The holding place's workspace name, for callers that check where a window
+-- stands.
+M.HELD = HELD
+
+---Where each window will stand once the moves an apply dispatched land. A
+---move is dispatched, not performed, so reading the compositor right after an
+---apply returns the desk as it was; this overlays the moves instead.
+---@param windows table[] `hl.get_windows()`
+---@param moves table<string, string> address -> workspace name it was sent to
+---@return { address: string, class: string?, workspace: string? }[]
+function M.project(windows, moves)
+  local out = {}
+  for _, w in ipairs(windows or {}) do
+    if w.address then
+      out[#out + 1] = {
+        address = w.address,
+        class = w.class,
+        workspace = moves[w.address] or (w.workspace and w.workspace.name),
+      }
+    end
+  end
+  return out
+end
+
+---The reachability invariant, checked after every mode apply. A window is
+---reachable when it stands on an admitted workspace, on a shelf
+---(a shelf's special workspace), on any other special or unmanaged workspace, or in the
+---holding place with a recorded origin the active mode does not admit (a
+---later mode brings it back). Everything else is returned with a token:
+---
+---  * `withdrawn` — on a managed workspace the mode withdrew
+---  * `no_origin` — held with no record, so no mode can ever restore it
+---  * `not_restored` — held from a workspace the active mode admits
+---
+---Pure: the caller hands in the projected windows and the record.
+---@param windows { address: string, class: string?, workspace: string? }[]
+---@param admitted table<string, true>
+---@param known table<string, true> managed workspace names (the registry)
+---@param record table<string, string> address -> origin
+---@return { address: string, class: string?, workspace: string?, reason: string }[]
+function M.unreachable(windows, admitted, known, record)
+  local out = {}
+  for _, w in ipairs(windows or {}) do
+    local ws = w.workspace
+    local reason
+    if ws == HELD then
+      local origin = record[w.address]
+      if not origin then
+        reason = "no_origin"
+      elseif admitted[origin] then
+        reason = "not_restored"
+      end
+    elseif ws and known[ws] and not admitted[ws] then
+      reason = "withdrawn"
+    end
+    if reason then
+      out[#out + 1] = { address = w.address, class = w.class, workspace = ws, reason = reason }
+    end
+  end
+  table.sort(out, function(a, b)
+    return a.address < b.address
+  end)
+  return out
+end
+
+---The record as it stands, for the invariant check.
+---@return table<string, string>
+function M.record()
+  return origins()
 end
 
 ---Drop every record without moving anything. For tests, and for recovering

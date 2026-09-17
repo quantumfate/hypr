@@ -82,14 +82,24 @@ t.describe("holding", function()
     t.eq("code", hold.origin("0x1"))
   end)
 
-  t.it("does not hold a window twice", function()
-    -- A second hold would overwrite the origin with the holding workspace and
-    -- lose the way back.
-    local stub, hold = fresh({ win("0x1", "code") })
+  t.it("keeps the origin when a window is held twice", function()
+    -- The compositor may still report the window on its workspace. Moving it
+    -- to the holding place again is harmless; losing the way back is not.
+    local _, hold = fresh({ win("0x1", "code") })
     hold.hold("code")
     hold.hold("code")
     t.eq("code", hold.origin("0x1"), "the original workspace survived")
-    t.eq(1, select(2, moves(stub):gsub("address:0x1", "")), "moved once")
+  end)
+
+  t.it("overwrites a stale record for a window that stands on the workspace", function()
+    -- A reused address, or an entry an interrupted apply left behind, used to
+    -- make hold skip the window; the workspace was then withdrawn under it.
+    local stub, hold, saved = fresh({ win("0x1", "code") })
+    saved.windows = { ["0x1"] = "obsidian-linear", ["0xdead"] = "code" }
+    t.eq(1, hold.hold("code"))
+    t.eq("address:0x1->special:hyprfocus-held", moves(stub))
+    t.eq("code", hold.origin("0x1"))
+    t.eq(nil, hold.origin("0xdead"), "dead addresses are pruned")
   end)
 end)
 
@@ -186,5 +196,40 @@ t.describe("shelf windows are never held (LEO-370)", function()
     t.eq(0, hold.hold("special:shelf-ankama"))
     t.eq("", moves(stub))
     _G.config = nil
+  end)
+end)
+
+t.describe("reachability invariant", function()
+  local function w(address, workspace)
+    return { address = address, workspace = workspace }
+  end
+  local known = { code = true, dofus = true, logs = true }
+
+  t.it("accepts admitted, shelf, unmanaged and legitimately held windows", function()
+    local _, hold = fresh()
+    local out = hold.unreachable({
+      w("0x1", "code"),
+      w("0x2", "special:" .. "shelf-signal"),
+      w("0x3", "2"),
+      w("0x4", "special:hyprfocus-held"),
+    }, { code = true }, known, { ["0x4"] = "dofus" })
+    t.eq({}, out)
+  end)
+
+  t.it("names each violation", function()
+    local _, hold = fresh()
+    local out = hold.unreachable({
+      w("0x1", "dofus"),
+      w("0x2", "special:hyprfocus-held"),
+      w("0x3", "special:hyprfocus-held"),
+    }, { code = true }, known, { ["0x3"] = "code" })
+    t.eq({ "withdrawn", "no_origin", "not_restored" }, { out[1].reason, out[2].reason, out[3].reason })
+  end)
+
+  t.it("projects dispatched moves over the reported workspace", function()
+    local _, hold = fresh()
+    local projected = hold.project({ win("0x1", "code"), win("0x2", "logs") }, { ["0x1"] = hold.HELD })
+    t.eq("special:hyprfocus-held", projected[1].workspace)
+    t.eq("logs", projected[2].workspace)
   end)
 end)

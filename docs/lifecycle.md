@@ -128,7 +128,9 @@ Bring-up runs on mode entry only. The scene binding "complete the scene" relaunc
 | float (default) | no behaviour matches            | window floats                              | —                                   |
 
 The hold area is the **shared** engine-owned `special:hyprfocus-held`. Each
-held window records its origin scene and returns there.
+held window records its origin scene and returns there. After every mode apply
+the reachability invariant is checked and violations are logged as
+`admit/unreachable` ([scenes.md](scenes.md#reachability-invariant)).
 
 ### Arrival as intent (decided: declared edges only)
 
