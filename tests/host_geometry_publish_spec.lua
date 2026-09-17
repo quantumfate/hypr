@@ -50,9 +50,9 @@ local function published_monitors(hostname, monitors)
 end
 
 t.describe("conf.host.build publishes per-monitor gaps -- LEO-340", function()
-  t.it("desk-dual: primary keeps the global 40px gap, secondary the profile's 14px", function()
+  t.it("desk-dual: primary takes the profile's 80px gap, secondary the profile's 14px", function()
     local monitors = published_monitors("quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 40, right = 40 }, monitors["DP-1"])
+    t.eq({ left = 80, right = 80 }, monitors["DP-1"])
     t.eq({ left = 14, right = 14 }, monitors["DP-2"])
   end)
 

@@ -13,13 +13,16 @@
 ---@type table<string, { gaps_by_monitor?: table<string, table<string, any>> }>
 local geometry_profiles = {
   [require("hypr.lib.profile").DESK_DUAL] = {
-    -- Separation is a property of the panel, not of the config: 40px of
-    -- outer gap is air on a 5120x1440 ultrawide and a wasted third of a
-    -- laptop lid. The global in hypr/conf.lua is the ultrawide's; the
-    -- secondary (a normal-aspect monitor) says so here. top stays 8: the
-    -- bar reserves its own height, so a full 40px on top would stack two
-    -- margins into a canyon (see hypr/events/solo_gaps.lua for the same rule).
+    -- Separation is a property of the panel, not of the config: air on a
+    -- 5120x1440 ultrawide is a wasted third of a laptop lid. hypr/conf.lua's
+    -- global (40px) used to be the ultrawide's own value by omission here;
+    -- 40 read as air rather than intentional framing on a panel this wide, so
+    -- primary is now doubled to 80 and spelled out explicitly rather than
+    -- left to fall through. top stays 8 on both: the bar reserves its own
+    -- height, so a full outer gap on top would stack two margins into a
+    -- canyon (see hypr/events/solo_gaps.lua for the same rule).
     gaps_by_monitor = {
+      primary = { gaps_in = 12, gaps_out = { top = 8, right = 80, bottom = 80, left = 80 } },
       secondary = { gaps_in = 6, gaps_out = 14 },
     },
   },
