@@ -234,6 +234,8 @@ do
   local scene_spec = require("hypr.scene.spec")
   local scene_provider = require("hypr.scene.provider")
   local scene_order = require("hypr.scene.order")
+  local group_adapters = require("hypr.scene.group_adapters")
+  local grouping = require("hypr.scene.grouping")
 
   ---@return HL.Window?, Scene.Spec?
   local function focused_scene()
@@ -255,13 +257,28 @@ do
     return nav.adjacent_monitor(ordered, monitor.name, dir)
   end
 
+  ---`mod+h`/`mod+l`: gather both monitors' state and hand it to the pure
+  ---decision (`hypr/lib/nav.lua` `M.decide`, LEO-380). Reading the focused
+  ---workspace from `hl.get_active_workspace()` rather than the active
+  ---window's own workspace is what lets this run from an empty workspace,
+  ---where there is no active window to read a workspace off at all
+  ---(`hl.get_active_monitor()`'s object never populates `activeWorkspace` —
+  ---unlike an entry from `hl.get_monitors()` — so that field is not a route
+  ---to it either).
   ---@param dir "left"|"right"
   local function focus_tile(dir)
-    local w, scene = focused_scene()
-    if not w then
+    local monitor = hl.get_active_monitor()
+    if not monitor then
       return
     end
+    local ws_name = (hl.get_active_workspace() or {}).name
+    local scene = ws_name and scene_spec.load()[ws_name]
+    local w = hl.get_active_window()
+
     if not scene then
+      if not w then
+        return
+      end
       -- Off a scene workspace (dwindle/master/scrolling): try the layout's
       -- own directional focus first. If it left the active window unchanged
       -- — there was nothing that way on this monitor — cross to the
@@ -271,47 +288,82 @@ do
       layout_lib.dispatch(dir == "left" and "focus_left" or "focus_right")
       local after = hl.get_active_window()
       if nav.focus_unchanged(before and before.address, after and after.address) then
-        local monitor = w.workspace and w.workspace.monitor
-        local adjacent = monitor and adjacent_monitor(monitor, dir)
+        local adjacent = adjacent_monitor(monitor, dir)
         if adjacent then
           hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
         end
       end
       return
     end
+
     local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
-    local index = nav.tile_index(tiles, w.address)
-    if not index then
+    local monitors = hl.get_monitors() or {}
+    local ordered = nav.monitor_order(nav.usable_monitors(monitors, config.host.ignored_monitors))
+    local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
+    -- What the adjacent monitor already shows, so `decide` can pick its edge
+    -- tile without a second round of dispatches — nil when there is no
+    -- adjacent monitor at all, an empty `target` when it has no scene tiles
+    -- (decide's cue to focus the monitor itself, per the decision comment).
+    local target
+    if adjacent then
+      local active = adjacent.activeWorkspace
+      local other_scene = active and active.name and scene_spec.load()[active.name]
+      target = {
+        tiles = other_scene and nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name)) or {},
+      }
+    end
+
+    local action = nav.decide({
+      monitors = monitors,
+      ignored = config.host.ignored_monitors,
+      focused = monitor.name,
+      tiles = tiles,
+      active = w and w.address,
+      dir = dir,
+      target = target,
+    })
+    if action.kind == "window" then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. action.address }))
+    elseif action.kind == "monitor" then
+      hl.dispatch(hl.dsp.focus({ monitor = action.name }))
+    end
+  end
+
+  ---A group's live members as `{ address, title }`, normalized the way
+  ---every other group reader here does (`hl.get_window().group.members` is a
+  ---bare window, not a one-element array, when the group holds exactly one).
+  ---@param group HL.Group
+  ---@return { address: string, title: string? }[]
+  local function group_members(group)
+    local raw = group.members
+    raw = (raw and raw.title) and { raw } or (raw or {})
+    local members = {}
+    for _, m in ipairs(raw) do
+      members[#members + 1] = { address = m.address, title = m.title }
+    end
+    return members
+  end
+
+  ---`mod+j`/`mod+k` on a grouped tile: next/prev in the group's adapter
+  ---order (LEO-380), wrapping, focusing by address — not the native
+  ---`hl.dsp.group.next/prev` tab step, which follows Hyprland's own order
+  ---instead of the adapter's (the Dofus roster, or default join order).
+  ---@param w HL.Window
+  ---@param dir "next"|"prev"
+  local function focus_in_group(w, dir)
+    local order = group_adapters.for_class(w.class).order(group_members(w.group), { group_key = grouping.group_key(w) })
+    local index
+    for i, address in ipairs(order) do
+      if address == w.address then
+        index = i
+      end
+    end
+    if not index or #order < 2 then
       return
     end
-    local target = nav.neighbor_tile(tiles, index, dir)
-    if target then
-      hl.dispatch(hl.dsp.focus({ window = "address:" .. target.addresses[1] }))
-      return
-    end
-    -- At the tile-order edge: continue onto the adjacent monitor's nearest
-    -- edge tile, per the decision comment. No `movewindow`-at-edge trick
-    -- (AGENTS.md: that moves the WINDOW, not focus) — this addresses a
-    -- window on the other monitor's workspace directly. When the adjacent
-    -- monitor has no scene workspace focused, or that scene has no tiles,
-    -- focus the monitor itself instead of doing nothing (LEO-372).
-    local monitor = w.workspace.monitor
-    if not monitor then
-      return
-    end
-    local adjacent = adjacent_monitor(monitor, dir)
-    if not adjacent then
-      return
-    end
-    local active = adjacent.activeWorkspace
-    local other_scene = active and active.name and scene_spec.load()[active.name]
-    local edge = other_scene
-      and nav.edge_tile(nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name)), dir)
-    if edge then
-      hl.dispatch(hl.dsp.focus({ window = "address:" .. edge.addresses[1] }))
-    else
-      hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
-    end
+    local step = dir == "next" and 1 or -1
+    local target = order[((index - 1 + step) % #order) + 1]
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
   end
 
   ---@param dir "next"|"prev"
@@ -325,9 +377,7 @@ do
       return
     end
     if w.group then
-      -- A group's tabs: the same object-addressed dispatcher
-      -- hypr/services/dofus/team.lua already uses for the Dofus roster.
-      hl.dispatch(dir == "next" and hl.dsp.group.next() or hl.dsp.group.prev())
+      focus_in_group(w, dir)
       return
     end
     local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))

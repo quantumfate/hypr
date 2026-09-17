@@ -73,7 +73,9 @@ local function window_tile(w)
       end
     end
   end
-  return { address = w.address, class = w.class, group = key }
+  -- `focus` (Hyprland's `focusHistoryID`) lets `hypr/lib/nav.lua` pick a
+  -- group's current/visible member instead of an arbitrary one (LEO-380).
+  return { address = w.address, class = w.class, group = key, focus = w.focusHistoryID }
 end
 -- Exposed so `hypr/binds.lua` can build the same tile list the layout used
 -- last, straight from `hl.get_windows()`, for the keyboard-navigation binds

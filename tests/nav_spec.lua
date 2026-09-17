@@ -99,6 +99,112 @@ t.describe("nav.window_neighbor", function()
   end)
 end)
 
+t.describe("nav.tile_order picks a group's visible member first", function()
+  t.it("orders group addresses by focus recency (lowest focusHistoryID first)", function()
+    local spec = scene({ TERMINALS })
+    local a = tile("0x1", "Kitty-Main", "g1")
+    local b = tile("0x2", "Kitty-Main", "g1")
+    local c = tile("0x3", "Kitty-Main", "g1")
+    a.focus, b.focus, c.focus = 2, 0, 1
+    local tiles = nav.tile_order(spec, { a, b, c })
+    t.eq({ "0x2", "0x3", "0x1" }, tiles[1].addresses)
+  end)
+
+  t.it("keeps arrival order when no member carries a focus field", function()
+    local spec = scene({ TERMINALS })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1") })
+    t.eq({ "0x1", "0x2" }, tiles[1].addresses)
+  end)
+end)
+
+t.describe("nav.decide (LEO-380: mod+h/l as one pure decision)", function()
+  local MONITORS = { { name = "DP-1", x = 0 }, { name = "DP-2", x = 1920 } }
+
+  t.it("focuses the neighbouring tile when one exists", function()
+    local spec = scene({ TERMINALS, BROWSER })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "zen-twilight") })
+    local action = nav.decide({
+      monitors = MONITORS,
+      focused = "DP-1",
+      tiles = tiles,
+      active = "0x1",
+      dir = "right",
+    })
+    t.eq({ kind = "window", address = "0x2" }, action)
+  end)
+
+  t.it("a group tile focuses its current member, not the first address", function()
+    local spec = scene({ TERMINALS, BROWSER })
+    local a, b = tile("0x1", "Kitty-Main", "g1"), tile("0x2", "Kitty-Main", "g1")
+    a.focus, b.focus = 5, 0
+    local tiles = nav.tile_order(spec, { a, b, tile("0x3", "zen-twilight") })
+    local action = nav.decide({ monitors = MONITORS, focused = "DP-1", tiles = tiles, active = "0x3", dir = "left" })
+    t.eq({ kind = "window", address = "0x2" }, action)
+  end)
+
+  t.it("an empty workspace (no active window) crosses to the adjacent monitor", function()
+    local action = nav.decide({ monitors = MONITORS, focused = "DP-1", tiles = {}, active = nil, dir = "right" })
+    t.eq({ kind = "monitor", name = "DP-2" }, action)
+  end)
+
+  t.it("landing on an empty workspace focuses the monitor, not a window", function()
+    local spec = scene({ TERMINALS })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1") })
+    local action = nav.decide({
+      monitors = MONITORS,
+      focused = "DP-1",
+      tiles = tiles,
+      active = "0x1",
+      dir = "right",
+      target = { tiles = {} },
+    })
+    t.eq({ kind = "monitor", name = "DP-2" }, action)
+  end)
+
+  t.it("landing where the other monitor has tiles focuses its edge tile", function()
+    local spec = scene({ TERMINALS })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1") })
+    local other = nav.tile_order(scene({ BROWSER }), { tile("0x9", "zen-twilight") })
+    local action = nav.decide({
+      monitors = MONITORS,
+      focused = "DP-1",
+      tiles = tiles,
+      active = "0x1",
+      dir = "right",
+      target = { tiles = other },
+    })
+    t.eq({ kind = "window", address = "0x9" }, action)
+  end)
+
+  t.it("no adjacent monitor at the outer edge is a no-op", function()
+    local spec = scene({ TERMINALS })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1") })
+    local action = nav.decide({ monitors = MONITORS, focused = "DP-1", tiles = tiles, active = "0x1", dir = "left" })
+    t.eq({ kind = "none" }, action)
+  end)
+
+  t.it("returning with the opposite key always works", function()
+    local spec = scene({ TERMINALS, BROWSER })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1"), tile("0x2", "zen-twilight") })
+    -- Landed on 0x2 (rightmost); pressing left steps back to the group tile.
+    local back = nav.decide({ monitors = MONITORS, focused = "DP-1", tiles = tiles, active = "0x2", dir = "left" })
+    t.eq({ kind = "window", address = "0x1" }, back)
+  end)
+
+  t.it("ignored monitors are never crossed onto", function()
+    local monitors = { { name = "DP-1", x = 0 }, { name = "HDMI-A-1", x = 1920 } }
+    local action = nav.decide({
+      monitors = monitors,
+      ignored = { "HDMI-A-1" },
+      focused = "DP-1",
+      tiles = {},
+      active = nil,
+      dir = "right",
+    })
+    t.eq({ kind = "none" }, action)
+  end)
+end)
+
 t.describe("nav.monitor_order / adjacent_monitor", function()
   -- x descends for DP-2/HDMI-A-1 so the sort itself is exercised, not just
   -- passthrough of already-sorted input.

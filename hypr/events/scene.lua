@@ -26,6 +26,7 @@
 local spec_lib = require("hypr.scene.spec")
 local companion = require("hypr.scene.companion")
 local grouping = require("hypr.scene.grouping")
+local group_adapters = require("hypr.scene.group_adapters")
 local strays = require("hypr.scene.strays")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
@@ -170,12 +171,15 @@ local function apply_group_decision(w)
     hl.dispatch(hl.dsp.group.toggle({ window = "address:" .. anchor.address }))
     local seeded = hl.get_window("address:" .. anchor.address)
     if seeded and seeded.group then
+      local group_key = grouping.group_key(seeded)
+      group_adapters.record_join(group_key, anchor.address)
       for i = 2, #decision.members do
         local member = hl.get_window("address:" .. decision.members[i].address)
         if member then
           pcall(function()
             seeded.group:add(member)
           end)
+          group_adapters.record_join(group_key, decision.members[i].address)
         end
       end
     end
@@ -193,6 +197,7 @@ local function apply_group_decision(w)
       pcall(function()
         target.group:add(joiner)
       end)
+      group_adapters.record_join(grouping.group_key(target), w.address)
     end
     trace.emit(window_fields(w, scene_name, {
       stage = "arrange",
@@ -204,9 +209,11 @@ local function apply_group_decision(w)
   elseif decision.action == "eject" then
     local victim = hl.get_window("address:" .. w.address)
     if victim and victim.group then
+      local group_key = grouping.group_key(victim)
       pcall(function()
         victim.group:remove(victim)
       end)
+      group_adapters.record_leave(group_key, w.address)
     end
     trace.emit(window_fields(w, scene_name, {
       stage = "arrange",
@@ -324,6 +331,13 @@ hl.on("window.close", function(w)
   fields.decision = "leave"
   fields.reason = "window.close"
   trace.emit(fields)
+  -- A closing group member leaves the default adapter's join-order record
+  -- too, same as an ejection (LEO-380): the group either shrinks or, if
+  -- `w` was the last member, `w.group` is already gone and there is
+  -- nothing to forget.
+  if w and w.group then
+    group_adapters.record_leave(grouping.group_key(w), w.address)
+  end
   -- A close event's payload may not say where the window stood, but the
   -- lifecycle is derived from live windows, so every spawn-carrying scene
   -- re-derives for free — there is no remembered book to consult.

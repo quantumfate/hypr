@@ -132,17 +132,32 @@ Workspaces are managed in the background; Quickshell presents them.
 - Navigation keys address the engine's ordered structure of active workspaces
   and of windows within a workspace (counted left to right), per monitor, so a
   window is reached by position instead of searched for. Implemented:
-  `mod+h/l` moves across tiles in the scene layout's own order, continuing
-  onto the adjacent monitor's nearest-edge tile past the last one — or, when
-  the adjacent monitor has no scene workspace focused (or that scene has no
-  tiles), focusing the monitor itself rather than doing nothing. Off a scene
+  `mod+h/l` moves across tiles in the scene layout's own order (a group is one
+  tile), continuing onto the adjacent monitor's edge tile past the last one —
+  or, when the adjacent monitor has no scene workspace focused (or that scene
+  has no tiles), focusing the monitor itself. It works from an empty
+  workspace too (no active window to read a tile off), and the opposite key
+  always returns (LEO-380): the whole decision is one pure function,
+  `hypr/lib/nav.lua` `M.decide` (`tests/nav_spec.lua`), given both monitors'
+  tiles and the active window's address (or nil); `hypr/binds.lua`'s
+  `focus_tile` gathers that state and dispatches the action. Off a scene
   workspace, `mod+h/l` first tries the layout's own directional focus
   (`focus_left`/`focus_right`); if that left the active window unchanged —
   nothing that way on this monitor — it crosses to the adjacent monitor the
   same way, so a `master`/`dwindle`/`scrolling` workspace at a monitor's edge
-  does not strand focus there;
-  `mod+j/k` moves within the focused tile (a group's members, or a stacked
-  block's windows); `mod+shift+h/l` swaps a tile with its neighbour
+  does not strand focus there.
+  `mod+j/k` moves within the focused tile: on a group, next/prev in that
+  group's **adapter** order, wrapping, focusing by address — a registry in
+  `hypr/scene/group_adapters.lua` keyed by class picks the adapter (Dofus:
+  team roster order from `hypr/services/dofus/team.lua`; everything else: a
+  stable join-order list, updated as members join/leave
+  (`hypr/events/scene.lua`), falling back to arrival order); on a stacked
+  non-group block, next/prev window in that block (no wrap). A stale
+  `hypr/services/dofus/dofus.lua` bind used to register `mod+h/l` before
+  `hypr/binds.lua` ever loads and silently shadowed it for every Dofus
+  session (Hyprland keeps the first registration for a chord) — retired in
+  favor of the one decision above.
+  `mod+shift+h/l` swaps a tile with its neighbour
   (session-only, `hypr/scene/order.lua` — never written to the scene
   declaration); `mod+shift+j/k` moves the focused window forward/back within
   its group. The workspace row (`config.host.workspaces.workspace_keys`)

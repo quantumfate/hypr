@@ -232,24 +232,13 @@ submap.tree({
   },
 })
 
--- MOD+H/L move window focus, but on a Dofus window they cycle the group
--- instead (a native group-tab step — see dofus.team.nav).
-local dofus_team = require("hypr.services.dofus.team")
-local function focus_or_dofus(action, reversed)
-  return function()
-    if dofus_team.nav(reversed) then
-      return
-    end
-    require("hypr.lib.layout").dispatch(action)
-  end
-end
-
-local bind = require("hypr.lib.bind")
-hl.bind(bind.parse_mods({ config.main_mod, "h" }), focus_or_dofus("focus_left", true), {
-  description = "Move focus left (Dofus: prev character)",
-  submap_universal = true,
-})
-hl.bind(bind.parse_mods({ config.main_mod, "l" }), focus_or_dofus("focus_right", false), {
-  description = "Move focus right (Dofus: next character)",
-  submap_universal = true,
-})
+-- MOD+H/L used to move window focus generically here, cycling the Dofus
+-- group instead on a Dofus window (`dofus_team.nav`) — registered before
+-- `hypr/binds.lua`'s scene-aware tile navigation (`hypr.services` loads
+-- ahead of `hypr.binds` in `hypr/init.lua`), so it silently shadowed that
+-- bind for every chord it claimed (Hyprland keeps the first registration;
+-- AGENTS.md "Hyprland primitives"). LEO-380 folds the Dofus case into the
+-- one pure decision instead: a Dofus group is one tile for `mod+h/l`, and
+-- `mod+j/k` cycles it via the Dofus group adapter
+-- (`hypr/scene/group_adapters.lua`), so this separate bind is retired
+-- rather than fixed in place.

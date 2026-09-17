@@ -39,10 +39,42 @@ end
 ---@field addresses string[] every window in this tile, left-to-right/top-to-bottom
 ---@field group boolean whether this tile is one Hyprland group
 
+---A group's members, current/visible one first. "Current" is the member with
+---the lowest `focus` (Hyprland's `focusHistoryID`: 0 is the most recently
+---focused window overall) — the same member Hyprland itself keeps showing in
+---the group's tab stack. A tile whose members carry no `focus` field (the
+---nav spec fixtures) keeps arrival order, so this is a no-op where the field
+---is absent.
+---@param members Scene.Tile[]
+---@return Scene.Tile[]
+local function by_recency(members)
+  local out = {}
+  for i, m in ipairs(members) do
+    out[i] = m
+  end
+  table.sort(out, function(a, b)
+    local fa, fb = a.focus, b.focus
+    if fa == nil and fb == nil then
+      return false
+    end
+    if fa == nil then
+      return false
+    end
+    if fb == nil then
+      return true
+    end
+    return fa < fb
+  end)
+  return out
+end
+
 ---The scene's tiles, left to right, in exactly the order
 ---`hypr/scene/layout.lua` places them (declared blocks by `order`, then
 ---strays in arrival order) — so `mod+h/l` always agrees with what is on
----screen.
+---screen. A group tile's `addresses` lead with its current/visible member
+---(`by_recency`), not just whichever member the compositor happened to list
+---first, so crossing INTO a group tile lands on what the user was already
+---looking at (LEO-380).
 ---@param scene Scene.Spec
 ---@param tiles Scene.Tile[] tiled windows present on the scene's workspace
 ---@return Nav.Tile[]
@@ -53,7 +85,7 @@ function M.tile_order(scene, tiles)
   for _, entry in ipairs(sequenced) do
     local addresses = {}
     if entry.tile.group and members[entry.tile.group] then
-      for _, member in ipairs(members[entry.tile.group]) do
+      for _, member in ipairs(by_recency(members[entry.tile.group])) do
         addresses[#addresses + 1] = member.address
       end
     else
@@ -148,6 +180,57 @@ function M.window_neighbor(addresses, current, dir)
     end
   end
   return nil
+end
+
+-- === mod+h/l decision (LEO-380) ===
+
+---@class Nav.Action
+---@field kind "window"|"monitor"|"none"
+---@field address string? present when kind == "window"
+---@field name string? present when kind == "monitor"
+
+---One `mod+h`/`mod+l` press, decided in full: move across tiles in scene
+---order (a group is one tile); at the edge, or from an empty workspace (no
+---`active` window), cross to the adjacent non-ignored monitor; landing there
+---focuses its edge tile, or the monitor itself when that side has none
+---(`target` omitted or empty) — so the opposite key always returns, since
+---focusing a monitor still lets its own tile lookup find the window next
+---time.
+---@param ctx {
+---monitors: { name: string, x: number }[],
+---ignored: string[]?,
+---focused: string?,
+---tiles: Nav.Tile[],
+---active: string?,
+---dir: "left"|"right",
+---target: { tiles: Nav.Tile[] }?}
+---@return Nav.Action
+function M.decide(ctx)
+  local index = ctx.active and M.tile_index(ctx.tiles, ctx.active) or nil
+  if index then
+    local neighbor = M.neighbor_tile(ctx.tiles, index, ctx.dir)
+    if neighbor then
+      return { kind = "window", address = neighbor.addresses[1] }
+    end
+  end
+
+  -- Empty workspace, focused window not in the tile list, or the tile-order
+  -- edge: cross to the adjacent usable monitor.
+  if not ctx.focused then
+    return { kind = "none" }
+  end
+  local ordered = M.monitor_order(M.usable_monitors(ctx.monitors, ctx.ignored))
+  local adjacent = M.adjacent_monitor(ordered, ctx.focused, ctx.dir)
+  if not adjacent then
+    return { kind = "none" }
+  end
+
+  local target_tiles = ctx.target and ctx.target.tiles
+  local edge = target_tiles and #target_tiles > 0 and M.edge_tile(target_tiles, ctx.dir)
+  if edge then
+    return { kind = "window", address = edge.addresses[1] }
+  end
+  return { kind = "monitor", name = adjacent.name }
 end
 
 -- === Monitors ===
