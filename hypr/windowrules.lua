@@ -406,7 +406,7 @@ hl.window_rule({
   name = "e2e-nested-hyprland",
   match = { class = "aquamarine" },
   float = true,
-  size = { 960, 540 },
-  move = { "monitor_w - 980", "monitor_h - 580" },
+  size = { 640, 180 },
+  move = { "monitor_w - 660", "monitor_h - 220" },
   no_initial_focus = true,
 })

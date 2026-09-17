@@ -175,7 +175,7 @@ cmd_shot() {
     hq_require_up
     local out=${1:-"$E2E_ROOT/shot.png"} raw="$E2E_ROOT/shot-raw.png"
     WAYLAND_DISPLAY="$E2E_WAYLAND" grim "$raw" || hq_fail "grim failed"
-    magick "$raw" -resize 960x "$out" 2>/dev/null || cp "$raw" "$out"
+    magick "$raw" -resize 640x "$out" 2>/dev/null || cp "$raw" "$out"
     echo "$out"
 }
 

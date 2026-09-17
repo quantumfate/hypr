@@ -125,7 +125,7 @@ e2e_boot() {
     wait_until 100 hc -j monitors >/dev/null
     # Small window: conf/hosts/e2e.lua is data and can't call hl.monitor()
     # itself, so pin WAYLAND-1's mode here, once, for every caller.
-    hc keyword monitor "WAYLAND-1,1280x720@60,0x0,1" >/dev/null || true
+    hc keyword monitor "WAYLAND-1,1280x360@60,0x0,1" >/dev/null || true
     e2e_log "nested instance $E2E_SIG up (pid $E2E_PID, $E2E_WAYLAND, root $E2E_ROOT)"
 }
 
