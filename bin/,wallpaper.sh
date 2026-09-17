@@ -5,12 +5,11 @@
 # does not any more: hyprpaper is being replaced by awww (it cannot crossfade),
 # and a second writer of the wallpaper would bypass everything ,theme.sh does
 # on the way — the blur/desaturate/tint pass that keeps a translucent bar
-# legible, the per-mood and per-palette binding, and the result record.
+# legible, the per-palette binding, and the result record.
 #
 # So this only chooses. ,theme.sh applies.
 #
 #   ,wallpaper.sh              bind a random wallpaper to the current palette
-#   ,wallpaper.sh --mood       bind it to the current mood instead
 
 set -euo pipefail
 
@@ -33,7 +32,4 @@ wallpaper=$(find "$WALLPAPER_DIR" -type f \
     exit 1
 }
 
-if [ "${1-}" = "--mood" ]; then
-    exec ,theme.sh mood-wallpaper "$wallpaper"
-fi
 exec ,theme.sh wallpaper "$wallpaper"

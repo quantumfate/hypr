@@ -324,14 +324,13 @@ STUB
     export THEME_AWWW="$ROOT/awww" THEME_AWWW_DAEMON="$ROOT/awww-daemon" AWWW_LOG
 }
 
-echo "wallpaper resolution: mood beats palette, palette beats the single fallback"
+echo "wallpaper resolution: a palette binding beats the single fallback"
 setup
 export THEME_MAGICK="$ROOT/no-such-magick-binary" # image processing is not the point here
 awww_stub
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
 printf 'single' >"$ROOT/single.png"
 printf 'palette-bound' >"$ROOT/palette.png"
-printf 'mood-bound' >"$ROOT/mood.png"
 
 # Nothing bound yet: falls all the way through to the bare `wallpaper` field.
 printf '{"palette":"mocha","mode":"manual","wallpaper":"%s"}\n' "$ROOT/single.png" >"$STORE"
@@ -343,13 +342,6 @@ contains "no binding falls back to the single wallpaper" "single.png" "$(cat "$A
 : >"$AWWW_LOG"
 "$THEME" apply >/dev/null
 contains "a palette binding outranks the bare fallback" "palette.png" "$(cat "$AWWW_LOG")"
-
-# A mood binding outranks the palette binding, even though both are set.
-"$THEME" mood-wallpaper "$ROOT/mood.png" work >/dev/null
-jq '.mood = "work"' "$STORE" >"$STORE.tmp" && mv "$STORE.tmp" "$STORE"
-: >"$AWWW_LOG"
-"$THEME" apply >/dev/null
-contains "mood wins over the bound palette" "mood.png" "$(cat "$AWWW_LOG")"
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
 teardown
 
@@ -375,15 +367,15 @@ contains "an empty wallpaper directory still reports unchanged" "wallpaper: unch
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
 teardown
 
-echo "wallpaper resolution: an unknown mood is refused, like an unknown palette"
+echo "wallpaper resolution: an unknown palette is refused"
 setup
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
 printf 'x' >"$ROOT/x.png"
-if "$THEME" mood-wallpaper "$ROOT/x.png" nightmare >/dev/null 2>&1; then
-    printf '  FAIL an unknown mood was accepted\n'
+if "$THEME" wallpaper "$ROOT/x.png" nightmare >/dev/null 2>&1; then
+    printf '  FAIL an unknown palette was accepted\n'
     fail=$((fail + 1))
 else
-    printf '  ok   an unknown mood is refused\n'
+    printf '  ok   an unknown palette is refused\n'
     pass=$((pass + 1))
 fi
 teardown
@@ -487,31 +479,26 @@ contains "the unnamed surface records a named failure, not a crash" \
     "gtk: catppuccin-gruvbox-material-mauve-standard+default not installed" "$out"
 teardown
 
-echo "a mode leases its wallpaper, above the palette binding and under the mood's"
+echo "a mode's wallpaper is the leased palette's own binding"
 setup
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers" "$XDG_STATE_HOME/quantum-store"
-touch "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" "$XDG_CONFIG_HOME/hypr/wallpapers/gaming.jpg"
+touch "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" "$XDG_CONFIG_HOME/hypr/wallpapers/latte.jpg"
 STORE="$XDG_STATE_HOME/quantum-store/theme.json"
 printf '{"mode":"manual","palette":"mocha","day":"latte","night":"mocha"}\n' >"$STORE"
-printf '{"modes":{"gaming":{"name":"gaming","presentation":{"wallpaper":"/w-LEASE.jpg"}}}}\n' \
+printf '{"modes":{"work":{"name":"work","presentation":{"palette":"latte"}}}}\n' \
     >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
 
-# At rest the palette's own binding answers; the mood's own binding — a user
-# decision — outranks the lease; the lease outranks the palette binding.
+# Wallpapers belong to palettes, not modes: a mode changes the wallpaper only
+# by leasing a palette, so binding latte's own wallpaper is what a leasing
+# mode picks up.
 "$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" mocha >/dev/null
-contains "at rest the palette binding answers" \
+"$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/latte.jpg" latte >/dev/null
+contains "at rest the baseline palette's binding answers" \
     "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" "$("$THEME" status)"
 
-printf '{"mode":"gaming","until":null}' >"$XDG_STATE_HOME/quantum-store/focus.json"
-contains "a held lease binds its own look" "wallpaper /w-LEASE.jpg" "$("$THEME" status)"
-
-# A user decision outranks the declared one. The 'mood' pointer is what
-# `cmd_mood_wallpaper` (and the shell switcher) write, so the chain reads the
-# mood the way the shell already does.
-jq '. + {mood: "gaming"}' "$STORE" >"$STORE.tmp" && mv "$STORE.tmp" "$STORE"
-"$THEME" mood-wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/gaming.jpg" gaming >/dev/null
-contains "the mood's own binding outranks the lease" \
-    "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/gaming.jpg" "$("$THEME" status)"
+printf '{"mode":"work","until":null}' >"$XDG_STATE_HOME/quantum-store/focus.json"
+contains "a held lease shows the leased palette's own binding" \
+    "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/latte.jpg" "$("$THEME" status)"
 teardown
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
@@ -585,3 +572,42 @@ latte | mocha)
     ;;
 esac
 teardown
+
+echo "a mode's leased palette can be a day/night pair"
+setup
+printf '{"mode":"manual","palette":"mocha","day":"latte","night":"mocha"}\n' >"$STORE"
+printf '{"modes":{"work":{"name":"work","presentation":{"palette":{"day":"latte","night":"frappe"}}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"work","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+
+check "the day half leases by day" "latte" "$(THEME_HOUR=10 "$THEME" get)"
+check "the night half leases by night" "frappe" "$(THEME_HOUR=22 "$THEME" get)"
+teardown
+
+echo "a plain string lease palette applies to both day and night"
+setup
+printf '{"mode":"manual","palette":"mocha","day":"latte","night":"mocha"}\n' >"$STORE"
+printf '{"modes":{"work":{"name":"work","presentation":{"palette":"frappe"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"work","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+
+check "a plain string leases by day too" "frappe" "$(THEME_HOUR=10 "$THEME" get)"
+check "and by night" "frappe" "$(THEME_HOUR=22 "$THEME" get)"
+teardown
+
+echo "neutral holds no lease, day/night pair or not"
+setup
+printf '{"mode":"manual","palette":"mocha","day":"latte","night":"mocha"}\n' >"$STORE"
+printf '{"modes":{"work":{"name":"work","presentation":{"palette":{"day":"latte","night":"frappe"}}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"neutral","until":null}\n' \
+    >"$XDG_STATE_HOME/quantum-store/focus.json"
+
+check "no held mode means the baseline answers by day" "mocha" "$(THEME_HOUR=10 "$THEME" get)"
+check "and by night" "mocha" "$(THEME_HOUR=22 "$THEME" get)"
+teardown
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

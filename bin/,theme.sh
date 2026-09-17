@@ -17,7 +17,6 @@
 #   ,theme.sh toggle                swap between the day and night palettes
 #   ,theme.sh get                   print the resolved palette
 #   ,theme.sh wallpaper F [P]       bind a wallpaper to a palette (default: current)
-#   ,theme.sh mood-wallpaper F [M]  bind a wallpaper to a mood (default: current)
 #   ,theme.sh status                print what each surface is currently set to
 #
 # Writes go through the same store the shell uses, so setting a palette here and
@@ -50,12 +49,6 @@ PALETTES=(latte frappe macchiato mocha)
 # Which flavours are light. Drives GTK's color-scheme, which is a separate
 # setting from the theme name and is what applications actually branch on.
 LIGHT=(latte)
-
-# The declared focus modes (see quickshell's hyprfocus.default.json — the
-# shipped declaration is what enumerates them). Mood is set elsewhere (the
-# shell's focus switcher writes `mood` into theme.json); this script only
-# reads it, to pick a wallpaper — it never sets one itself.
-MOODS=(neutral work study gaming)
 
 die() {
     printf '%s: %s\n' "${0##*/}" "$1" >&2
@@ -199,12 +192,6 @@ is_light() {
     return 1
 }
 
-is_mood() {
-    local m=$1
-    for known in "${MOODS[@]}"; do [ "$m" = "$known" ] && return 0; done
-    return 1
-}
-
 # --- which palette --------------------------------------------------------
 
 # The pointer, resolved exactly like the mode policy reads it everywhere else:
@@ -223,16 +210,21 @@ lease_state() {
     printf '%s' "$mode"
 }
 
-# The palette a mode leases while it runs (LEO-288). The declaration names one
-# in the mode's `presentation`; the pointer (focus.json) says the mode is on,
-# and a timed mode whose `until` already passed reads as neutral — the same
-# rule the mode policy keeps everywhere else. "" means no lease held, and an
+# The palette a mode leases while it runs (LEO-288). The declaration names a
+# day/night pair (or one palette for both) in the mode's `presentation`; the
+# pointer (focus.json) says the mode is on, and a timed mode whose `until`
+# already passed reads as neutral — the same rule the mode policy keeps
+# everywhere else. The pair follows `daytime`, so the sun timer flips a mode's
+# palette exactly as it flips the baseline. "" means no lease held, and an
 # unknown lease palette reads as no lease: resolution never fails.
 lease() {
-    local mode until until_ms palette
+    local mode palette half=night
     mode=$(lease_state)
     [ "$mode" != neutral ] || return 0
-    palette=$(jq -r --arg m "$mode" '.modes[$m].presentation.palette // ""' "$DECLARATION" 2>/dev/null) || return 0
+    ! daytime || half=day
+    palette=$(jq -r --arg m "$mode" --arg h "$half" \
+        '.modes[$m].presentation.palette // "" | if type == "object" then .[$h] // "" else . end' \
+        "$DECLARATION" 2>/dev/null) || return 0
     is_palette "$palette" && printf '%s' "$palette" || return 0
 }
 
@@ -260,9 +252,13 @@ resolve() {
 # Sunrise/sunset without a network call or a geolocation dependency: the hours
 # are close enough for a colour scheme, and being wrong by twenty minutes at the
 # equinox costs nothing.
+#
+# THEME_HOUR overrides the clock, the same injection pattern as THEME_GSETTINGS
+# below: tests need to force day/night deterministically rather than waiting for
+# the clock to agree.
 daytime() {
     local hour
-    hour=$(date +%-H)
+    hour=${THEME_HOUR:-$(date +%-H)}
     [ "$hour" -ge 7 ] && [ "$hour" -lt 19 ]
 }
 
@@ -676,34 +672,18 @@ process_wallpaper() {
     fi
 }
 
-# Which wallpaper this palette should show: mood binding, then palette binding,
-# then the single fallback, then <palette>.jpg. A palette with none of those is
-# legitimate configuration, so the last fallback is a random pick from the
-# wallpapers directory — the same semantics `,wallpaper.sh` gives a user who
-# asked for anything — rather than an error. The pick is not persisted: a
-# binding is a user decision, and applying it instead of forgetting it would
-# re-roll on every palette switch. Shared with `status` so the two can never
-# disagree about what is bound.
+# Which wallpaper this palette should show: the palette binding, then the
+# single fallback, then <palette>.jpg. Wallpapers belong to palettes, not to
+# modes, so a mode changes the wallpaper only by leasing a palette. A palette
+# with none of those is legitimate configuration, so the last fallback is a
+# random pick from the wallpapers directory — the same semantics
+# `,wallpaper.sh` gives a user who asked for anything — rather than an error.
+# The pick is not persisted: a binding is a user decision, and applying it
+# instead of forgetting it would re-roll on every palette switch. Shared with
+# `status` so the two can never disagree about what is bound.
 resolve_wallpaper() {
-    local palette=$1 mood wall mode lease_wall
-    # The mode's wallpaper lease (LEO-289) sits above the paint binding and
-    # the palette binding, the same way the palette lease sits above the
-    # baseline: a mode that needs a specific look names the file, and hands
-    # it back when the mode ends. But a mood's own binding — the wallpaper a
-    # user bound to that mood — outranks the lease, the same way an explicit
-    # pick outranks a lease for the palette itself.
-    if [ -z "${wall:-}" ]; then
-        mood=$(get mood "")
-        if [ -n "$mood" ]; then
-            wall=$(jq -r --arg m "$mood" '.moods[$m] // ""' "$STATE" 2>/dev/null || echo "")
-        fi
-    fi
-    mode=$(lease_state)
-    if [ "$mode" != neutral ]; then
-        lease_wall=$(jq -r --arg m "$mode" '.modes[$m].presentation.wallpaper // ""' "$DECLARATION" 2>/dev/null || echo "")
-        [ -n "$lease_wall" ] && [ -z "${wall:-}" ] && wall="$lease_wall"
-    fi
-    [ -n "${wall:-}" ] || wall=$(jq -r --arg p "$palette" '.wallpapers[$p] // ""' "$STATE" 2>/dev/null || echo "")
+    local palette=$1 wall
+    wall=$(jq -r --arg p "$palette" '.wallpapers[$p] // ""' "$STATE" 2>/dev/null || echo "")
     [ -n "$wall" ] || wall=$(get wallpaper "")
     if [ -z "$wall" ]; then
         local dir="$CONFIG/hypr/wallpapers"
@@ -727,7 +707,7 @@ apply_wallpaper() {
     wall=$(resolve_wallpaper "$palette")
     [ -n "$wall" ] && [ -f "$wall" ] || {
         echo "wallpaper: unchanged"
-        record_failed wallpaper "no wallpaper bound to mood or palette and no default found"
+        record_failed wallpaper "no wallpaper bound to the palette and no default found"
         return
     }
     wall=$(process_wallpaper "$palette" "$wall")
@@ -783,7 +763,7 @@ cmd_apply() {
     # disagree about what the desk shows with no lease held, even in auto
     # mode. A lease is never written here: a mode holds a palette the way it
     # holds a window, and when the mode ends the store still points at what
-    # the sun (or the user) chose — a mood must not bury the baseline.
+    # the sun (or the user) chose — a mode must not bury the baseline.
     put "$(jq -n --arg p "$baseline" '{palette: $p}')"
 
     apply_kitty "$palette"
@@ -840,22 +820,6 @@ cmd_wallpaper() {
     cmd_apply
 }
 
-# Bind a wallpaper to a mood: `,theme.sh mood-wallpaper <file> [mood]`. No
-# `cmd_mood`/`set`-equivalent exists — the mood itself is the shell's to pick,
-# not this script's; this only lets a binding be made without clicking through
-# the shell to do it.
-cmd_mood_wallpaper() {
-    local file=${1-} mood=${2-}
-    [ -n "$file" ] || die "mood-wallpaper needs a file"
-    [ -f "$file" ] || die "no such file: $file"
-    [ -n "$mood" ] || mood=$(get mood "")
-    [ -n "$mood" ] || die "no mood is set; pass one explicitly: ${MOODS[*]}"
-    is_mood "$mood" || die "unknown mood '$mood' (have: ${MOODS[*]})"
-    put "$(jq -n --arg m "$mood" --arg f "$file" '{moods: {($m): $f}}')"
-    echo "wallpaper: $mood -> ${file##*/}"
-    cmd_apply
-}
-
 cmd_status() {
     printf 'store     %s\n' "$STATE"
     printf 'mode      %s\n' "$(get mode auto)"
@@ -868,9 +832,6 @@ cmd_status() {
     printf 'kvantum   %s\n' "$(sed -n 's/^theme=//p' "$CONFIG/Kvantum/kvantum.kvconfig" 2>/dev/null || echo unset)"
     # Which wallpaper is bound, resolved the same way apply_wallpaper resolves
     # it — so `status` and an apply can never disagree about what is showing.
-    local mood
-    mood=$(get mood "")
-    printf 'mood      %s\n' "${mood:-none}"
     printf 'wallpaper %s\n' "$(resolve_wallpaper "$(resolve)")"
 }
 
@@ -885,10 +846,6 @@ toggle) cmd_toggle ;;
 wallpaper)
     shift
     cmd_wallpaper "${1-}" "${2-}"
-    ;;
-mood-wallpaper)
-    shift
-    cmd_mood_wallpaper "${1-}" "${2-}"
     ;;
 get)
     resolve
