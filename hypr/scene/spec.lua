@@ -263,16 +263,19 @@ function M.ambiguous_classes(spec)
   local count, order = {}, {}
   for _, block in ipairs(spec.blocks) do
     for _, entry in ipairs(block.classes) do
-      if not count[entry] then
-        order[#order + 1] = entry
+      -- A slot tells two blocks of one class apart, so only class-only
+      -- claims count toward ambiguity.
+      local key = block.slot and (entry .. "@" .. block.slot) or entry
+      if not count[key] then
+        order[#order + 1] = { key = key, class = entry }
       end
-      count[entry] = (count[entry] or 0) + 1
+      count[key] = (count[key] or 0) + 1
     end
   end
   local out = {}
   for _, entry in ipairs(order) do
-    if count[entry] > 1 then
-      out[#out + 1] = entry
+    if count[entry.key] > 1 then
+      out[#out + 1] = entry.class
     end
   end
   return out

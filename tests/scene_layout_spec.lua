@@ -318,13 +318,14 @@ t.describe("slot blocks (LEO-364)", function()
     t.eq("pokemon/stream", candidates[2].slot)
   end)
 
-  t.it("a slot class with no matching tag is still ambiguous by class alone", function()
-    -- Two blocks share `classes`, exactly like any other declared conflict
-    -- (docs/scenes.md "by design" case) — `slot` disambiguates live windows,
-    -- it does not change what the static declaration itself says.
-    local spec = scene({ CHAT, STREAM })
+  t.it("distinct slots are not an ambiguous class; a bare duplicate still is", function()
+    -- A slot is what tells two blocks of one class apart, so the declaration
+    -- lint only flags blocks that claim a class with nothing to separate them.
     local spec_lib = require("hypr.scene.spec")
-    t.eq("zen-gaming-media", table.concat(spec_lib.ambiguous_classes(spec), ","))
+    t.eq("", table.concat(spec_lib.ambiguous_classes(scene({ CHAT, STREAM })), ","))
+    local bare_a = { classes = { "zen-gaming-media" }, order = 4 }
+    local bare_b = { classes = { "zen-gaming-media" }, order = 5 }
+    t.eq("zen-gaming-media", table.concat(spec_lib.ambiguous_classes(scene({ bare_a, bare_b })), ","))
   end)
 end)
 
