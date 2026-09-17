@@ -137,20 +137,23 @@ The two-tile split is `layout_opts.dwindle.default_split_ratio` (`0.67`). That i
 
 ## Group
 
-`group = true` on a member match set means one Hyprland group containing **only** those classes. The declaration is compiled to static rules; join and eviction are **not executed today**.
+`group = true` on a member match set means one Hyprland group containing **only** those classes.
 
-`hypr/scene/compile.lua` emits `set always` on the match and the `barred`/`deny` guard on every other class that can land on the workspace, at config load. Do not use Hyprland `lock` — it rejects later same-class members.
+**Timing fact, spiked live (LEO-369):** a static rule cannot express this. A window rule chained off another rule's _effect_ — tag on `class` + `workspace` inside `match`, then group on that tag — never fires: the tagging rule's own `workspace` match is not true yet when the window opens, so its tag effect lands _after_ open, and a rule matched on that tag never sees a window that already satisfies it. This is exactly what `compile.lua` used to emit, so no scene block ever grouped from it, and the `barred`/`deny` guard chained the same way never fired either. `match.workspace` tests where the window already is; it is not a promise about when a load-time rule's effects land relative to open.
 
-The corrective engine that used to derive a block's dominant group each pass, fold stragglers into it, and eject foreigners `auto_group` swallowed (`schedule.lua` + `model.lua` + `actuator.lua`, `HL.Group:add`/`:remove`) is retired (LEO-261). Group membership becomes **open-time rules**, scoped to the scene's workspace by tags (LEO-354); until that lands, a block that `auto_group` splits, or a foreigner it swallows, is not corrected.
-**Grouping is scoped to the scene's own workspace, not the class globally** ([lifecycle.md](lifecycle.md) D2). A class shared by two scenes — `Kitty-Main` in `code`, say, opened again on an unrelated workspace — must group only where its scene runs. `compile.lua` compiles each block class to three rules: two tagging rules, matched on `class` _and_ `workspace = "name:<scene>"` inside `match`, that stamp the Hyprland tags `scene:<name>` and `block:<name>/<order>` (one tag per rule: the `tag` effect takes a single tag, and `"+a +b"` stamps one tag literally named `a +b`); then the group rule itself, matched on the `block:<name>/<order>` tag rather than the bare class. A window of that class elsewhere never receives the tag, so it never reaches the group rule. Inside `match`, `workspace` tests where the window is; a top-level `workspace` is the effect that moves it. `onworkspace` is not a match key in the Lua API and is rejected at load.
+Grouping is decided at **runtime** instead, once per `window.open`/`window.move_to_workspace`, by `hypr/scene/grouping.lua` (pure: given a landed window, the scene spec and the live windows, it returns `seed` / `join` / `eject` / `none`) and its executor in `hypr/events/scene.lua`, through the live `HL.Group` object interface the spike verified: `hl.dispatch(hl.dsp.group.toggle({ window = "address:"..a }))` seeds a group without moving focus; `window.group:add(other)`/`:remove(other)` join and eject. No loop, no timer: one decision per event. Do not use Hyprland `lock` — it rejects later same-class members.
 
-Grouping is decided **once**, by the scene. Do not also write a `group` key in `windowrules.lua` for a class a block names; the compiler emits it.
+The group already holding the most of a block's tiles wins, derived fresh from the live windows on every event rather than remembered — the same rule the retired corrective engine (`schedule.lua` + `model.lua` + `actuator.lua`, LEO-261) used, so a block `auto_group` splits in two still converges on one. `auto_group` can still swallow a foreign window into a block's group; the executor ejects it on that foreigner's own open/move event.
+
+**Grouping is scoped to the scene's own workspace, not the class globally** ([lifecycle.md](lifecycle.md) D2). A class shared by two scenes — `Kitty-Main` in `code`, say, opened again on an unrelated workspace — must group only where its scene runs. `hypr/scene/grouping.lua` reads a window's block through `spec_lib.block_for(spec, class)` where `spec` is the scene owning the window's own workspace, so a class matching a block on a different scene never enters that scene's grouping decision. `compile.lua` still compiles each block class to two **identity** tagging rules, matched on `class` _and_ `workspace = "name:<scene>"` inside `match`, stamping `scene:<name>` and `block:<name>/<order>` (one tag per rule: the `tag` effect takes a single tag, and `"+a +b"` stamps one tag literally named `a +b`) — useful identity for logging and other readers, but nothing chains a group rule off them any more, per the timing fact above.
+
+Grouping is decided **once**, by the scene. Do not also write a `group` key in `windowrules.lua` for a class a block names; the runtime decision reads the declaration directly.
 
 ## Guard
 
-`guard` on a non-group member: `barred` (default) keeps `auto_group` from swallowing it; `deny` also refuses a deliberate toggle, for a tile whose job is to be a fixed region beside a group.
+`guard` on a non-group member (`"barred"` default, `"deny"`) is declaration metadata; nothing reads it at runtime yet — the executor above only groups/ejects for `group = true` blocks. A non-group block's own class is simply never a group-block match, so it is never folded in or ejected by the executor either.
 
-`barred` at scene level lists classes that legitimately open on the workspace without belonging to any block — a game, a launcher overlay. Scope is the same as `Group` above: `compile.lua` tags a barred class `barred:<name>` only when it opens on the scene's own workspace, then bars on that tag (never on `scene:<name>`, which every block window carries too) — so a barred class does not reach across scenes either.
+`barred` at scene level lists classes that legitimately open on the workspace without belonging to any block — a game, a launcher overlay. `compile.lua` still stamps a `barred:<name>` identity tag (scoped to the scene's own workspace, same as above) so a reader can recognize a deliberately unblocked class, but — per the timing fact above — no rule chains a group effect off it; a barred class reaching the block's group is instead the executor's `eject` case, the same path a plain foreigner takes.
 
 ## Collect
 
@@ -325,7 +328,7 @@ arrives at the layout as one target.
 The layout only runs on the workspace running the scene layout: the same
 declaration on dwindle or master — where another layout owns the geometry —
 is inert there, because nothing asks the scene layout provider to place
-anything on a workspace it does not own. The compiled group rules stay
+anything on a workspace it does not own. The runtime group decision stays
 layout-independent.
 
 `mod+shift+h/l` (tile swap, LEO-344) asks the provider for a different order

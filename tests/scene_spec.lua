@@ -93,28 +93,29 @@ end)
 t.describe("compiled rules", function()
   local compile = require("hypr.scene.compile")
 
-  ---Group rules match a block/scene tag, not a bare class, so a spec
-  ---resolves group/guard by walking tag -> group through the tagging rule
-  ---that feeds it, the same way the runtime would.
+  ---Tag stamped for `class` on `scene`'s own workspace, or nil.
   ---@param rules Scene.CompiledRule[]
   ---@param scene string
   ---@param class string
-  ---@return string? group, string? on_workspace
-  local function group_for(rules, scene, class)
-    for _, tag_rule in ipairs(rules) do
-      local applied_tag = tag_rule.tag and tag_rule.tag:sub(2)
-      if tag_rule.match.class == class and applied_tag and applied_tag:find(":" .. scene, 1, true) then
-        for _, group_rule in ipairs(rules) do
-          if group_rule.group and group_rule.match.tag == applied_tag then
-            return group_rule.group, tag_rule.match.workspace
-          end
-        end
+  ---@return string? tag, string? on_workspace
+  local function tag_for(rules, scene, class)
+    for _, rule in ipairs(rules) do
+      local applied_tag = rule.tag and rule.tag:sub(2)
+      if rule.match.class == class and applied_tag and applied_tag:find(":" .. scene, 1, true) then
+        return applied_tag, rule.match.workspace
       end
     end
     return nil, nil
   end
 
-  t.it("declares grouping once, from the scene", function()
+  -- LEO-369: a rule chained off `match = { tag = ... }` never fires (the
+  -- tagging rule's own `workspace` match is not true yet when the window
+  -- opens), so compile.lua stops emitting the group/guard effect. It keeps
+  -- stamping identity tags — the runtime decision in
+  -- hypr/scene/grouping.lua reads a window's block through
+  -- `spec_lib.block_for`, not through these tags, but the tags remain
+  -- useful identity for other readers (e.g. logging).
+  t.it("stamps identity tags only, no group or guard effect", function()
     local rules = compile.plan({
       gaming = {
         name = "gaming",
@@ -125,14 +126,15 @@ t.describe("compiled rules", function()
         barred = { "steam_app_default" },
       },
     })
-    t.eq("set always", (group_for(rules, "gaming", "Dofus.x64")))
-    t.eq("deny", (group_for(rules, "gaming", "zen-gaming-media")), "the block's own guard, not the default bar")
-    t.eq("barred", (group_for(rules, "gaming", "steam_app_default")))
+    t.eq("scene:gaming", (tag_for(rules, "gaming", "Dofus.x64")))
+    for _, rule in ipairs(rules) do
+      t.eq(nil, rule.group, rule.name .. " must not emit a group effect")
+    end
   end)
 
   -- Hyprland's `tag` effect takes one tag: "+a +b" stamps a single tag
-  -- literally named "a +b", so no group rule matching "b" ever fired.
-  t.it("stamps exactly one tag per rule, and never bars on the scene tag", function()
+  -- literally named "a +b".
+  t.it("stamps exactly one tag per rule", function()
     local rules = compile.plan({
       dofus = {
         name = "dofus",
@@ -142,48 +144,29 @@ t.describe("compiled rules", function()
     })
     local stamped = {}
     for _, rule in ipairs(rules) do
-      if rule.tag then
-        t.ok(rule.tag:match("^%+[^%s+]+$"), "one tag in " .. rule.name .. ": " .. rule.tag)
-        stamped[rule.tag] = true
-      end
-      if rule.group then
-        t.ok(rule.match.tag ~= "scene:dofus", rule.name .. " must not match the scene tag")
-      end
+      t.ok(rule.tag:match("^%+[^%s+]+$"), "one tag in " .. rule.name .. ": " .. rule.tag)
+      stamped[rule.tag] = true
     end
     t.ok(stamped["+scene:dofus"] and stamped["+block:dofus/1"], "block windows get both tags")
+    t.ok(stamped["+barred:dofus"], "barred classes get their own tag")
   end)
 
   -- The cross-scene bug (LEO-354): two scenes declaring the same class used
-  -- to compile to one global `match = { class = class }` group rule, so a
-  -- Kitty-Main opened on either workspace joined the same class-wide group.
-  t.it("groups a shared class only on its own scene's workspace", function()
+  -- to compile to one global `match = { class = class }` rule, so a
+  -- Kitty-Main opened on either workspace would have shared identity.
+  t.it("tags a shared class only on its own scene's workspace", function()
     local specs = {
       code = { name = "code", blocks = { { classes = { "Kitty-Main" }, group = true, order = 1 } }, barred = {} },
       other = { name = "other", blocks = { { classes = { "Kitty-Main" }, group = true, order = 1 } }, barred = {} },
     }
     local rules = compile.plan(specs)
 
-    local code_group, code_ws = group_for(rules, "code", "Kitty-Main")
-    local other_group, other_ws = group_for(rules, "other", "Kitty-Main")
-    t.eq("set always", code_group)
-    t.eq("set always", other_group)
+    local code_tag, code_ws = tag_for(rules, "code", "Kitty-Main")
+    local other_tag, other_ws = tag_for(rules, "other", "Kitty-Main")
+    t.eq("scene:code", code_tag)
+    t.eq("scene:other", other_tag)
     t.eq("name:code", code_ws, "the code scene's tagging rule is scoped to the code workspace")
     t.eq("name:other", other_ws, "the other scene's tagging rule is scoped to the other workspace")
-
-    -- Distinct block tags mean distinct group rules: a window tagged
-    -- `block:code/1` (because it opened on the code workspace) never
-    -- satisfies `match = { tag = "block:other/1" }`, and a Kitty-Main opened
-    -- on a third, undeclared workspace matches neither tagging rule at all,
-    -- so it is never tagged and never reaches a group rule — "gets none".
-    local group_rule_tags = {}
-    for _, rule in ipairs(rules) do
-      if rule.group then
-        t.ok(rule.match.class == nil, "group rule " .. rule.name .. " must match a tag, not a class")
-        group_rule_tags[rule.match.tag] = true
-      end
-    end
-    t.ok(group_rule_tags["block:code/1"], "code scene has its own group rule")
-    t.ok(group_rule_tags["block:other/1"], "other scene has its own, distinct group rule")
   end)
 
   t.it("plan is pure and deterministically sorted", function()

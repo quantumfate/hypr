@@ -307,6 +307,7 @@ The Lua API has object and handle interfaces that make the dispatcher workaround
 - **`HL.Group:add(window)` / `:remove(window)`** — window-targeted grouping. No adjacency, no hops.
 - **`set_enabled`** on the handles returned by `hl.bind`, `hl.window_rule`, `hl.workspace_rule` and `hl.layer_rule` — rules and binds are admitted and withdrawn at runtime, with no config reload.
 - `auto_group` can still swallow foreigners; runtime eject is required even after compiling `set always` / `barred`.
+- A window rule matched on another rule's effect (e.g. `match = { tag = "..." }` where that tag is stamped by a rule matched on `workspace = "name:<ws>"`) never fires from that chain: the feeding rule's own `workspace` match is not true yet when the window opens, so its tag lands after open and the dependent rule never sees it (spiked live, LEO-369). Compile-time `group`/`barred`/`deny` effects chained off a workspace-scoped tag never fire; decide them at runtime instead.
 
 Only if none of the above fits:
 

@@ -25,6 +25,7 @@
 -- (LEO-352) and mode-scoped binding admission on workspace arrival.
 local spec_lib = require("hypr.scene.spec")
 local companion = require("hypr.scene.companion")
+local grouping = require("hypr.scene.grouping")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
 
@@ -41,9 +42,10 @@ local pending = {}
 ---window's lifetime is queryable by the same key.
 ---@param w HL.Window?
 ---@param scene_name string?
+---@param extra table? stage/event/decision/reason/block, merged over the base fields
 ---@return table
-local function window_fields(w, scene_name)
-  return {
+local function window_fields(w, scene_name, extra)
+  local fields = {
     trace = w and w.address,
     address = w and w.address,
     class = w and w.class,
@@ -53,6 +55,10 @@ local function window_fields(w, scene_name)
     scene = scene_name,
     workspace = w and w.workspace and w.workspace.name,
   }
+  for key, value in pairs(extra or {}) do
+    fields[key] = value
+  end
+  return fields
 end
 
 ---Run the companion lifecycle for the named scene against live windows.
@@ -106,6 +112,77 @@ local function scene_for(w)
   end
   local spec = w.workspace and specs[w.workspace.name]
   return spec and spec_lib.block_for(spec, w.class) and spec.name or nil
+end
+
+---Execute one `grouping.decide` decision (LEO-369): `hl.dispatch`/`HL.Group`
+---calls the spike verified live, never a loop or timer. `seed` folds every
+---currently ungrouped block peer in the same pass, since a peer that opened
+---first has no future event of its own to catch it.
+---The scene is read from `w`'s workspace directly, not `scene_for` (which
+---only names a scene when the window's own class matches one of its
+---blocks): an ejectable foreigner's class matches no block by definition,
+---but its workspace still owns a scene whose group it was swallowed into.
+---@param w HL.Window?
+local function apply_group_decision(w)
+  local spec = w and w.workspace and specs[w.workspace.name]
+  if not spec then
+    return
+  end
+  local scene_name = spec.name
+  local decision = grouping.decide(spec, w, hl.get_windows() or {})
+  local block_field = decision.block and ("%s/%d"):format(scene_name, decision.block.order)
+
+  if decision.action == "seed" and decision.members and #decision.members >= 2 then
+    local anchor = decision.members[1]
+    hl.dispatch(hl.dsp.group.toggle({ window = "address:" .. anchor.address }))
+    local seeded = hl.get_window("address:" .. anchor.address)
+    if seeded and seeded.group then
+      for i = 2, #decision.members do
+        local member = hl.get_window("address:" .. decision.members[i].address)
+        if member then
+          pcall(function()
+            seeded.group:add(member)
+          end)
+        end
+      end
+    end
+    trace.emit(window_fields(w, scene_name, {
+      stage = "arrange",
+      event = "group_seed",
+      decision = "seed",
+      reason = "seeded block group",
+      block = block_field,
+    }))
+  elseif decision.action == "join" and decision.target then
+    local target = hl.get_window("address:" .. decision.target.address)
+    local joiner = hl.get_window("address:" .. w.address)
+    if target and target.group and joiner then
+      pcall(function()
+        target.group:add(joiner)
+      end)
+    end
+    trace.emit(window_fields(w, scene_name, {
+      stage = "arrange",
+      event = "group_join",
+      decision = "join",
+      reason = "joined block group",
+      block = block_field,
+    }))
+  elseif decision.action == "eject" then
+    local victim = hl.get_window("address:" .. w.address)
+    if victim and victim.group then
+      pcall(function()
+        victim.group:remove(victim)
+      end)
+    end
+    trace.emit(window_fields(w, scene_name, {
+      stage = "arrange",
+      event = "group_eject",
+      decision = "eject",
+      reason = "foreign window ejected from block group",
+      block = block_field,
+    }))
+  end
 end
 
 local M = {}
@@ -177,6 +254,7 @@ hl.on("window.open", function(w)
   fields.reason = scene_name and ("matched scene " .. scene_name) or "no scene claims this class"
   trace.emit(fields)
   converge_companions(scene_name)
+  apply_group_decision(w)
 end)
 
 hl.on("window.close", function(w)
@@ -215,6 +293,7 @@ hl.on("window.move_to_workspace", function(w)
   -- may have lost its last, and the event's payload cannot say where from.
   -- The lifecycle re-derives from live windows like everything else here.
   converge_companions(scene_name)
+  apply_group_decision(w)
   for other_scene, spec in pairs(specs) do
     for _, block in ipairs(spec.blocks) do
       if block.spawn then

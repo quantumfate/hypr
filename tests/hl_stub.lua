@@ -242,7 +242,19 @@ function M.new(stub_opts)
   function hl.get_workspace_windows()
     return {}
   end
-  function hl.get_window()
+  -- Real Hyprland accepts "address:<addr>" as a window selector; specs that
+  -- want it resolved through their own `get_windows` override can keep using
+  -- that default, so grouping specs need not stub `get_window` separately.
+  function hl.get_window(query)
+    local address = type(query) == "string" and query:match("^address:(.+)$")
+    if not address then
+      return nil
+    end
+    for _, w in ipairs(hl.get_windows() or {}) do
+      if w.address == address then
+        return w
+      end
+    end
     return nil
   end
   function hl.get_layers()
@@ -269,6 +281,36 @@ function M.new(stub_opts)
     })
   end
   return hl
+end
+
+--- A minimal live-shaped `HL.Group`: `.members` (each `{address=...}`, the
+--- shape `hypr/scene/grouping.lua`'s `group_key` and `hypr/scene/provider.lua`'s
+--- `window_tile` both read) plus `:add`/`:remove`, mutating both the group
+--- and the member windows' `.group` field the way the real object does.
+--- `windows[address].group = group` seeds membership; grouping specs build
+--- one of these per group.toggle to simulate the spike's synchronous result
+--- (`hl.get_window(addr).group` non-nil right after the dispatch).
+---@param seed HL.Window[] windows already in the group when it is created
+function M.new_group(seed)
+  local group = { members = {} }
+  for _, w in ipairs(seed) do
+    group.members[#group.members + 1] = { address = w.address }
+    w.group = group
+  end
+  function group:add(w)
+    self.members[#self.members + 1] = { address = w.address }
+    w.group = self
+  end
+  function group:remove(w)
+    for i, member in ipairs(self.members) do
+      if member.address == w.address then
+        table.remove(self.members, i)
+        break
+      end
+    end
+    w.group = nil
+  end
+  return group
 end
 
 return M

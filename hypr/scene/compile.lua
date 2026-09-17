@@ -1,23 +1,28 @@
--- Scene declarations to static window rules (LEO-245, LEO-354).
+-- Scene declarations to static window rules (LEO-245, LEO-354, LEO-369).
 --
--- Grouping has to be asserted twice — once at config load so a window is born
--- in the right group, once at runtime so it stays there — but it must only be
--- *decided* once. Before this, the compile-time half was hand-written in
--- windowrules.lua and the runtime half was the engine, and the two disagreed:
--- `set always` joins whatever group is focused, so the static rule could put
--- a window in the wrong group and the engine would then spend a pass undoing
--- it. Now the scene is the single source and this file is its compiler.
+-- Grouping used to be asserted twice — once at config load so a window is
+-- born in the right group, once at runtime so it stays there — but the
+-- compile-time half never actually fired. Spiked live (LEO-369): a rule
+-- whose `match` includes `workspace = "name:<ws>"` has its tag effect land
+-- *after* the window opens, and a second rule chained off that tag (the
+-- group rule) never sees a window that already satisfies it — grouping and
+-- the `barred`/`deny` guard chained the same way never fired for a single
+-- scene block. Group and guard are now decided at runtime, once per
+-- `window.open`/`window.move_to_workspace`, by `hypr/scene/grouping.lua` and
+-- its executor in `hypr/events/scene.lua`, through the live `HL.Group`
+-- object interface (`group.toggle`, `:add`, `:remove`) rather than a static
+-- rule.
 --
--- Per lifecycle.md D2, a class must group only on its own scene's workspace:
--- two scenes that both declare `Kitty-Main` must not pool a class-wide group
--- across both workspaces. A bare `match = { class = class }` group rule
--- cannot express that — it is global. So grouping is compiled in two rules
--- per class: first a tagging rule, scoped to the scene's workspace, that
--- stamps `scene:<name>` and `block:<name>/<order>` (Hyprland tags, assigned
--- at identify time — before any group rule can apply); then the group rule
--- itself, matched on the block tag rather than the bare class. A window of
--- the same class on a different workspace never receives the tag, so it
--- never matches the group rule either.
+-- Per lifecycle.md D2, a class must still be identified only on its own
+-- scene's workspace: two scenes that both declare `Kitty-Main` must not pool
+-- identity across both workspaces. A bare `match = { class = class }` rule
+-- cannot express that — it is global. So this file keeps compiling the
+-- *identity* half: a tagging rule, scoped to the scene's workspace, that
+-- stamps `scene:<name>` and `block:<name>/<order>` (Hyprland tags). The
+-- runtime grouping decision reads a window's block through
+-- `spec_lib.block_for`, the same source these tags describe, so the tags
+-- remain useful identity even though nothing chains a group rule off them
+-- any more.
 --
 -- The workspace scope is `match.workspace`: inside `match` it tests the
 -- window's workspace, while a top-level `workspace` is the effect that moves
@@ -30,11 +35,10 @@ local M = {}
 ---@class Scene.CompiledRule
 ---@field name string
 ---@field match table<string, string>
----@field tag string? Hyprland tag-assignment effect, one tag, e.g. "+block:code/1"
----@field group string? Hyprland group effect, e.g. "set always", "barred", "deny"
+---@field tag string Hyprland tag-assignment effect, one tag, e.g. "+block:code/1"
 
----Scene and block tag names, shared by the tagging rule and the group rule
----that depends on it.
+---Scene and block tag names, identity only — no group rule depends on them
+---any more (see file header).
 ---@param scene string
 ---@param order integer?
 ---@return string scene_tag, string? block_tag
@@ -70,9 +74,8 @@ function M.plan(specs)
         -- Identify: stamp the scene and block tags, but only for a window
         -- of this class that is actually on the scene's own workspace. One
         -- tag per rule: the `tag` effect takes a single tag, and "+a +b"
-        -- would stamp one tag literally named "a +b". Named "-1a"/"-1b"/
-        -- "-2-group" so sorting rule names keeps both tagging rules ahead of
-        -- the group rule that depends on them.
+        -- would stamp one tag literally named "a +b". Named "-1a"/"-1b" so
+        -- sorting rule names stays deterministic.
         rules[#rules + 1] = {
           name = ("scene-%s-%d-%s-1a-scene"):format(name, block.order, class),
           match = { class = class, workspace = on_workspace },
@@ -83,39 +86,21 @@ function M.plan(specs)
           match = { class = class, workspace = on_workspace },
           tag = "+" .. block_tag,
         }
-        -- Arrange: the group decision matches the block tag, not the bare
-        -- class, so it only ever fires for a window already confirmed to be
-        -- on this scene's workspace. `set always` rather than `set`: the
-        -- default only groups a window the first time, and the point is
-        -- that it holds for the fifth project terminal as much as the
-        -- first. `barred` on every non-group block keeps `auto_group` from
-        -- swallowing the browser into the tab strip beside it.
-        rules[#rules + 1] = {
-          name = ("scene-%s-%d-%s-2-group"):format(name, block.order, class),
-          match = { tag = block_tag },
-          group = block.group and "set always" or block.guard,
-        }
       end
     end
 
     -- Classes that legitimately land on the scene's workspace without being
-    -- part of any block — a game, a launcher overlay. They are barred rather
-    -- than left alone because `auto_group` grabs whatever opens while a group
-    -- has focus, and these open into a workspace whose main tile is a group.
-    -- Scoped the same way: tag on the scene's workspace, then match the tag.
-    -- The tag is `barred:<name>`, never the scene tag: every block window
-    -- carries `scene:<name>` too, and a bar on it would fight the group.
+    -- part of any block — a game, a launcher overlay. Identity only, same as
+    -- a block: the runtime grouping decision reads this tag to recognize a
+    -- deliberately unblocked class rather than a foreigner `auto_group`
+    -- swallowed. The tag is `barred:<name>`, never the scene tag: every
+    -- block window carries `scene:<name>` too.
     for _, class in ipairs(spec.barred) do
       local barred_tag = ("barred:%s"):format(name)
       rules[#rules + 1] = {
         name = ("scene-%s-barred-%s-1-tag"):format(name, class),
         match = { class = class, workspace = on_workspace },
         tag = "+" .. barred_tag,
-      }
-      rules[#rules + 1] = {
-        name = ("scene-%s-barred-%s-2-group"):format(name, class),
-        match = { tag = barred_tag },
-        group = "barred",
       }
     end
   end
@@ -131,7 +116,6 @@ function M.emit(specs)
       name = rule.name,
       match = rule.match,
       tag = rule.tag,
-      group = rule.group,
     })
   end
 end
