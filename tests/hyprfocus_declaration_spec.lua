@@ -24,6 +24,11 @@ local function host_workspaces()
   local p = assert(io.popen("ls conf/hosts/*.lua 2>/dev/null"))
   for path in p:lines() do
     local host = path:match("([^/]+)%.lua$")
+    -- The e2e host is a nested-compositor fixture with its own tiny workspace
+    -- set, not a machine the shipped declaration is written for.
+    if host == "e2e" then
+      goto continue
+    end
     local spec = dofile(path)
     local names = {}
     for _, rule in ipairs((spec.workspaces or {}).workspace_specs or {}) do
@@ -32,6 +37,7 @@ local function host_workspaces()
       end
     end
     hosts[host] = names
+    ::continue::
   end
   p:close()
   return hosts
