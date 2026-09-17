@@ -27,6 +27,53 @@ local function scenes_on_monitor(monitor_output)
   return nav.workspaces_on_monitor(placements, monitor_output)
 end
 
+---The output workspace keys act on: the focused monitor, or the primary when
+---the focused one is ignored (`config.host.ignored_monitors`).
+---@return string?
+function M.focused_output()
+  local host = config.host
+  local monitor = hl.get_active_monitor()
+  return nav.target_monitor(host.ignored_monitors, monitor and monitor.name, host.primary_monitor)
+end
+
+---Focus a named workspace, closing a special shown over the current one
+---first. Both are real dispatches, not values returned from a callback.
+---@param name string
+function M.focus_named(name)
+  local active = hl.get_active_workspace()
+  if active and active.special then
+    hl.dispatch(hl.dsp.workspace.toggle_special())
+  end
+  hl.dispatch(hl.dsp.focus({ workspace = "name:" .. name }))
+end
+
+---`mod+TAB` / `mod+shift+TAB`: cycle the active mode's admitted, non-special
+---workspaces on the focused monitor (the primary when that one is ignored), in
+---mode order, wrapping. Resolved at press time like the workspace row.
+function M.bind_workspace_cycle()
+  for _, spec in ipairs({
+    { mods = nil, dir = "next", desc = "Workspace: Next on this monitor" },
+    { mods = { "SHIFT" }, dir = "prev", desc = "Workspace: Previous on this monitor" },
+  }) do
+    hyprfocus_binds.bind(config.main_mod .. M.parse_mods(spec.mods) .. "TAB", function()
+      local output = M.focused_output()
+      if not output then
+        return
+      end
+      local active
+      for _, monitor in ipairs(hl.get_monitors() or {}) do
+        if monitor.name == output and monitor.activeWorkspace then
+          active = monitor.activeWorkspace.name
+        end
+      end
+      local name = nav.cycle_workspace(scenes_on_monitor(output), active, spec.dir)
+      if name then
+        M.focus_named(name)
+      end
+    end, { description = spec.desc })
+  end
+end
+
 ---Workspace row (LEO-344 decision): `mod+<key>` focuses, `mod+shift+<key>`
 ---moves the focused window to, the Nth scene of the active mode's scene list
 ---on the FOCUSED monitor — position N is this key's index in
@@ -44,22 +91,16 @@ function M.bind_workspace_row()
   for i, key in ipairs(config.host.workspaces.workspace_keys) do
     local symbol = nav.symbol_for(key)
     hyprfocus_binds.bind(config.main_mod .. M.parse_mods() .. key, function()
-      local monitor = hl.get_active_monitor()
-      local name = monitor and nav.nth_workspace(scenes_on_monitor(monitor.name), i)
-      if not name then
-        return
+      local output = M.focused_output()
+      local name = output and nav.nth_workspace(scenes_on_monitor(output), i)
+      if name then
+        M.focus_named(name)
       end
-      hl.dispatch(function()
-        if hl.get_active_workspace() and hl.get_active_workspace().special then
-          hl.dsp.workspace.toggle_special()
-        end
-        return hl.dsp.focus({ workspace = "name:" .. name })
-      end)
     end, { description = ("Workspace %s on this monitor"):format(symbol) })
 
     hyprfocus_binds.bind(config.main_mod .. M.parse_mods({ "SHIFT" }) .. key, function()
-      local monitor = hl.get_active_monitor()
-      local name = monitor and nav.nth_workspace(scenes_on_monitor(monitor.name), i)
+      local output = M.focused_output()
+      local name = output and nav.nth_workspace(scenes_on_monitor(output), i)
       if not name then
         return
       end
@@ -79,23 +120,6 @@ function M.move_focused_to_workspace(key, selector, mods, label)
     {
       description = ("Workspace: Move focused to %s"):format(label),
     }
-  )
-end
-
----@param key string
----@param selector string the workspace selector the dispatcher speaks, e.g. "name:code"
----@param label string how the bind's description spells the workspace
----@param mods string[]?
-function M.focus_workspace(key, selector, label, mods)
-  hyprfocus_binds.bind(
-    config.main_mod .. M.parse_mods(mods) .. key,
-    hl.dispatch(function()
-      if hl.get_active_workspace() and hl.get_active_workspace().special then
-        hl.dsp.workspace.toggle_special()
-      end
-      return hl.dsp.focus({ workspace = selector })
-    end),
-    { description = ("Workspace: Focus %s"):format(label) }
   )
 end
 

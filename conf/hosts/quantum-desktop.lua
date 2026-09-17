@@ -12,6 +12,9 @@
 return {
   primary_monitor = "DP-1",
   secondary_monitor = "DP-2",
+  -- The case panel: connected, never a target. Nothing is placed, shown or
+  -- focused there; a window that lands on it moves to the primary.
+  ignored_monitors = { "HDMI-A-1" },
   hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock.conf",
   -- #engine-block-layoutopts: Hyprland drops layoutopt on workspace rules
   -- (only layoutopt:orientation is implemented), so engine.layout_opts is

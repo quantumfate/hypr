@@ -163,4 +163,65 @@ t.describe("nav.symbol_for", function()
   end)
 end)
 
+t.describe("nav.cycle_workspace (mod+TAB)", function()
+  local names = { "code", "proton", "dofus" }
+
+  t.it("steps in mode order and wraps both ways", function()
+    t.eq("proton", nav.cycle_workspace(names, "code", "next"))
+    t.eq("code", nav.cycle_workspace(names, "dofus", "next"))
+    t.eq("dofus", nav.cycle_workspace(names, "code", "prev"))
+  end)
+
+  t.it("enters the list from a workspace outside it", function()
+    t.eq("code", nav.cycle_workspace(names, "special:shelf-music", "next"))
+    t.eq("dofus", nav.cycle_workspace(names, nil, "prev"))
+  end)
+
+  t.it("does nothing with nowhere to go", function()
+    t.eq(nil, nav.cycle_workspace({}, "code", "next"))
+    t.eq(nil, nav.cycle_workspace({ "code" }, "code", "next"))
+  end)
+end)
+
+t.describe("ignored monitors", function()
+  local IGNORED = { "HDMI-A-1" }
+  local MONITORS = {
+    { name = "DP-2", x = 0, activeWorkspace = { name = "logs" } },
+    { name = "DP-1", x = 2560, activeWorkspace = { name = "code" } },
+    { name = "HDMI-A-1", x = 7680, activeWorkspace = { name = "1" }, specialWorkspace = { name = "" } },
+  }
+
+  t.it("are never crossed onto", function()
+    local ordered = nav.monitor_order(nav.usable_monitors(MONITORS, IGNORED))
+    t.eq(nil, nav.adjacent_monitor(ordered, "DP-1", "right"))
+    t.eq("DP-2", nav.adjacent_monitor(ordered, "DP-1", "left").name)
+  end)
+
+  t.it("redirect a targeted action to the primary", function()
+    t.eq("DP-1", nav.target_monitor(IGNORED, "HDMI-A-1", "DP-1"))
+    t.eq("DP-2", nav.target_monitor(IGNORED, "DP-2", "DP-1"))
+    t.eq("DP-1", nav.target_monitor(IGNORED, nil, "DP-1"))
+  end)
+
+  t.it("move a window off, address-targeted, to the primary's active workspace", function()
+    local w = { address = "0xa", workspace = { name = "1", monitor = { name = "HDMI-A-1" } } }
+    t.eq({ { move = "0xa", workspace = "code" } }, nav.off_ignored(IGNORED, "DP-1", MONITORS, w))
+    local fine = { address = "0xb", workspace = { name = "code", monitor = { name = "DP-1" } } }
+    t.eq({}, nav.off_ignored(IGNORED, "DP-1", MONITORS, fine))
+  end)
+
+  t.it("re-show a special shown there on the primary", function()
+    local monitors = {
+      MONITORS[2],
+      { name = "HDMI-A-1", specialWorkspace = { name = "special:shelf-ankama" } },
+    }
+    t.eq({ { show = "shelf-ankama" } }, nav.off_ignored(IGNORED, "DP-1", monitors, nil))
+  end)
+
+  t.it("do nothing on a host that ignores none", function()
+    local w = { address = "0xa", workspace = { name = "1", monitor = { name = "HDMI-A-1" } } }
+    t.eq({}, nav.off_ignored(nil, "DP-1", MONITORS, w))
+  end)
+end)
+
 return t

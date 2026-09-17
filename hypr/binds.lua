@@ -210,8 +210,7 @@ do
   submap.tree({ name = "shelf", desc = "Shelves", entries = entries })
 end
 
-bind.focus_workspace("TAB", "e-1", "the previous used workspace")
-bind.focus_workspace("TAB", "e+1", "the next used workspace", { config.secondary_mod })
+bind.bind_workspace_cycle()
 
 -- The media guard used to live here as a separate block ahead of
 -- bind_workspaces() (Hyprland keeps the first registration for a chord). It
@@ -251,7 +250,8 @@ do
   ---@param dir "left"|"right"
   ---@return table?
   local function adjacent_monitor(monitor, dir)
-    local ordered = nav.monitor_order(hl.get_monitors() or {})
+    -- Ignored monitors are never crossed onto.
+    local ordered = nav.monitor_order(nav.usable_monitors(hl.get_monitors() or {}, config.host.ignored_monitors))
     return nav.adjacent_monitor(ordered, monitor.name, dir)
   end
 

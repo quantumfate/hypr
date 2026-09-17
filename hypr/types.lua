@@ -47,6 +47,7 @@
 ---@class Hosts
 ---@field primary_monitor string
 ---@field secondary_monitor string?
+---@field ignored_monitors string[]? outputs that are connected but never a target (placement, shelves, focus)
 ---@field hyprlock_conf string
 ---@field kb_options string?
 ---@field workspaces Workspaces

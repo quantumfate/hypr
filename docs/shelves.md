@@ -54,6 +54,10 @@ scene })`), dispatched only when that workspace is not already the active
   monitor, same as a global shelf — and the decision is logged
   (`shelf_owner_not_admitted`). Signal, Vesktop and Spotify stay global: no
   `scene`, always opens on the focused monitor.
+- **Ignored monitors:** a shelf never opens on a host's ignored monitor. When
+  the focused monitor is ignored, the primary is focused first (`decide` and
+  `show_decision` return it as `monitor`). A shelf already shown there is
+  re-shown on the primary ([scenes.md](scenes.md#ignored-monitors)).
 - Signal, Vesktop, Steam, Lutris, Spotify and the Ankama Launcher are no
   longer scenes or workspaces.
 - **Never held:** `hypr/hyprfocus/hold.lua` never parks or restores a window

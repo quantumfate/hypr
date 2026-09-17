@@ -50,7 +50,60 @@ to its role's output (`admit/scene_monitor`). The mode's role wins over the
 host file's `workspace_specs[].monitor`, which is only the load-time default. A
 role whose output is not connected falls back to primary
 (`reason=monitor_missing`); `monitor.added` re-places the last applied desk, so
-the scene moves back when the monitor returns.
+the scene moves back when the monitor returns. Every `workspace.active` also
+re-places the applied desk quietly (only moves are logged), so a scene workspace
+created after the apply, or before its output existed, still lands on its role's
+output.
+
+### Ignored monitors
+
+A host may list `ignored_monitors` (`conf/hosts/quantum-desktop.lua`:
+`{ "HDMI-A-1" }`, the case panel). An ignored output is connected but never a
+target:
+
+- `output_for` never resolves a role to it, so no scene is placed there.
+- Shelves open on the primary when the focused monitor is ignored.
+- `mod+h/l` never crosses onto it (`nav.usable_monitors`).
+- The workspace row and `mod+TAB` act on the primary when focus is on it.
+- A window that opens on, or moves to, a plain workspace of an ignored monitor
+  moves (address-targeted) to the primary's active workspace. A special shown
+  on an ignored monitor is shown on the primary instead. Both are logged as
+  `admit/ignored_monitor` (`hypr/events/scene.lua`, pure decision
+  `nav.off_ignored`).
+
+Hyprland still keeps one workspace on the ignored output; nothing else goes
+there.
+
+### Reachability invariant
+
+After every mode apply (`hypr/hyprfocus/init.lua`), every window must be on an
+admitted workspace, on a shelf or another unmanaged workspace, or held with a
+recorded origin the mode does not admit. `hold.unreachable` (pure) names each
+violation, logged as `admit/unreachable` with `reason`:
+
+| Reason         | Meaning                                                         |
+| -------------- | --------------------------------------------------------------- |
+| `withdrawn`    | on a managed workspace the mode withdrew                        |
+| `no_origin`    | held with no record; moved to the primary's active workspace    |
+| `not_restored` | held from a workspace the mode admits (restore should have run) |
+
+The check projects the moves the apply dispatched over what the compositor
+reports, because a dispatched move has not landed yet.
+
+`apply` never nests. Its own moves raise `window.move_to_workspace`, which the
+watcher converges on; a nested apply read the held-window record before the
+outer one wrote it, and the outer write dropped the inner entries. That left
+windows held with no origin. `apply` now refuses while it runs, and the watcher
+skips its tick. `hold.hold` also overwrites a stale record for a window that
+still stands on the workspace (reused address) instead of skipping it, and
+prunes records for dead addresses.
+
+### Workspace cycling
+
+`mod+TAB` / `mod+shift+TAB` cycle the applied mode's scenes on the focused
+monitor, in mode order, wrapping (`nav.cycle_workspace`). Specials and
+unmanaged workspaces are never targets; from one of them the cycle enters at
+the first (or last) scene.
 
 ### Validation (refuses the whole mode)
 

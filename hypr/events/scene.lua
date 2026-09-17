@@ -29,6 +29,7 @@ local grouping = require("hypr.scene.grouping")
 local strays = require("hypr.scene.strays")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
+local nav = require("hypr.lib.nav")
 
 local specs = spec_lib.load()
 
@@ -37,6 +38,37 @@ local specs = spec_lib.load()
 -- maps or when the scan converges on another decision for the key; no timer
 -- arms it, because the events are what a companion's presence rides anyway.
 local pending = {}
+
+---Keep the desk off the host's ignored monitors (`config.host.ignored_monitors`):
+---a special shown there is re-shown on the primary, and a window standing on
+---one of its plain workspaces moves, address-targeted, to the primary's active
+---workspace.
+---@param w HL.Window?
+local function keep_off_ignored(w)
+  local host = (rawget(_G, "config") or {}).host or {}
+  local actions = nav.off_ignored(host.ignored_monitors, host.primary_monitor, hl.get_monitors() or {}, w)
+  for _, action in ipairs(actions) do
+    if action.show then
+      hl.dispatch(hl.dsp.focus({ monitor = host.primary_monitor }))
+      hl.dispatch(hl.dsp.workspace.toggle_special(action.show))
+    else
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. action.move,
+        workspace = "name:" .. action.workspace,
+        follow = false,
+      }))
+    end
+    trace.emit({
+      stage = "admit",
+      event = "ignored_monitor",
+      decision = action.show and "show_on_primary" or "move",
+      reason = "ignored monitor",
+      window = action.move,
+      workspace = action.show or action.workspace,
+      monitor = host.primary_monitor,
+    })
+  end
+end
 
 ---Decision-record fields common to every window-keyed log line: `trace` is
 ---the window address (docs/lifecycle.md Part B), so every stage for one
@@ -281,6 +313,7 @@ hl.on("window.open", function(w)
   converge_companions(scene_name)
   apply_group_decision(w)
   apply_stray_decision(w)
+  keep_off_ignored(w)
 end)
 
 hl.on("window.close", function(w)
@@ -329,6 +362,7 @@ hl.on("window.move_to_workspace", function(w)
       end
     end
   end
+  keep_off_ignored(w)
 end)
 
 -- Arriving on a workspace admits or withholds its scene's mode-scoped binding
@@ -336,6 +370,10 @@ end)
 -- layout provider is asked by the compositor on every change and needs no
 -- event subscription (see "Hyprland primitives" in AGENTS.md).
 hl.on("workspace.active", function()
+  keep_off_ignored(nil)
+  -- A scene workspace created after the last apply (or after its output
+  -- appeared) still stands where it was made; stand it on its role's output.
+  pcall(hyprfocus.replace, true)
   local ws = hl.get_active_workspace()
   local scene_name = M.active(ws)
   if scene_name then

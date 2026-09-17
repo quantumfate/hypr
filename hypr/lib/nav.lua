@@ -201,6 +201,87 @@ function M.adjacent_monitor(ordered, name, dir)
   return nil
 end
 
+---Whether `name` is one of the host's ignored monitors (`ignored_monitors`
+---in `conf/hosts/*.lua`): an output that is connected but never a target.
+---@param ignored string[]?
+---@param name string?
+---@return boolean
+function M.is_ignored(ignored, name)
+  for _, other in ipairs(ignored or {}) do
+    if other == name then
+      return true
+    end
+  end
+  return false
+end
+
+---Monitors minus the ignored ones, order kept.
+---@generic T: { name: string }
+---@param monitors T[]
+---@param ignored string[]?
+---@return T[]
+function M.usable_monitors(monitors, ignored)
+  local out = {}
+  for _, m in ipairs(monitors or {}) do
+    if not M.is_ignored(ignored, m.name) then
+      out[#out + 1] = m
+    end
+  end
+  return out
+end
+
+---The monitor an action should target instead of `name`: the primary when
+---`name` is ignored (or unknown), `name` itself otherwise.
+---@param ignored string[]?
+---@param name string?
+---@param primary string?
+---@return string?
+function M.target_monitor(ignored, name, primary)
+  if name == nil or M.is_ignored(ignored, name) then
+    return primary
+  end
+  return name
+end
+
+---What keeps the desk off ignored monitors, as dispatch-shaped actions:
+---
+---  * `{ show = "<special name without prefix>" }` for a special shown on an
+---    ignored monitor: focus the primary, then toggle it there
+---  * `{ move = address, workspace = name }` for `w` standing on a plain
+---    workspace of an ignored monitor: sent to the primary's active workspace
+---
+---A special that is not shown (a silently routed shelf) is left alone; the
+---shelf key opens it on a usable monitor.
+---@param ignored string[]?
+---@param primary string?
+---@param monitors table[] `hl.get_monitors()`
+---@param w table? the window an event carried, if any
+---@return table[] actions
+function M.off_ignored(ignored, primary, monitors, w)
+  local actions = {}
+  if not primary or #(ignored or {}) == 0 then
+    return actions
+  end
+  local primary_workspace
+  for _, m in ipairs(monitors or {}) do
+    if m.name == primary and m.activeWorkspace then
+      primary_workspace = m.activeWorkspace.name
+    end
+  end
+  for _, m in ipairs(monitors or {}) do
+    local special = m.specialWorkspace and m.specialWorkspace.name
+    if M.is_ignored(ignored, m.name) and special and special ~= "" then
+      actions[#actions + 1] = { show = (string.gsub(special, "^special:", "")) }
+    end
+  end
+  local ws = w and w.workspace
+  local on = ws and ws.monitor and ws.monitor.name
+  if ws and M.is_ignored(ignored, on) and not tostring(ws.name):find("^special:") and primary_workspace then
+    actions[#actions + 1] = { move = w.address, workspace = primary_workspace }
+  end
+  return actions
+end
+
 -- === Workspace row: Nth scene on the focused monitor ===
 
 ---The active mode's scenes placed on one monitor output, in desk order.
@@ -228,6 +309,32 @@ end
 ---@return string?
 function M.nth_workspace(names, n)
   return names[n]
+end
+
+---The workspace a `mod+TAB` (`dir` "next") or `mod+shift+TAB` ("prev")
+---press lands on: the neighbour of `current` in `names`, wrapping at both
+---ends. A current workspace outside the list (a special, a stray numbered
+---one) enters at the first ("next") or last ("prev") name. Nil when there is
+---nothing to go to: an empty list, or `current` the only name.
+---@param names string[] from `workspaces_on_monitor`
+---@param current string?
+---@param dir "next"|"prev"
+---@return string?
+function M.cycle_workspace(names, current, dir)
+  local count = #names
+  if count == 0 then
+    return nil
+  end
+  for i, name in ipairs(names) do
+    if name == current then
+      if count == 1 then
+        return nil
+      end
+      local step = dir == "prev" and -1 or 1
+      return names[(i - 1 + step) % count + 1]
+    end
+  end
+  return dir == "prev" and names[count] or names[1]
 end
 
 return M

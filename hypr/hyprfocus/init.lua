@@ -20,6 +20,7 @@ local hold = require("hypr.hyprfocus.hold")
 local whichkey = require("hypr.lib.whichkey")
 local trace = require("hypr.lib.trace")
 local scene_spec = require("hypr.scene.spec")
+local nav = require("hypr.lib.nav")
 
 local M = {}
 
@@ -50,6 +51,13 @@ local CLI = ",hyprfocus"
 --- its scenes without resolving again.
 ---@type Hyprfocus.Desk?
 local applied_desk = nil
+
+--- True while `apply` runs. Its dispatched moves raise the very events the
+--- watcher converges on, and an apply nested inside another one read the
+--- held-window record before the outer one wrote it; the outer write then
+--- dropped the inner entries, leaving windows in the holding place with no
+--- origin and no way back. A nested call now refuses instead.
+local applying = false
 
 ---@return table? declaration, string? error
 function M.declaration()
@@ -104,7 +112,7 @@ local function output_for(role)
   local host = (rawget(_G, "config") or {}).host or {}
   local wanted = host[role .. "_monitor"]
   local connected = {}
-  for _, monitor in ipairs(hl.get_monitors() or {}) do
+  for _, monitor in ipairs(nav.usable_monitors(hl.get_monitors() or {}, host.ignored_monitors)) do
     connected[monitor.name] = true
   end
   if wanted and connected[wanted] then
@@ -133,8 +141,9 @@ end
 ---to. The mode's role wins over the host file's workspace pin, which is only
 ---the load-time default.
 ---@param desk Hyprfocus.Desk
+---@param quiet boolean? log only the moves (the per-focus re-place)
 ---@return { scene: string, role: string, output: string?, moved: boolean, reason: string? }[]
-function M.place(desk)
+function M.place(desk, quiet)
   local placed = {}
   for _, placement in ipairs(desk.scenes or {}) do
     local output, fallback = output_for(placement.monitor)
@@ -143,16 +152,18 @@ function M.place(desk)
     if moved then
       hl.dispatch(hl.dsp.workspace.move({ workspace = "name:" .. placement.name, monitor = output }))
     end
-    trace.emit({
-      stage = "admit",
-      event = "scene_monitor",
-      decision = moved and "move" or "keep",
-      reason = fallback or ("mode " .. desk.mode .. " places it on " .. placement.monitor),
-      mode = desk.mode,
-      scene = placement.name,
-      workspace = placement.name,
-      monitor = output,
-    })
+    if moved or not quiet then
+      trace.emit({
+        stage = "admit",
+        event = "scene_monitor",
+        decision = moved and "move" or "keep",
+        reason = fallback or ("mode " .. desk.mode .. " places it on " .. placement.monitor),
+        mode = desk.mode,
+        scene = placement.name,
+        workspace = placement.name,
+        monitor = output,
+      })
+    end
     placed[#placed + 1] = {
       scene = placement.name,
       role = placement.monitor,
@@ -164,13 +175,15 @@ function M.place(desk)
   return placed
 end
 
----Re-place the last applied desk's scenes, for a monitor that came back.
+---Re-place the last applied desk's scenes, for a monitor that came back or a
+---scene workspace created where its role does not put it.
+---@param quiet boolean? log only the moves
 ---@return table[] placements, empty before the first apply
-function M.replace()
+function M.replace(quiet)
   if not applied_desk then
     return {}
   end
-  return M.place(applied_desk)
+  return M.place(applied_desk, quiet)
 end
 
 ---What the desk currently holds, in the shape the planner compares against.
@@ -328,8 +341,80 @@ local function focused_scene_name()
   return name and scene_spec.load()[name] and name or nil
 end
 
+---The primary monitor's active workspace name: where a window that must not
+---stay where it is goes (an ignored monitor, a hold with no origin).
+---@return string?
+function M.primary_workspace()
+  local host = (rawget(_G, "config") or {}).host or {}
+  for _, monitor in ipairs(hl.get_monitors() or {}) do
+    if monitor.name == host.primary_monitor and monitor.activeWorkspace then
+      return monitor.activeWorkspace.name
+    end
+  end
+  return nil
+end
+
+---Log every reachability violation (`admit/unreachable`), and move a held
+---window with no origin (which no mode could ever restore) to the primary
+---monitor's active workspace.
+---@param mode string
+---@param admitted table<string, true>
+---@param moves table<string, string> address -> destination, dispatched by this apply
+---@return integer violations
+local function check_reachable(mode, admitted, moves)
+  local known = {}
+  for _, name in ipairs(workspaces.names()) do
+    known[name] = true
+  end
+  local projected = hold.project(hl.get_windows() or {}, moves)
+  local violations = hold.unreachable(projected, admitted, known, hold.record())
+  local rescue = M.primary_workspace()
+  for _, v in ipairs(violations) do
+    local rescued = v.reason == "no_origin" and rescue ~= nil
+    if rescued then
+      hl.dispatch(
+        hl.dsp.window.move({ window = "address:" .. v.address, workspace = "name:" .. rescue, follow = false })
+      )
+    end
+    trace.emit({
+      stage = "admit",
+      event = "unreachable",
+      decision = rescued and "move" or "report",
+      reason = v.reason,
+      mode = mode,
+      window = v.address,
+      class = v.class,
+      workspace = rescued and rescue or v.workspace,
+    })
+  end
+  return #violations
+end
+
+---Whether an apply is running right now; the watcher skips its tick then.
+---@return boolean
+function M.applying()
+  return applying
+end
+
+local apply_mode
+
 ---@return table? report, string? error
 function M.apply(mode)
+  if applying then
+    return nil, "apply already in progress"
+  end
+  applying = true
+  local ok, report, err = pcall(apply_mode, mode)
+  applying = false
+  if not ok then
+    return nil, tostring(report)
+  end
+  return report, err
+end
+
+---@param mode string
+---@return table? report, string? error
+apply_mode = function(mode)
   local declaration, err = M.declaration()
   if not declaration then
     return nil, err
@@ -352,10 +437,17 @@ function M.apply(mode)
   end
 
   -- Give back what this mode admits, before deciding what is occupied.
+  -- Every move this apply dispatches, so the invariant below judges where
+  -- windows are going rather than where the compositor still reports them.
+  local moves = {}
   local restored = 0
   for name in pairs(hold.workspaces()) do
     if admitted[name] then
-      restored = restored + hold.restore(name)
+      local count, addresses = hold.restore(name)
+      restored = restored + count
+      for _, address in ipairs(addresses) do
+        moves[address] = name
+      end
     end
   end
 
@@ -370,7 +462,11 @@ function M.apply(mode)
   local parked, emptied = 0, {}
   for _, name in ipairs(workspaces.names()) do
     if not admitted[name] then
-      parked = parked + hold.hold(name)
+      local count, addresses = hold.hold(name)
+      parked = parked + count
+      for _, address in ipairs(addresses) do
+        moves[address] = hold.HELD
+      end
       emptied[name] = true
     end
   end
@@ -419,6 +515,8 @@ function M.apply(mode)
   applied = mode
   applied_desk = desk
 
+  local unreachable = check_reachable(mode, admitted, moves)
+
   -- Re-resolve the compositor accent now that the mode has actually
   -- transitioned (LEO-341): `colors.lua` only ran this at config load, so
   -- borders and groupbar kept the previous mode's accent until the next
@@ -443,6 +541,8 @@ function M.apply(mode)
     -- seeing rather than silently working around.
     workspaces_refused = refused,
     placements = placements,
+    -- How many windows the reachability invariant flagged (`admit/unreachable`).
+    unreachable = unreachable,
   },
     nil
 end

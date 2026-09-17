@@ -37,6 +37,14 @@ t.describe("shelf decisions", function()
     t.eq(nil, d.toggle)
   end)
 
+  t.it("never opens a shelf on an ignored focused monitor", function()
+    local c = { focused = "HDMI-A-1", primary = "DP-1", ignored = { "HDMI-A-1" }, monitors = {} }
+    t.eq("DP-1", shelf.decide(SIGNAL, {}, c).monitor)
+    t.eq("DP-1", shelf.show_decision(SIGNAL, c).monitor)
+    c.focused = "DP-2"
+    t.eq(nil, shelf.decide(SIGNAL, {}, c).monitor)
+  end)
+
   t.it("toggles the shelf of a running app wherever its window is", function()
     local d = shelf.decide(SIGNAL, { { class = "signal", workspace = { name = "special:shelf-signal" } } })
     t.eq(nil, d.launch)

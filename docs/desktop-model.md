@@ -22,7 +22,7 @@ controls exactly four things:
 1. **Theme** — palette pair and accent.
 2. **Active scenes** — the set of scenes this mode brings up.
 3. **Monitor per scene** — where each scene lands. Monitor names are host
-   data (`conf/hosts/*.lua`); the mode maps scenes onto host monitor roles.
+   data (`conf/hosts/*.lua`); the mode maps scenes onto host monitor roles. A host's `ignored_monitors` are never a target ([scenes.md](scenes.md#ignored-monitors)).
 4. **Lifecycle** — on entry and exit it calls each scene's bring-up and
    teardown interface. It does not arrange windows itself.
 
@@ -150,7 +150,7 @@ Workspaces are managed in the background; Quickshell presents them.
   focused monitor, resolved at press time from the applied desk
   (`hypr/hyprfocus/init.lua` `applied_desk`/`output_for`); pure ordering,
   neighbour and Nth-on-monitor decisions live in `hypr/lib/nav.lua`
-  (`tests/nav_spec.lua`), bind handlers in `hypr/binds.lua` are thin.
+  (`tests/nav_spec.lua`), bind handlers in `hypr/binds.lua` are thin. `mod+TAB` / `mod+shift+TAB` cycle the same per-monitor scene list in mode order, wrapping.
 - The bar's side insets mirror each monitor's base tiled outer gap (LEO-340),
   published to the `geometry` store by `conf/host.lua`'s `build()` and read
   off resolved geometry, not a layout-specific option — workspace layouts are

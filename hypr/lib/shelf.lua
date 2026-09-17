@@ -29,6 +29,9 @@ local pending = {}
 ---@field desk Hyprfocus.Desk? the active mode's applied desk (`hyprfocus.applied_desk()`)
 ---@field output_for fun(role: string): string?, string? `hyprfocus.output_for`
 ---@field monitors table[] `hl.get_monitors()` result
+---@field focused string? the focused monitor's name
+---@field primary string? `config.host.primary_monitor`
+---@field ignored string[]? `config.host.ignored_monitors`
 
 ---The special workspace a shelf lives on.
 ---@param shelf Shelf
@@ -116,6 +119,22 @@ local function active_workspace_on(monitors, output)
   return nil
 end
 
+---The primary, when a shelf would otherwise open on an ignored focused monitor
+---(a special shows on the focused monitor); nil when the focused one is usable.
+---@param ctx Shelf.Ctx?
+---@return string?
+local function away_from_ignored(ctx)
+  if not ctx or not ctx.focused or not ctx.primary then
+    return nil
+  end
+  for _, name in ipairs(ctx.ignored or {}) do
+    if name == ctx.focused then
+      return ctx.primary
+    end
+  end
+  return nil
+end
+
 ---What pressing a shelf key does: slide a running app's shelf in or out, or
 ---open the app, whose window rule then lands it on the shelf and shows it.
 ---Toggling while launching would open an empty shelf that the late window then
@@ -135,10 +154,12 @@ end
 function M.decide(shelf, windows, ctx)
   local out = M.running(shelf, windows) and { toggle = M.workspace(shelf) } or { launch = shelf.cmd }
   if not shelf.scene then
+    out.monitor = away_from_ignored(ctx)
     return out
   end
   local output = owner_output(shelf, ctx)
   if not output then
+    out.monitor = away_from_ignored(ctx)
     out.reason = ("shelf %s: owner scene %s is not in the active mode's desk; opening on the focused monitor"):format(
       shelf.name,
       shelf.scene
@@ -194,6 +215,10 @@ function M.show_decision(shelf, ctx)
       end
     end
   end
+  if not out.monitor then
+    out.monitor = away_from_ignored(ctx)
+    output = out.monitor
+  end
   if not shelf_shown(shelf, ctx and ctx.monitors, output) then
     out.toggle = M.workspace(shelf)
   end
@@ -237,6 +262,9 @@ function M.entry(shelf)
         desk = hyprfocus.applied_desk(),
         output_for = hyprfocus.output_for,
         monitors = hl.get_monitors() or {},
+        focused = (hl.get_active_monitor() or {}).name,
+        primary = ((rawget(_G, "config") or {}).host or {}).primary_monitor,
+        ignored = ((rawget(_G, "config") or {}).host or {}).ignored_monitors,
       }
       local d = M.decide(shelf, hl.get_windows(), ctx)
       if d.reason then
@@ -297,6 +325,9 @@ function M.rules(shelves)
       desk = hyprfocus.applied_desk(),
       output_for = hyprfocus.output_for,
       monitors = hl.get_monitors() or {},
+      focused = (hl.get_active_monitor() or {}).name,
+      primary = ((rawget(_G, "config") or {}).host or {}).primary_monitor,
+      ignored = ((rawget(_G, "config") or {}).host or {}).ignored_monitors,
     }
     local d = M.show_decision(shelf, ctx)
     if d.monitor then
