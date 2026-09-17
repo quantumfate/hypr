@@ -225,21 +225,16 @@ function M.boxes(scene, tiles, area, opts)
   local gaps_out = opts.gaps_out or 0
 
   local representatives, members = collapse_groups(tiles)
-  local sequenced = M.reorder(sequence(scene, representatives), opts.override)
-
-  -- A scene declaring `strays = "float"` pulls its strays out of the split
-  -- entirely: they never claim a share, so a fixed capture region's declared
-  -- blocks keep exactly their geometry regardless of what else is open.
-  local floats = M.floats_strays(scene)
-  local slots, floated = {}, {}
-  for _, entry in ipairs(sequenced) do
-    if entry.block == nil and floats then
-      floated[#floated + 1] = entry
-    else
-      slots[#slots + 1] = entry
-    end
-  end
-  if #slots == 0 and #floated == 0 then
+  -- `strays = "float"` is no longer a layout concern (LEO-367): a floated
+  -- stray is truly floated by the open-time executor
+  -- (`hypr/scene/strays.lua` + `hypr/events/scene.lua`), and a floating
+  -- window never reaches here as a tile (`hypr/scene/provider.lua` only
+  -- offers `recalculate` the compositor's tiled targets). A stray still
+  -- tiled for the moment between its open event and the dispatch landing
+  -- gets the same `slot` treatment as a `strays = "slot"` scene, since it
+  -- has not floated yet.
+  local slots = M.reorder(sequence(scene, representatives), opts.override)
+  if #slots == 0 then
     return {}
   end
 
@@ -281,19 +276,6 @@ function M.boxes(scene, tiles, area, opts)
     end
     cursor = cursor + width + gaps_in
   end
-
-  for i, entry in ipairs(floated) do
-    -- No layout-target primitive can toggle a window floating (only `place`
-    -- and `set_box`), and dispatchers act on the focused window, which this
-    -- engine avoids on principle. A floated stray gets a centered box over
-    -- the declared layout instead, nudged per index so several do not stack
-    -- exactly on top of each other; the declared blocks above are untouched.
-    local box = M.float_box(area, i)
-    local placed = entry.tile.group and members[entry.tile.group] or { entry.tile }
-    for _, tile in ipairs(placed) do
-      out[#out + 1] = { address = tile.address, x = box.x, y = box.y, w = box.w, h = box.h }
-    end
-  end
   return out
 end
 
@@ -318,34 +300,9 @@ function M.stack(tiles, x, y, w, h, gaps_in)
   return out
 end
 
----Fraction of the area a floated stray's centered box covers.
-local FLOAT_FRACTION = 0.5
-
----Where a floated stray lands: centered over the declared layout's area,
----sized to half of it, offset per index so several floated strays do not
----exactly overlap.
----@param area Scene.Area
----@param index integer 1-based position among this pass's floated strays
----@return { x: number, y: number, w: number, h: number }
-function M.float_box(area, index)
-  local w = math.floor(area.w * FLOAT_FRACTION)
-  local h = math.floor(area.h * FLOAT_FRACTION)
-  local margin_x = math.floor((area.w - w) / 2)
-  local margin_y = math.floor((area.h - h) / 2)
-  local step = (index - 1) * 24
-  return {
-    x = area.x + margin_x + math.min(step, margin_x),
-    y = area.y + margin_y + math.min(step, margin_y),
-    w = w,
-    h = h,
-  }
-end
-
----Whether a stray should float instead of taking a slot.
----
----Slotting is the default: the desk adjusts to what is present. A scene whose
----tile geometry is a fixed region — one being captured, where a box that moves
----when something unrelated opens invalidates the crop — opts out instead.
+---Whether a stray should float instead of staying tiled. Read by the open-time
+---executor (`hypr/scene/strays.lua`), not by this layout any more (LEO-367):
+---a floated window never reaches `boxes` as a tile in the first place.
 ---@param scene Scene.Spec
 ---@return boolean
 function M.floats_strays(scene)

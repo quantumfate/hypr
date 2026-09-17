@@ -26,6 +26,7 @@
 local spec_lib = require("hypr.scene.spec")
 local companion = require("hypr.scene.companion")
 local grouping = require("hypr.scene.grouping")
+local strays = require("hypr.scene.strays")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
 
@@ -185,6 +186,30 @@ local function apply_group_decision(w)
   end
 end
 
+---Execute one `strays.decide` decision (LEO-367): float the window
+---address-targeted, no focus-dance. Tiled layout targets never include a
+---floated window (`hypr/scene/provider.lua` reads `hl.get_windows()`'s own
+---`floating` field), so once this dispatch lands the stray drops out of the
+---scene layout's split on the next `recalculate` for free.
+---@param w HL.Window?
+local function apply_stray_decision(w)
+  local spec = w and w.workspace and specs[w.workspace.name]
+  if not spec then
+    return
+  end
+  local decision = strays.decide(spec, w)
+  if decision.action ~= "float" then
+    return
+  end
+  hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address }))
+  trace.emit(window_fields(w, spec.name, {
+    stage = "arrange",
+    event = "stray_float",
+    decision = "float",
+    reason = "unblocked window on a strays=float scene",
+  }))
+end
+
 local M = {}
 
 ---Scene name owning this workspace, or nil.
@@ -255,6 +280,7 @@ hl.on("window.open", function(w)
   trace.emit(fields)
   converge_companions(scene_name)
   apply_group_decision(w)
+  apply_stray_decision(w)
 end)
 
 hl.on("window.close", function(w)
@@ -294,6 +320,7 @@ hl.on("window.move_to_workspace", function(w)
   -- The lifecycle re-derives from live windows like everything else here.
   converge_companions(scene_name)
   apply_group_decision(w)
+  apply_stray_decision(w)
   for other_scene, spec in pairs(specs) do
     for _, block in ipairs(spec.blocks) do
       if block.spawn then

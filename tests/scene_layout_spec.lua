@@ -174,31 +174,19 @@ t.describe("strays", function()
     t.eq(3, #boxes, "the stray got a box")
   end)
 
-  t.it("get placed but never take a slot when the scene floats them", function()
-    -- `strays = "float"` used to be parsed and ignored: a stray still ate
-    -- into the declared split. Now it is pulled out before shares are
-    -- computed, so the declared blocks keep exactly their geometry.
+  t.it("still takes a slot here even on a float scene (LEO-367)", function()
+    -- `strays = "float"` is executed by the open-time executor now
+    -- (`hypr/scene/strays.lua` + `hypr/events/scene.lua`'s `window.open`),
+    -- which floats the window for real; a floating window never reaches this
+    -- layout as a tile at all (`hypr/scene/provider.lua` only offers it the
+    -- compositor's tiled targets). This layout has no float concept of its
+    -- own any more, so a scene declaring it still eats into the split the
+    -- same as `strays = "slot"` would — that's only the moment between the
+    -- stray's open event and the dispatch landing.
     local spec, layout = scene({ TERMINALS, BROWSER }, { strays = "float" })
     local tiles = { tile("0x1", "Kitty-Main"), tile("0x9", "zen-twilight"), tile("0xf", "mpv") }
     local boxes = layout.boxes(spec, tiles, AREA, NO_GAPS)
-    local by_addr = {}
-    for _, b in ipairs(boxes) do
-      by_addr[b.address] = b
-    end
-    t.eq(670, by_addr["0x1"].w, "the declared block's share is untouched")
-    t.eq(330, by_addr["0x9"].w, "the declared block's share is untouched")
-    t.ok(by_addr["0xf"], "the floated stray still gets a box")
-    t.ok(by_addr["0xf"].w > 0 and by_addr["0xf"].h > 0)
-  end)
-
-  t.it("places a floated stray centered over the whole area when there are no blocks", function()
-    local spec, layout = scene({}, { strays = "float" })
-    local boxes = layout.boxes(spec, { tile("0xf", "mpv") }, AREA, NO_GAPS)
-    t.eq(1, #boxes)
-    t.eq(250, boxes[1].x)
-    t.eq(250, boxes[1].y)
-    t.eq(500, boxes[1].w)
-    t.eq(500, boxes[1].h)
+    t.eq(3, #boxes, "the stray still gets a slot in this layout pass")
   end)
 end)
 

@@ -217,25 +217,34 @@ the contract below is the schema it edits against.
 | `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping               |
 | `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                           |
 
-### Strays: `"slot"` executes, `"float"` centers
+### Strays: `"slot"` executes, `"float"` floats for real (LEO-367)
 
-`strays` used to be parsed and ignored — a `"float"` scene's unmatched windows
-still ate into the declared split. It is executed now, in `hypr/scene/layout.lua`:
+- `"slot"` (default): a stray divides whatever the declared blocks leave,
+  computed in `hypr/scene/layout.lua`.
+- `"float"`: a stray is floated for real, decided at **open time** — the same
+  pattern grouping uses (see "Group" above), for the same reason: a
+  compile-time rule matched on `workspace` inside `match` is not true yet
+  when the window opens (AGENTS.md "Hyprland primitives", LEO-369), so a
+  static `float = true` rule chained off it never fires.
 
-- `"slot"` (default): a stray divides whatever the declared blocks leave, same
-  as before.
-- `"float"`: strays are pulled out before shares are computed at all, so the
-  declared blocks keep exactly their geometry no matter what else is open —
-  the point of the flag for a fixed capture region.
+`hypr/scene/strays.lua` (pure) decides: a window that lands on a
+`strays = "float"` scene's workspace, whose class matches no block, is not in
+`barred`, and is not already floating → `float`. Its executor in
+`hypr/events/scene.lua`, on `window.open`/`window.move_to_workspace`,
+dispatches `hl.dsp.window.float({ window = "address:"..a })` — address-targeted,
+no focus-dance, no loop, no timer — and logs `arrange`/`stray_float`. A
+`barred` class or a block member is left exactly as it is; the same
+reasoning as `grouping.lua`'s eject case does not apply here, since a stray
+that already floats has nothing to correct.
 
-A Hyprland layout provider has no non-dispatch primitive to toggle a window's
-`floating` field from `recalculate` — `HL.LayoutTarget` offers only `place`
-and `set_box`, and the dispatcher path (`hl.dispatch.window.float`) acts on
-the _focused_ window, which this engine avoids on principle (see "Hyprland
-primitives" in `AGENTS.md`). So a floated stray still gets exactly one box —
-centered over the declared layout's area at half its size, each additional
-floated stray nudged so they do not exactly overlap — rather than truly
-floating. `layout.float_box` computes it; `layout.stack` (below) is unrelated.
+Once that dispatch lands, the window is floating and Hyprland stops offering
+it to the scene layout's `recalculate` as a tiled target at all — the layout
+has no float branch left (`layout.float_box` and the centered-box fallback it
+used to give a floated stray are gone). The one moment a `strays = "float"`
+scene's stray can still be seen tiled is between its own open event and that
+dispatch landing; `layout.lua` treats it exactly like a `"slot"` stray for
+that moment, since it is not floating yet. `layout.stack` (below) is
+unrelated.
 
 ### Every window of a block gets placed
 

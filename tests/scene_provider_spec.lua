@@ -183,16 +183,20 @@ t.describe("strays", function()
     strays = "float",
   }
 
-  t.it("floats a stray instead of giving it a slot", function()
+  t.it("still slots a stray the compositor still offers as a tiled target", function()
+    -- `strays = "float"` is executed by the open-time executor now
+    -- (`hypr/scene/strays.lua`), which floats the window for real; once that
+    -- dispatch lands, a floated window never reaches `recalculate` as a
+    -- target again (`hl.get_windows()`'s own `floating` field). What this
+    -- provider still sees mid-flight — before that dispatch lands — gets
+    -- `slot` treatment, same as any other stray.
     local _, provider = fresh({ FLOAT_CODE })
     local a = target("0x1", "Kitty-Main", "code")
     local b = target("0x9", "zen-twilight", "code")
     local stray = target("0xf", "mpv", "code")
     provider.recalculate({ area = AREA, targets = { a, b, stray } })
-    -- The declared split is untouched by the floated stray.
-    t.eq(670, placed(a).w)
-    t.eq(330, placed(b).w)
-    t.ok(placed(stray), "the floated stray still gets placed")
+    t.ok(placed(stray), "the stray still gets placed")
+    t.ok(placed(a).w < 670, "the stray still claims a share of the split")
   end)
 end)
 
