@@ -565,6 +565,30 @@ def print_desk(desk: dict) -> None:
         print(f"{'notify':<12}{json.dumps(routes, sort_keys=True)}")
 
 
+def reapply_theme() -> None:
+    """Re-run the accent-bearing theme adapters for the mode just entered.
+
+    A mode's accent role can change on a transition even when the
+    palette does not, so `,theme.sh apply` — which reads both off the same
+    stores this converge just updated — has to run again here rather than
+    waiting for the sun timer or a manual `set`. Best-effort and silent:
+    a theme adapter failing must not fail a mode transition that otherwise
+    succeeded, the same contract `apply_colors`'s pcall gives the compositor
+    half. `HYPRFOCUS_NO_THEME` is the test escape hatch — tests exercise this
+    module's own systemd bookkeeping and must not fan out into a real
+    kitty/gsettings/hyprctl/awww call the way `,theme.sh` would.
+    """
+    if os.environ.get("HYPRFOCUS_NO_THEME"):
+        return
+    theme_sh = Path(__file__).resolve().parent / ",theme.sh"
+    if not theme_sh.exists():
+        return
+    try:
+        subprocess.run([str(theme_sh), "apply"], check=False, capture_output=True)
+    except OSError:
+        pass
+
+
 def apply(declaration: dict, mode: str, dry_run: bool) -> int:
     """Bring background work in line with a mode.
 
@@ -656,6 +680,8 @@ def apply(declaration: dict, mode: str, dry_run: bool) -> int:
         print(f"  FAILED  {unit}", file=sys.stderr)
     if not stopped and not started and not failed:
         print(f"already {mode}; nothing to do")
+
+    reapply_theme()
 
     # A unit that would not move is reported, not fatal: one stubborn service
     # must not leave the desk wedged between two modes. Missing units are not a

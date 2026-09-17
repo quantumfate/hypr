@@ -197,7 +197,7 @@ apply_with() {
     local active=$1 mode=$2 decl=${3:-$declaration}
     : >"$scratch/record"
     RECORD=$scratch/record ACTIVE=$active MISSING=${MISSING:-} ONESHOT=${ONESHOT:-} \
-        SYSTEMCTL=$recorder QF_STORE=$scratch/quantum-store \
+        SYSTEMCTL=$recorder QF_STORE=$scratch/quantum-store HYPRFOCUS_NO_THEME=1 \
         "$cli" --declaration "$decl" apply "$mode" >/dev/null 2>&1
     sort "$scratch/record" | tr '\n' ' ' | sed 's/ $//'
 }
@@ -245,7 +245,7 @@ json.dump(d, open(sys.argv[2], 'w'))
 # writer takes SIGPIPE, and `pipefail` would turn a passing check into a
 # failing one.
 drift_output=$(RECORD=$scratch/record ACTIVE='' SYSTEMCTL=$recorder QF_STORE=$scratch/quantum-store \
-    "$cli" --declaration "$drifted" apply neutral 2>&1)
+    HYPRFOCUS_NO_THEME=1 "$cli" --declaration "$drifted" apply neutral 2>&1)
 if [[ $drift_output == *"have drifted"* ]]; then
     echo "  ok   an unimplemented task is reported, not ignored"
 else
@@ -265,7 +265,7 @@ else
 fi
 
 missing_report=$(MISSING="theme-auto.service" RECORD=$scratch/record ACTIVE='' SYSTEMCTL=$recorder \
-    QF_STORE=$scratch/quantum-store "$cli" --declaration "$declaration" apply neutral 2>&1)
+    QF_STORE=$scratch/quantum-store HYPRFOCUS_NO_THEME=1 "$cli" --declaration "$declaration" apply neutral 2>&1)
 if [[ $missing_report == *"not installed: theme-auto.service"* ]]; then
     echo "  ok   a missing unit is named once"
 else

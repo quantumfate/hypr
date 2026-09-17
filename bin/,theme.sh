@@ -41,14 +41,23 @@ DECLARATION="$ROOT/hyprfocus.json"
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/wallpapers"
 
-# The accent is not yet a store field: every surface below takes flavour+accent
-# as one theme name, and only one accent is installed per flavour that matters.
+# The accent is a mode-scoped store field, not a hardcoded name: every focus
+# mode declares an `accent_role` in `hyprfocus.json`'s `presentation` block
+# (the same field `hypr/themes/colors.lua` resolves for window borders), and
+# `accent_role()` below reads it for whichever mode currently holds the lease.
+# ACCENT is the surface-name role (the installed variant naming scheme, e.g.
+# "catppuccin-<palette>-mauve"), which stays mauve — swapping it would mean
+# shipping a full icon/GTK/Qt asset set per accent, which nobody has done.
 ACCENT="mauve"
 
 PALETTES=(latte frappe macchiato mocha)
 # Which flavours are light. Drives GTK's color-scheme, which is a separate
 # setting from the theme name and is what applications actually branch on.
 LIGHT=(latte)
+
+# `baseline`'s own auto-mode fallbacks (day/night, below) default the sun's
+# pair to latte/macchiato — frappe and mocha stay leasable by a mode or a
+# manual `set`, but auto's day/night split does not default to them.
 
 die() {
     printf '%s: %s\n' "${0##*/}" "$1" >&2
@@ -483,11 +492,11 @@ apply_wlogout() {
 # still needs a restart to pick up CSS changes, but the files are correct
 # immediately.
 apply_zen() {
-    local palette=$1 accent
+    local palette=$1 role=$2 accent
     local zen_dir="$CONFIG/zen-chezmoi"
     local js="$zen_dir/user.js"
     [ -f "$js" ] || return 0
-    accent=$(accent_hex "$palette")
+    accent=$(accent_hex "$palette" "$role")
 
     sed -i "s|^user_pref(\"zen.theme.accent-color\".*|user_pref(\"zen.theme.accent-color\", \"$accent\");|" "$js"
     sed -i "s|^user_pref(\"layout.css.prefers-color-scheme.content-override\".*|user_pref(\"layout.css.prefers-color-scheme.content-override\", 3); // follow system|" "$js"
@@ -518,7 +527,7 @@ apply_zen() {
 # looks themed. `bin/,obsidian-cli-wrapper.sh` names the same Main vault, so
 # the two paths already agree on the source.
 apply_obsidian() {
-    local palette=$1 vault="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian/Main}" base appearance
+    local palette=$1 role=$2 vault="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian/Main}" base appearance
     appearance="$vault/.obsidian/appearance.json"
     [ -f "$appearance" ] || {
         echo "obsidian: $appearance not found"
@@ -528,7 +537,7 @@ apply_obsidian() {
     # `theme` is Obsidian's base-look key: moonstone wants a light palette,
     # obsidian a dark one — the same question is_light answers everywhere else.
     base=$(is_light "$palette" && echo moonstone || echo obsidian)
-    if ! jq --arg base "$base" --arg accent "$(accent_hex "$palette")" \
+    if ! jq --arg base "$base" --arg accent "$(accent_hex "$palette" "$role")" \
         '.theme = $base | .accentColor = $accent' "$appearance" >"$appearance.tmp" ||
         ! mv -f "$appearance.tmp" "$appearance"; then
         record_failed obsidian "appearance.json is not writable"
@@ -642,10 +651,13 @@ apply_transparency() {
 # instead of the original.
 #
 # Cached by source mtime rather than content hash — a stat is free and a
-# wallpaper file does not change without its mtime moving. The stamp file next
-# to the render is what makes an unchanged source a no-op on the next apply.
+# wallpaper file does not change without its mtime moving. The stamp also
+# carries the accent role: two modes leasing the same palette can still tint
+# toward different accents, so a role change must re-render even though the
+# source file did not move. The stamp file next to the render is what makes
+# an unchanged source-and-role a no-op on the next apply.
 process_wallpaper() {
-    local palette=$1 wall=$2
+    local palette=$1 wall=$2 role=$3
     have "$MAGICK" || {
         printf '%s' "$wall"
         return
@@ -654,22 +666,23 @@ process_wallpaper() {
     local out_dir="$CACHE/$palette"
     local cached="$out_dir/$name"
     local stamp="$cached.mtime"
-    local src_mtime
+    local src_mtime stamp_key
     src_mtime=$(stat -c %Y "$wall" 2>/dev/null || echo 0)
+    stamp_key="$src_mtime:$role"
 
-    if [ -f "$cached" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$src_mtime" ]; then
+    if [ -f "$cached" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$stamp_key" ]; then
         printf '%s' "$cached"
         return
     fi
 
     mkdir -p "$out_dir"
     local accent
-    accent=$(accent_hex "$palette")
+    accent=$(accent_hex "$palette" "$role")
     # Blur hides detail a bar would otherwise sit on top of; the modulate call
     # desaturates without flattening to grey; colorize is the tint toward the
     # palette's accent that makes the result read as "this palette" at a glance.
     if "$MAGICK" "$wall" -blur 0x12 -modulate 100,50,100 -fill "$accent" -colorize 25% "$cached" 2>/dev/null; then
-        printf '%s' "$src_mtime" >"$stamp"
+        printf '%s' "$stamp_key" >"$stamp"
         printf '%s' "$cached"
     else
         rm -f "$cached" "$stamp"
@@ -720,14 +733,14 @@ resolve_wallpaper() {
 }
 
 apply_wallpaper() {
-    local palette=$1 wall
+    local palette=$1 role=$2 wall
     wall=$(resolve_wallpaper "$palette")
     [ -n "$wall" ] && [ -f "$wall" ] || {
         echo "wallpaper: unchanged"
         record_failed wallpaper "no wallpaper bound to the palette and no default found"
         return
     }
-    wall=$(process_wallpaper "$palette" "$wall")
+    wall=$(process_wallpaper "$palette" "$wall" "$role")
     # Unlike MAGICK, calling the real awww has a live-session side effect (it
     # would actually repaint the desk), so sandboxed() still holds it back —
     # except when a test has pointed AWWW at its own recorder, the same
@@ -758,15 +771,50 @@ apply_wallpaper() {
     record_applied wallpaper immediate
 }
 
-# The accent colour per flavour, matching Theme.qml's tables. Duplicated here
-# because a shell script cannot read QML, and asserted against the real table by
-# the quickshell test suite rather than left to drift.
+# The mode currently holding the lease's declared accent role (one
+# store, `hyprfocus.json`'s `.modes[mode].presentation.accent_role`, read the
+# same way `hypr/themes/colors.lua`'s `resolve_accent` reads it for window
+# borders — so the bar, the borders and these adapters can never disagree).
+# Falls back to "mauve" exactly like the Lua reader does: a fresh desk or a
+# mode with no declared role must still resolve to something installed.
+accent_role() {
+    local mode
+    mode=$(lease_state)
+    jq -r --arg m "$mode" '.modes[$m].presentation.accent_role // "mauve"' "$DECLARATION" 2>/dev/null || printf 'mauve'
+}
+
+# The accent colour for a palette+role pair, matching the tables
+# `hypr/themes/*.lua` and Theme.qml both carry. Duplicated here because a
+# shell script cannot require Lua or QML; asserted against those tables by
+# `tests/theme_test.sh` rather than left to drift. An unknown role falls back
+# to the palette's own mauve; an unknown palette falls back to macchiato's,
+# matching `baseline`'s own default.
 accent_hex() {
-    case "$1" in
-    latte) printf '#8839ef' ;;
-    frappe) printf '#ca9ee6' ;;
-    macchiato) printf '#c6a0f6' ;;
-    mocha) printf '#cba6f7' ;;
+    local palette=$1 role=${2:-mauve}
+    case "$palette:$role" in
+    latte:mauve) printf '#8839ef' ;;
+    latte:red) printf '#d20f39' ;;
+    latte:peach) printf '#fe640b' ;;
+    latte:blue) printf '#1e66f5' ;;
+    latte:lavender) printf '#7287fd' ;;
+    frappe:mauve) printf '#ca9ee6' ;;
+    frappe:red) printf '#e78284' ;;
+    frappe:peach) printf '#ef9f76' ;;
+    frappe:blue) printf '#8caaee' ;;
+    frappe:lavender) printf '#babbf1' ;;
+    macchiato:mauve) printf '#c6a0f6' ;;
+    macchiato:red) printf '#ed8796' ;;
+    macchiato:peach) printf '#f5a97f' ;;
+    macchiato:blue) printf '#8aadf4' ;;
+    macchiato:lavender) printf '#b7bdf8' ;;
+    mocha:mauve) printf '#cba6f7' ;;
+    mocha:red) printf '#f38ba8' ;;
+    mocha:peach) printf '#fab387' ;;
+    mocha:blue) printf '#89b4fa' ;;
+    mocha:lavender) printf '#b4befe' ;;
+    latte:*) printf '#8839ef' ;;
+    frappe:*) printf '#ca9ee6' ;;
+    mocha:*) printf '#cba6f7' ;;
     *) printf '#c6a0f6' ;;
     esac
 }
@@ -774,9 +822,13 @@ accent_hex() {
 # --- commands ----------------------------------------------------------------
 
 cmd_apply() {
-    local palette baseline
+    local palette baseline role
     palette=$(resolve)
     baseline=$(baseline)
+    # The accent role belongs to whichever mode holds the lease right now
+    # (accent_role(), the store field a mode declares) — resolved once so every
+    # accent-bearing adapter below tints toward the same colour.
+    role=$(accent_role)
     # Keep the BASELINE in the store so the shell and the script never
     # disagree about what the desk shows with no lease held, even in auto
     # mode. A lease is never written here: a mode holds a palette the way it
@@ -793,10 +845,10 @@ cmd_apply() {
     apply_zathura "$palette"
     apply_rofi "$palette"
     apply_wlogout "$palette"
-    apply_zen "$palette"
-    apply_obsidian "$palette"
+    apply_zen "$palette" "$role"
+    apply_obsidian "$palette" "$role"
     apply_linear "$palette"
-    apply_wallpaper "$palette"
+    apply_wallpaper "$palette" "$role"
 
     # Last, so it reflects every applier above it. A sandboxed run records
     # nothing real, so it writes nothing — a test must not leave a result file

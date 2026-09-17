@@ -423,6 +423,30 @@ contains "a missing vault is failed, not silent" "obsidian:" "$(cat "$ROOT/out")
 unset OBSIDIAN_VAULT
 teardown
 
+echo "accent: a mode's declared role resolves to its own hex per palette"
+setup
+mkdir -p "$ROOT/vault/.obsidian"
+printf '{"cssTheme":"Catppuccin","accentColor":"","theme":"obsidian"}\n' >"$ROOT/vault/.obsidian/appearance.json"
+export OBSIDIAN_VAULT="$ROOT/vault"
+
+printf '{"modes":{"study":{"name":"study","presentation":{"accent_role":"red"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"study","until":null}\n' >"$XDG_STATE_HOME/quantum-store/focus.json"
+"$THEME" set macchiato >/dev/null
+check "study's red role on macchiato is the catppuccin red hex" "#ed8796" \
+    "$(jq -r '.accentColor' "$ROOT/vault/.obsidian/appearance.json")"
+
+printf '{"modes":{"gaming":{"name":"gaming","presentation":{"accent_role":"lavender"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"gaming","until":null}\n' >"$XDG_STATE_HOME/quantum-store/focus.json"
+"$THEME" set latte >/dev/null
+check "gaming's lavender role on latte is the catppuccin lavender hex" "#7287fd" \
+    "$(jq -r '.accentColor' "$ROOT/vault/.obsidian/appearance.json")"
+
+rm -f "$XDG_STATE_HOME/quantum-store/hyprfocus.json" "$XDG_STATE_HOME/quantum-store/focus.json"
+unset OBSIDIAN_VAULT
+teardown
+
 echo "crossfade: awww is asked for a transition, not a hard cut"
 setup
 export THEME_MAGICK="$ROOT/no-such-magick-binary"
