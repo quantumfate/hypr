@@ -106,3 +106,4 @@ hypr_enable_units: >-
 # Custom units shipped in session/systemd (deployed then enabled).
 hypr_custom_units:
   - hypridle.service
+  - awww-daemon.service

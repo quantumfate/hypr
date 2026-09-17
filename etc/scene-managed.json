@@ -3,7 +3,7 @@
     "pipewire.service",
     "wireplumber.service",
     "hypridle.service",
-    "hyprpaper.service",
+    "awww-daemon.service",
     "hyprsunset.service",
     "foot-server.service",
     "copyq.service",

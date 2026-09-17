@@ -1,11 +1,11 @@
 [Unit]
-Description=Hyprpaper wallpaper daemon
+Description=awww wallpaper daemon
 After=wayland-session@hyprland.desktop.target
 BindsTo=wayland-session@hyprland.desktop.target
 PartOf=monitors-changed.target
 
 [Service]
-ExecStart=/usr/bin/hyprpaper
+ExecStart=/usr/bin/awww-daemon
 Restart=on-failure
 
 [Install]

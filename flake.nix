@@ -18,12 +18,6 @@
     hyprlock.inputs.hyprutils.follows = "hyprland/hyprutils";
     hyprlock.inputs.hyprgraphics.follows = "hyprland/hyprgraphics";
 
-    hyprpaper.url = "github:hyprwm/hyprpaper";
-    hyprpaper.inputs.nixpkgs.follows = "nixpkgs";
-    hyprpaper.inputs.hyprlang.follows = "hyprland/hyprlang";
-    hyprpaper.inputs.hyprutils.follows = "hyprland/hyprutils";
-    hyprpaper.inputs.hyprgraphics.follows = "hyprland/hyprgraphics";
-
     hyprsunset.url = "github:hyprwm/hyprsunset";
     hyprsunset.inputs.nixpkgs.follows = "nixpkgs";
     hyprsunset.inputs.hyprlang.follows = "hyprland/hyprlang";
@@ -47,7 +41,6 @@
     , hyprland
     , hypridle
     , hyprlock
-    , hyprpaper
     , hyprsunset
     , hyprpicker
     , xdph
@@ -57,7 +50,6 @@
         pkgs.hyprland
         pkgs.hypridle
         pkgs.hyprlock
-        pkgs.hyprpaper
         pkgs.hyprsunset
         pkgs.hyprpicker
         hyprpolkitagent
@@ -89,7 +81,6 @@
         hyprland = hyprland.packages.${prev.system}.hyprland;
         hypridle = hypridle.packages.${prev.system}.hypridle;
         hyprlock = hyprlock.packages.${prev.system}.hyprlock;
-        hyprpaper = hyprpaper.packages.${prev.system}.hyprpaper;
         hyprsunset = hyprsunset.packages.${prev.system}.hyprsunset;
         hyprpicker = hyprpicker.packages.${prev.system}.hyprpicker;
         xdg-desktop-portal-hyprland = xdph.packages.${prev.system}.xdg-desktop-portal-hyprland;
@@ -167,8 +158,8 @@
 
             xdg.configFile."systemd/user/hypridle.service".source =
               self + "/session/systemd/hypridle.service";
-            xdg.configFile."systemd/user/hyprpaper.service".source =
-              self + "/session/systemd/hyprpaper.service";
+            xdg.configFile."systemd/user/awww-daemon.service".source =
+              self + "/session/systemd/awww-daemon.service";
           };
         };
     }

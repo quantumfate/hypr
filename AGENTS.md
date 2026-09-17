@@ -274,7 +274,7 @@ New to the repo, read in this order — each layer points at the next:
 | Path                     | Owns                                                                 |
 | ------------------------ | -------------------------------------------------------------------- |
 | `hypr/`                  | the running compositor logic (Lua); scene engine under `hypr/scene/` |
-| `*.conf`                 | hypr\* daemon configs (hypridle, hyprlock, hyprpaper, …)             |
+| `*.conf`                 | hypr\* daemon configs (hypridle, hyprlock, hyprsunset, …)            |
 | `bin/`                   | the `,name.sh` helpers binds and quickshell spawn                    |
 | `conf/`                  | host-specific data (`workspace_specs`, temporary `scenes` fork)      |
 | `etc/`                   | generated/contract data (`scene-managed.json`, systemd targets)      |

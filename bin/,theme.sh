@@ -737,9 +737,10 @@ apply_wallpaper() {
         record_failed wallpaper "awww not installed"
         return
     }
-    # `img` is a no-op against a dead daemon, and a fresh session has none yet
-    # — `query` is how both swww and awww probe for that. Starting it here is
-    # what makes a cold session behave the same as a warm one.
+    # `img` is a no-op against a dead daemon. The session unit
+    # (session/systemd/awww-daemon.service) starts it at login, so this is a
+    # fallback for a daemon that died or a session the unit never reached —
+    # `query` is how both swww and awww probe for that.
     "$AWWW" query >/dev/null 2>&1 || {
         "$AWWW_DAEMON" >/dev/null 2>&1 &
         disown

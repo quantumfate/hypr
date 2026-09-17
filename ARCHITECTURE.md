@@ -20,8 +20,9 @@ The Lua config, assets, and `.conf` files are shared verbatim by both.
 In scope (absorbed into this repo, out of chezmoi):
 
 - Compositor + config: `hyprland`, this repo's `hypr/**.lua` and `*.conf`.
-- Ecosystem daemons: `hypridle`, `hyprpaper`, `hyprsunset`, `hyprlock`,
+- Ecosystem daemons: `hypridle`, `hyprsunset`, `hyprlock`,
   `hyprpolkitagent`, `hyprpicker`, `hyprshot`, `hyprcursor`.
+- Wallpaper daemon: `awww` (retired `hyprpaper`, which cannot crossfade).
 - Session glue: `uwsm` env (`env-hyprland`), the `hypr*` systemd **user**
   units, portal backends (`xdg-desktop-portal-hyprland` + gtk).
 - Greeter fragment tied to the compositor (`dms-hypr.conf`).
@@ -35,7 +36,7 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 ## Source layout
 
 - `hypr/` — Lua config (the running compositor logic).
-- `*.conf` — hypr\* daemon configs (hypridle, hyprlock, hyprpaper, …).
+- `*.conf` — hypr\* daemon configs (hypridle, hyprlock, hyprsunset, …).
 - `assets/`, `icons/`, `wallpapers/` — generated + static assets.
 - `session/` — session glue absorbed from chezmoi (uwsm env, systemd user
   units, greeter fragment). Deployed identically by both paths.
@@ -61,7 +62,7 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 
 The `hypr*` ecosystem is **soname-coupled**. `hyprland` and every daemon link
 shared libs — `libhyprutils.so` is universal (all of hyprland, hyprlock,
-hypridle, hyprpaper, hyprsunset, hyprpicker, portal, qt-support, guiutils),
+hypridle, hyprsunset, hyprpicker, portal, qt-support, guiutils),
 with `libhyprlang/graphics/aquamarine/wire` on subsets. A lib soname bump
 (e.g. `libhyprutils.so.13 → .14`) forces **every consumer to be rebuilt**
 against it. Consequence: the ecosystem moves as **one atomic unit** — you
