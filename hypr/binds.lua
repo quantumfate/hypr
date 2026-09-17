@@ -213,49 +213,192 @@ end
 bind.focus_workspace("TAB", "e-1", "the previous used workspace")
 bind.focus_workspace("TAB", "e+1", "the next used workspace", { config.secondary_mod })
 
--- Focus mode also blocks reaching the media workspace, not just launching
--- apps on it. bind_workspaces() below registers every workspace key
--- generically; Hyprland keeps the FIRST registration for a given chord, so
--- the guarded bind for "media" is registered here, ahead of it, to win.
+-- The media guard used to live here as a separate block ahead of
+-- bind_workspaces() (Hyprland keeps the first registration for a chord). It
+-- is gone (LEO-344): workspace-row keys are positional now (Nth scene on the
+-- focused monitor, resolved at press time from the applied desk), so a mode
+-- that does not place "media" on the focused monitor already makes its key a
+-- no-op — there is no fixed "media" chord left to guard. Focus mode's
+-- media-launch guard (`applications` submap, "d") is the meaningful target
+-- that survives; it blocks OPENING the browser, which a workspace key alone
+-- never does.
+bind.bind_workspace_row()
+
+-- Scene tile/window navigation (LEO-344 decision comment). `mod+h/l` moves
+-- across tiles in the scene layout's own left-to-right order, continuing
+-- onto the adjacent monitor at the edge; `mod+j/k` moves within the focused
+-- tile (a group's members, or a stacked block's windows). Off a scene
+-- workspace (dwindle/master/scrolling), these fall back to the layout's own
+-- directional focus/swap, which is what these chords did before.
 do
-  local specs = config.host.workspaces.workspace_specs
-  local keys = config.host.workspaces.workspace_keys
-  local media_idx
-  for i, spec in ipairs(specs) do
-    if spec.default_name == "media" then
-      media_idx = i
-      break
+  local nav = require("hypr.lib.nav")
+  local scene_spec = require("hypr.scene.spec")
+  local scene_provider = require("hypr.scene.provider")
+  local scene_order = require("hypr.scene.order")
+
+  ---@return HL.Window?, Scene.Spec?
+  local function focused_scene()
+    local w = hl.get_active_window()
+    if not w or not w.workspace then
+      return w, nil
+    end
+    return w, scene_spec.load()[w.workspace.name]
+  end
+
+  ---@param dir "left"|"right"
+  local function focus_tile(dir)
+    local w, scene = focused_scene()
+    if not w then
+      return
+    end
+    if not scene then
+      layout_lib.dispatch(dir == "left" and "focus_left" or "focus_right")
+      return
+    end
+    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
+    local index = nav.tile_index(tiles, w.address)
+    if not index then
+      return
+    end
+    local target = nav.neighbor_tile(tiles, index, dir)
+    if target then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. target.addresses[1] }))
+      return
+    end
+    -- At the tile-order edge: continue onto the adjacent monitor's nearest
+    -- edge tile, per the decision comment. No `movewindow`-at-edge trick
+    -- (AGENTS.md: that moves the WINDOW, not focus) — this addresses a
+    -- window on the other monitor's workspace directly.
+    local monitor = w.workspace.monitor
+    if not monitor then
+      return
+    end
+    local ordered = nav.monitor_order(hl.get_monitors() or {})
+    local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
+    local active = adjacent and adjacent.activeWorkspace
+    local other_scene = active and active.name and scene_spec.load()[active.name]
+    if not other_scene then
+      return
+    end
+    local other_tiles = nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name))
+    local edge = nav.edge_tile(other_tiles, dir)
+    if edge then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. edge.addresses[1] }))
     end
   end
-  if media_idx and keys[media_idx] then
-    -- Addressed the environment's way: a named default_name, else the id.
-    local spec = specs[media_idx]
-    local ws = spec.default_name and ("name:" .. spec.default_name) or tostring(spec.workspace)
-    hyprfocus_binds.bind(config.main_mod .. "+" .. keys[media_idx], function()
-      local reason = focus_block_reason("media") or scene_block_reason("media")
-      if reason then
-        notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
-        return
-      end
-      hl.dispatch(function()
-        if hl.get_active_workspace() and hl.get_active_workspace().special then
-          hl.dsp.workspace.toggle_special()
-        end
-        return hl.dsp.focus({ workspace = ws })
-      end)
-    end, { description = "Workspace: Focus media (blocked during focus mode)" })
+
+  ---@param dir "next"|"prev"
+  local function focus_window_in_tile(dir)
+    local w, scene = focused_scene()
+    if not w then
+      return
+    end
+    if not scene then
+      layout_lib.dispatch(dir == "next" and "focus_down" or "focus_up")
+      return
+    end
+    if w.group then
+      -- A group's tabs: the same object-addressed dispatcher
+      -- hypr/services/dofus/team.lua already uses for the Dofus roster.
+      hl.dispatch(dir == "next" and hl.dsp.group.next() or hl.dsp.group.prev())
+      return
+    end
+    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
+    local index = nav.tile_index(tiles, w.address)
+    local tile = index and tiles[index]
+    if not tile then
+      return
+    end
+    local target = nav.window_neighbor(tile.addresses, w.address, dir)
+    if target then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
+    end
   end
+
+  ---@param dir "left"|"right"
+  local function swap_tile(dir)
+    local w, scene = focused_scene()
+    if not w then
+      return
+    end
+    if not scene then
+      layout_lib.dispatch(dir == "left" and "swap_left" or "swap_right")
+      return
+    end
+    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
+    local index = nav.tile_index(tiles, w.address)
+    if not index then
+      return
+    end
+    local new_order = nav.swap_order(tiles, index, dir)
+    if not new_order then
+      return
+    end
+    -- Session-only (hypr/scene/order.lua): the layout provider reads this on
+    -- its next recalculate. Nothing here writes $QF_STORE or a scene
+    -- declaration — a swap is how the desk looks right now, not an edit.
+    scene_order.set(scene.name, new_order)
+    -- Re-asserting focus on the window already focused is not a focus-dance
+    -- (nothing else is focused meanwhile); it just gives the compositor a
+    -- change to react to, so the swapped order actually gets laid out.
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. w.address }))
+  end
+
+  ---mod+shift+j/k: move the focused window forward/back within its group.
+  ---Only meaningful for a grouped tile (the decision names "within its
+  ---group" specifically); a stacked non-group block has no such order to
+  ---change here, so it is a no-op.
+  ---@param dir "forward"|"back"
+  local function move_in_group(dir)
+    local w = hl.get_active_window()
+    if not w or not w.group then
+      return
+    end
+    -- movegroupwindow takes the same bare-string argument dwindle's own
+    -- layoutmsg dispatchers do above ("f"/"b"), acting on the focused
+    -- window's own group — no focus-dance, since that window is already
+    -- focused by definition of "its group".
+    hl.dispatch(hl.dsp.movegroupwindow(dir == "forward" and "f" or "b"))
+  end
+
+  bind.exec("h", function()
+    focus_tile("left")
+  end, { description = "Focus the tile to the left", submap_universal = true })
+  bind.exec("l", function()
+    focus_tile("right")
+  end, { description = "Focus the tile to the right", submap_universal = true })
+  bind.exec("j", function()
+    focus_window_in_tile("next")
+  end, { description = "Focus the next window in this tile", submap_universal = true })
+  bind.exec("k", function()
+    focus_window_in_tile("prev")
+  end, { description = "Focus the previous window in this tile", submap_universal = true })
+
+  bind.exec("h", function()
+    swap_tile("left")
+  end, {
+    mods = { config.secondary_mod },
+    description = "Swap this tile with the one to the left",
+    submap_universal = true,
+  })
+  bind.exec("l", function()
+    swap_tile("right")
+  end, {
+    mods = { config.secondary_mod },
+    description = "Swap this tile with the one to the right",
+    submap_universal = true,
+  })
+  bind.exec(
+    "j",
+    function()
+      move_in_group("forward")
+    end,
+    { mods = { config.secondary_mod }, description = "Move this window forward in its group", submap_universal = true }
+  )
+  bind.exec("k", function()
+    move_in_group("back")
+  end, { mods = { config.secondary_mod }, description = "Move this window back in its group", submap_universal = true })
 end
-
-bind.bind_workspaces()
-
-bind.layout_action({ config.main_mod, "j" }, "focus_up", "Move window focus up")
-bind.layout_action({ config.main_mod, "k" }, "focus_down", "Move window focus down")
-
-bind.layout_action({ config.main_mod, config.secondary_mod, "h" }, "swap_left", "Swap current with the left window")
-bind.layout_action({ config.main_mod, config.secondary_mod, "l" }, "swap_right", "Swap current with the right window")
-bind.layout_action({ config.main_mod, config.secondary_mod, "j" }, "swap_up", "Swap current with the window above")
-bind.layout_action({ config.main_mod, config.secondary_mod, "k" }, "swap_down", "Swap current with the window below")
 
 -- Layout messages, per layout, in a which-key submap tree:
 --   SUPER+x  ->  d (dwindle) | m (master) | s (scrolling)  ->  layout op.

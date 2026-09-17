@@ -328,6 +328,13 @@ is inert there, because nothing asks the scene layout provider to place
 anything on a workspace it does not own. The compiled group rules stay
 layout-independent.
 
+`mod+shift+h/l` (tile swap, LEO-344) asks the provider for a different order
+without touching the declaration: `hypr/scene/order.lua` holds a session-only
+key-order override per scene name (never persisted, never `$QF_STORE`), and
+`hypr/scene/layout.lua`'s `M.reorder` applies it to the sequenced entries
+before the split is computed. A restart or config reload drops it back to
+declared order.
+
 ## Engine layers
 
 | File                     | Owns                                              |

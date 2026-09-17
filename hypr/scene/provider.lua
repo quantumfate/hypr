@@ -11,6 +11,7 @@
 -- correction to verify because there was no correction.
 local spec_lib = require("hypr.scene.spec")
 local layout = require("hypr.scene.layout")
+local order = require("hypr.scene.order")
 
 local M = {}
 
@@ -55,6 +56,45 @@ local function scene_for(targets, scenes)
   return nil
 end
 
+---One window (as `hl.get_windows()`/`target.window` reports it) as a
+---`Scene.Tile`. A group's identity is its lowest member address: group
+---objects are not comparable across reads, and the member set is what "same
+---group" means.
+---@param w HL.Window
+---@return Scene.Tile
+local function window_tile(w)
+  local key
+  if w.group then
+    for _, member in
+      ipairs(w.group.members and (w.group.members.title and { w.group.members } or w.group.members) or {})
+    do
+      if member.address and (not key or member.address < key) then
+        key = member.address
+      end
+    end
+  end
+  return { address = w.address, class = w.class, group = key }
+end
+-- Exposed so `hypr/binds.lua` can build the same tile list the layout used
+-- last, straight from `hl.get_windows()`, for the keyboard-navigation binds
+-- (`hypr/lib/nav.lua`) — one tiling rule, not a second one reimplemented at
+-- the bind site.
+M.window_tile = window_tile
+
+---The tiled (non-floating) windows on one workspace, as `Scene.Tile`s, in
+---whatever order `hl.get_windows()` returns them.
+---@param window_name string workspace `default_name`
+---@return Scene.Tile[]
+function M.workspace_tiles(window_name)
+  local tiles = {}
+  for _, w in ipairs(hl.get_windows() or {}) do
+    if not w.floating and w.workspace and w.workspace.name == window_name then
+      tiles[#tiles + 1] = window_tile(w)
+    end
+  end
+  return tiles
+end
+
 ---The tiles a scene arranges, in the order the compositor offered them.
 ---@param targets HL.LayoutTarget[]
 ---@return Scene.Tile[], table<string, HL.LayoutTarget>
@@ -63,19 +103,7 @@ local function tiles_of(targets)
   for _, target in ipairs(targets) do
     local w = target.window
     if w and w.address then
-      local group = w.group
-      local key
-      if group then
-        -- A group's identity is its lowest member address: group objects are
-        -- not comparable across reads, and the member set is what "same group"
-        -- means.
-        for _, member in ipairs(group.members and (group.members.title and { group.members } or group.members) or {}) do
-          if member.address and (not key or member.address < key) then
-            key = member.address
-          end
-        end
-      end
-      tiles[#tiles + 1] = { address = w.address, class = w.class, group = key }
+      tiles[#tiles + 1] = window_tile(w)
       by_address[w.address] = target
     end
   end
@@ -117,6 +145,7 @@ function M.register(scenes)
         gaps_in = gaps_in,
         gaps_out = gaps_out,
         solo_frame = scene.solo_frame ~= false,
+        override = order.get(scene.name),
       })
 
       for _, box in ipairs(boxes) do

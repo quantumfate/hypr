@@ -103,6 +103,57 @@ local function sequence(scene, tiles)
   return out
 end
 
+-- Exposed so `hypr/lib/nav.lua` can compute the same left-to-right order for
+-- keyboard navigation without re-deriving grouping/sequencing rules a second
+-- time (and risking the two disagreeing about what "next tile" means).
+M.collapse_groups = collapse_groups
+M.sequence = sequence
+
+---A stable identity for a sequenced entry, used by keyboard tile-swap
+---(`hypr/scene/order.lua`) to name a slot without depending on which window
+---happens to occupy it. A block's identity is its declared `order` (fixed by
+---the scene document); a stray's is its own address (nothing else names it).
+---@param entry { block: Scene.Block?, tile: Scene.Tile }
+---@return string
+function M.entry_key(entry)
+  if entry.block then
+    return "block:" .. tostring(entry.block.order)
+  end
+  return "stray:" .. tostring(entry.tile.address)
+end
+
+---Reorder sequenced entries to match a desired key order (see `entry_key`).
+---Entries whose key is not named by `override` keep their original relative
+---order, appended after the named ones — so a stale or partial override (a
+---swapped tile that closed) degrades to the declared order instead of
+---dropping anything.
+---@param sequenced { block: Scene.Block?, tile: Scene.Tile }[]
+---@param override string[]? desired key order
+---@return { block: Scene.Block?, tile: Scene.Tile }[]
+function M.reorder(sequenced, override)
+  if not override or #override == 0 then
+    return sequenced
+  end
+  local by_key, used = {}, {}
+  for _, entry in ipairs(sequenced) do
+    by_key[M.entry_key(entry)] = entry
+  end
+  local out = {}
+  for _, key in ipairs(override) do
+    local entry = by_key[key]
+    if entry and not used[key] then
+      out[#out + 1] = entry
+      used[key] = true
+    end
+  end
+  for _, entry in ipairs(sequenced) do
+    if not used[M.entry_key(entry)] then
+      out[#out + 1] = entry
+    end
+  end
+  return out
+end
+
 ---How much of the area each slot gets.
 ---
 ---Declared blocks keep their `share` of the area. Strays divide what is left,
@@ -158,6 +209,8 @@ end
 ---@field gaps_out number gap between the tiles and the screen edge
 ---@field solo_extra number? extra outer gap for a lone tile (default SOLO_EXTRA)
 ---@field solo_frame boolean? whether a lone tile is framed at all (default true)
+---@field override string[]? desired left-to-right entry-key order
+---(see `M.entry_key`, `M.reorder`); nil keeps the declared order
 
 ---Place every tile.
 ---
@@ -172,7 +225,7 @@ function M.boxes(scene, tiles, area, opts)
   local gaps_out = opts.gaps_out or 0
 
   local representatives, members = collapse_groups(tiles)
-  local sequenced = sequence(scene, representatives)
+  local sequenced = M.reorder(sequence(scene, representatives), opts.override)
 
   -- A scene declaring `strays = "float"` pulls its strays out of the split
   -- entirely: they never claim a share, so a fixed capture region's declared

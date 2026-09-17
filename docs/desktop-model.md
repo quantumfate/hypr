@@ -131,7 +131,19 @@ Workspaces are managed in the background; Quickshell presents them.
 - The workspace widget shows the **order** of workspaces per monitor.
 - Navigation keys address the engine's ordered structure of active workspaces
   and of windows within a workspace (counted left to right), per monitor, so a
-  window is reached by position instead of searched for.
+  window is reached by position instead of searched for. Implemented:
+  `mod+h/l` moves across tiles in the scene layout's own order, continuing
+  onto the adjacent monitor's nearest-edge tile past the last one;
+  `mod+j/k` moves within the focused tile (a group's members, or a stacked
+  block's windows); `mod+shift+h/l` swaps a tile with its neighbour
+  (session-only, `hypr/scene/order.lua` — never written to the scene
+  declaration); `mod+shift+j/k` moves the focused window forward/back within
+  its group. The workspace row (`config.host.workspaces.workspace_keys`)
+  focuses/moves-to the Nth scene of the active mode's scene list on the
+  focused monitor, resolved at press time from the applied desk
+  (`hypr/hyprfocus/init.lua` `applied_desk`/`output_for`); pure ordering,
+  neighbour and Nth-on-monitor decisions live in `hypr/lib/nav.lua`
+  (`tests/nav_spec.lua`), bind handlers in `hypr/binds.lua` are thin.
 - The bar's side insets mirror each monitor's base tiled outer gap (LEO-340),
   published to the `geometry` store by `conf/host.lua`'s `build()` and read
   off resolved geometry, not a layout-specific option — workspace layouts are

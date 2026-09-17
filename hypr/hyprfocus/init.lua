@@ -112,6 +112,11 @@ local function output_for(role)
   return host.primary_monitor, "monitor_missing"
 end
 
+-- Exposed for the workspace-row binds (`hypr/binds.lua`), which resolve "the
+-- Nth scene on the focused monitor" at press time from the same desk and
+-- role->output mapping a mode transition already used to place it.
+M.output_for = output_for
+
 ---The output a workspace currently stands on, or nil when it does not exist.
 ---@param name string
 ---@return string?
@@ -523,6 +528,15 @@ end
 ---@return string?
 function M.last_applied_scene()
   return applied_scene
+end
+
+---The desk this runtime last applied (its `scenes`: `{name, monitor role}`
+---placements), or nil before the first apply. The workspace-row binds read
+---this rather than re-resolving the mode, so a key press reflects exactly
+---what is standing rather than a fresh (and possibly different) resolve.
+---@return Hyprfocus.Desk?
+function M.applied_desk()
+  return applied_desk
 end
 
 return M

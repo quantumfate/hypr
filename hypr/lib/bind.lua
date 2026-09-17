@@ -1,4 +1,6 @@
 local hyprfocus_binds = require("hypr.hyprfocus.binds")
+local nav = require("hypr.lib.nav")
+local hyprfocus = require("hypr.hyprfocus")
 local M = {}
 
 ---@param mods string[]?
@@ -6,20 +8,63 @@ function M.parse_mods(mods)
   return mods and "+" .. table.concat(mods, "+") .. "+" or "+"
 end
 
----Binds workspace focus and window move actions. Namespace rule: a spec's
----`default_name` is what the environment addresses (window rules, hold
----restore, the scene actuator), so binds speak "name:<default_name>"; a spec
----without one keeps its numeric or special: selector.
-function M.bind_workspaces()
-  local host = config.host
-  for i, key in ipairs(host.workspaces.workspace_keys) do
-    local spec = host.workspaces.workspace_specs[i]
-    if spec then
-      local selector = spec.default_name and ("name:" .. spec.default_name) or tostring(spec.workspace)
-      local label = spec.default_name or tostring(spec.workspace)
-      M.focus_workspace(key, selector, label)
-      M.move_focused_to_workspace(key, selector, { "SHIFT" }, label)
-    end
+---The active mode's scene names placed on one monitor output, in desk order
+---(`hypr/hyprfocus/init.lua` `applied_desk`/`output_for`; see docs/scenes.md
+---"Scene sets: mode → scene → monitor"). Resolved at press time, not at
+---config load, since it depends on the mode and which monitor is focused —
+---both of which change without a reload.
+---@param monitor_output string
+---@return string[]
+local function scenes_on_monitor(monitor_output)
+  local desk = hyprfocus.applied_desk()
+  if not desk then
+    return {}
+  end
+  local placements = {}
+  for _, placement in ipairs(desk.scenes or {}) do
+    placements[#placements + 1] = { name = placement.name, output = hyprfocus.output_for(placement.monitor) }
+  end
+  return nav.workspaces_on_monitor(placements, monitor_output)
+end
+
+---Workspace row (LEO-344 decision): `mod+<key>` focuses, `mod+shift+<key>`
+---moves the focused window to, the Nth scene of the active mode's scene list
+---on the FOCUSED monitor — position N is this key's index in
+---`workspace_keys`, never a hardcoded digit. A monitor with fewer scenes than
+---a key's position makes that key a no-op, by construction: `nth_workspace`
+---returns nil and the handler dispatches nothing.
+---
+---Registered once per `workspace_keys` entry regardless of what any given
+---mode/monitor holds — which-key renders "Workspace <symbol> on this
+---monitor" generically rather than a description that would have to know the
+---mode and focused monitor ahead of press time (AGENTS.md's "never show a
+---binding that cannot execute" is satisfied by the description being true in
+---general, not by hiding positions a monitor happens not to fill right now).
+function M.bind_workspace_row()
+  for i, key in ipairs(config.host.workspaces.workspace_keys) do
+    local symbol = nav.symbol_for(key)
+    hyprfocus_binds.bind(config.main_mod .. M.parse_mods() .. key, function()
+      local monitor = hl.get_active_monitor()
+      local name = monitor and nav.nth_workspace(scenes_on_monitor(monitor.name), i)
+      if not name then
+        return
+      end
+      hl.dispatch(function()
+        if hl.get_active_workspace() and hl.get_active_workspace().special then
+          hl.dsp.workspace.toggle_special()
+        end
+        return hl.dsp.focus({ workspace = "name:" .. name })
+      end)
+    end, { description = ("Workspace %s on this monitor"):format(symbol) })
+
+    hyprfocus_binds.bind(config.main_mod .. M.parse_mods({ "SHIFT" }) .. key, function()
+      local monitor = hl.get_active_monitor()
+      local name = monitor and nav.nth_workspace(scenes_on_monitor(monitor.name), i)
+      if not name then
+        return
+      end
+      hl.dispatch(hl.dsp.window.move({ workspace = "name:" .. name, follow = true }))
+    end, { description = ("Move focused window to workspace %s on this monitor"):format(symbol) })
   end
 end
 
