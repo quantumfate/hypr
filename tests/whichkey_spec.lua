@@ -97,6 +97,33 @@ t.describe("whichkey registry (LEO-222)", function()
     t.ok(decoded["wk-root-b"].items[1].child == "explicit", "nested child serialized")
     t.eq("SHIFT", decoded["wk-root-a"].items[2].mods[1], "mods serialized")
   end)
+
+  t.it("dumps atomically: no .tmp left behind, content round-trips (LEO-372)", function()
+    local tmp = os.tmpname()
+    os.remove(tmp)
+    local old = whichkey.path
+    whichkey.path = tmp
+    whichkey.dump()
+    whichkey.path = old
+    t.eq(
+      false,
+      (function()
+        local f = io.open(tmp .. ".tmp", "r")
+        if f then
+          f:close()
+          return true
+        end
+        return false
+      end)(),
+      "no leftover .tmp file"
+    )
+    local f = assert(io.open(tmp, "r"))
+    local raw = f:read("*a")
+    f:close()
+    os.remove(tmp)
+    local decoded = assert(json.decode(raw))
+    t.ok(decoded["wk-root-a"], "the written document decodes back to the registry")
+  end)
 end)
 
 t.describe("whichkey dismiss on submap exit (LEO-222)", function()

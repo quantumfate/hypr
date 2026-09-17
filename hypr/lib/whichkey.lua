@@ -148,7 +148,14 @@ function M.dump(admitted)
   -- of config load, which is the only thing that guarantees the caller runs
   -- Lua, so it is fair to create it here rather than require a seed step.
   os.execute(("mkdir -p %q"):format(M.path:match("^(.*)/[^/]+$")))
-  local f = io.open(M.path, "w")
+  -- Written to a temp file and renamed into place (LEO-372): a plain
+  -- truncate-and-rewrite leaves the file briefly empty, and Quickshell's
+  -- Store side reads an empty file as "never seeded" and migrates the legacy
+  -- document back over it. `os.rename` is atomic on the same filesystem, so a
+  -- reader never observes anything but the previous complete document or the
+  -- new one.
+  local tmp = M.path .. ".tmp"
+  local f = io.open(tmp, "w")
   if not f then
     return
   end
@@ -180,6 +187,7 @@ function M.dump(admitted)
   end
   f:write(json.encode(out), "\n")
   f:close()
+  os.rename(tmp, M.path)
 end
 
 return M
