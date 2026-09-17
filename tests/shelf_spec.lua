@@ -65,6 +65,7 @@ t.describe("shelf decisions", function()
       ctx({ { name = "dofus", monitor = "game" } }, { { name = "game", activeWorkspace = { name = "code" } } })
     )
     t.eq("name:dofus", d.focus)
+    t.ok(d.monitor ~= nil, "an owned shelf always focuses its owner's monitor first")
   end)
 
   t.it("an owned shelf does not focus when its owner scene is already active there", function()

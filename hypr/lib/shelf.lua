@@ -125,7 +125,7 @@ end
 ---@param shelf Shelf
 ---@param windows table[]
 ---@param ctx Shelf.Ctx? omitted or scene-less shelves behave as before
----@return { launch: string?, toggle: string?, focus: string?, reason: string? }
+---@return { launch: string?, toggle: string?, monitor: string?, focus: string?, reason: string? }
 function M.decide(shelf, windows, ctx)
   local out = M.running(shelf, windows) and { toggle = M.workspace(shelf) } or { launch = shelf.cmd }
   if not shelf.scene then
@@ -139,6 +139,11 @@ function M.decide(shelf, windows, ctx)
     )
     return out
   end
+  -- A special workspace shows on the focused monitor, both for a toggle and
+  -- for a window a rule routes there on launch, so the owner's monitor is
+  -- always focused first. Focusing by workspace name alone was verified live
+  -- not to move to another monitor.
+  out.monitor = output
   if active_workspace_on(ctx.monitors, output) ~= shelf.scene then
     out.focus = "name:" .. shelf.scene
   end
@@ -170,6 +175,9 @@ function M.entry(shelf)
           shelf = shelf.name,
           scene = shelf.scene,
         })
+      end
+      if d.monitor then
+        hl.dispatch(hl.dsp.focus({ monitor = d.monitor }))
       end
       if d.focus then
         hl.dispatch(hl.dsp.focus({ workspace = d.focus }))
