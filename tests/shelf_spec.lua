@@ -6,6 +6,27 @@ local t = require("tests.harness")
 
 local SIGNAL = { name = "signal", key = "s", class = "signal", cmd = "signal-desktop", desc = "Signal" }
 local STEAM = { name = "steam", key = "t", class = "steam", cmd = "steam", desc = "Steam", tree = "shelf-steam" }
+local ANKAMA = {
+  name = "ankama",
+  key = "a",
+  class = "Ankama Launcher",
+  cmd = ",ankama-launcher.sh",
+  desc = "Ankama Launcher",
+  tree = "shelf-ankama",
+  scene = "dofus",
+}
+
+-- A ctx as the shelf submap entry builds it: the active desk's placements,
+-- `hyprfocus.output_for` (role -> output), and `hl.get_monitors()`.
+local function ctx(scenes, monitors)
+  return {
+    desk = { scenes = scenes },
+    output_for = function(role)
+      return role
+    end,
+    monitors = monitors,
+  }
+end
 
 t.describe("shelf decisions", function()
   local shelf = require("hypr.lib.shelf")
@@ -29,6 +50,58 @@ t.describe("shelf decisions", function()
     t.eq(2, #stub.window_rules)
     t.eq("special:shelf-steam", stub.window_rules[2].workspace)
     t.eq(true, stub.window_rules[2].float)
+  end)
+
+  t.it("a global shelf never asks to focus anything, even with a ctx", function()
+    local d = shelf.decide(SIGNAL, {}, ctx({ { name = "dofus", monitor = "game" } }, { { name = "game" } }))
+    t.eq(nil, d.focus)
+    t.eq(nil, d.reason)
+  end)
+
+  t.it("an owned shelf focuses its owner scene when another workspace is active there", function()
+    local d = shelf.decide(
+      ANKAMA,
+      {},
+      ctx({ { name = "dofus", monitor = "game" } }, { { name = "game", activeWorkspace = { name = "code" } } })
+    )
+    t.eq("name:dofus", d.focus)
+  end)
+
+  t.it("an owned shelf does not focus when its owner scene is already active there", function()
+    local d = shelf.decide(
+      ANKAMA,
+      {},
+      ctx({ { name = "dofus", monitor = "game" } }, { { name = "game", activeWorkspace = { name = "dofus" } } })
+    )
+    t.eq(nil, d.focus)
+  end)
+
+  t.it("an owned shelf whose owner scene is not in the active desk opens on the focused monitor", function()
+    local d = shelf.decide(ANKAMA, {}, ctx({ { name = "code", monitor = "main" } }, { { name = "main" } }))
+    t.eq(nil, d.focus)
+    t.ok(d.reason and d.reason:match("not in the active mode's desk"), "explains the fallback")
+  end)
+
+  t.it("an owned shelf with no ctx at all never focuses, same as no active desk", function()
+    local d = shelf.decide(ANKAMA, {})
+    t.eq(nil, d.focus)
+    t.ok(d.reason, "still reports why it fell back, for the caller to log")
+  end)
+end)
+
+t.describe("shelf exemption from hold", function()
+  local shelf = require("hypr.lib.shelf")
+
+  t.it("a window on any shelf special workspace is exempt", function()
+    t.ok(shelf.exempt({ workspace = { name = "special:shelf-ankama" } }, {}))
+  end)
+
+  t.it("a window of a configured shelf's class is exempt, wherever it stands", function()
+    t.ok(shelf.exempt({ class = "steam", workspace = { name = "code" } }, { STEAM }))
+  end)
+
+  t.it("an unrelated window on an unrelated workspace is not exempt", function()
+    t.eq(false, shelf.exempt({ class = "kitty", workspace = { name = "code" } }, { STEAM }))
   end)
 end)
 

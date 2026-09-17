@@ -5,14 +5,14 @@ and holds one app the desk depends on but that never takes a tile. It is the
 first implementation of the **drawers** in
 [desktop-model.md](desktop-model.md#scene).
 
-| Shelf   | Key | Class               | Opens with            | Admitted            |
-| ------- | --- | ------------------- | --------------------- | ------------------- |
-| signal  | `s` | `signal`            | `signal-desktop`      | always              |
-| vesktop | `v` | `vesktop`           | `vesktop`             | always              |
-| ankama  | `a` | `Ankama Launcher`   | `,ankama-launcher.sh` | tree `shelf-ankama` |
-| steam   | `t` | `steam`             | `steam`               | tree `shelf-steam`  |
-| lutris  | `l` | `net.lutris.Lutris` | `lutris`              | tree `shelf-lutris` |
-| music   | `m` | `([Ss]potify)`      | `spotify`             | always              |
+| Shelf   | Key | Class               | Opens with            | Admitted            | Owner scene   |
+| ------- | --- | ------------------- | --------------------- | ------------------- | ------------- |
+| signal  | `s` | `signal`            | `signal-desktop`      | always              | global        |
+| vesktop | `v` | `vesktop`           | `vesktop`             | always              | global        |
+| ankama  | `a` | `Ankama Launcher`   | `,ankama-launcher.sh` | tree `shelf-ankama` | `dofus`       |
+| steam   | `t` | `steam`             | `steam`               | tree `shelf-steam`  | `steam-games` |
+| lutris  | `l` | `net.lutris.Lutris` | `lutris`              | tree `shelf-lutris` | `dofus`       |
+| music   | `m` | `([Ss]potify)`      | `spotify`             | always              | global        |
 
 ## Contract
 
@@ -30,8 +30,28 @@ first implementation of the **drawers** in
   tree (`SubmapEntry.tree`), so a mode withholds that key alone and which-key
   hides it. The hyprfocus declaration lists the trees in `base.bindings`;
   every mode except `gaming` removes them.
+- **Owner scene:** a shelf may declare `scene` (Ankama and Lutris → `dofus`,
+  Steam → `steam-games`), the scene it slides in over. The press first
+  focuses the owner scene's workspace (`hl.dsp.focus({ workspace = "name:" ..
+scene })`), dispatched only when that workspace is not already the active
+  one on the monitor the active mode placed it on — then toggles or launches
+  as usual, so the special workspace shows up on that scene's monitor instead
+  of wherever the user was focused. `hypr/lib/shelf.lua`'s `decide` stays pure
+  for this: it is handed a `ctx` (the applied desk, `hyprfocus.output_for`,
+  and `hl.get_monitors()`) and returns the workspace to focus, if any, for the
+  submap entry to dispatch. If the owner scene is not part of the active
+  mode's desk at all, no focus is dispatched — the shelf opens on the focused
+  monitor, same as a global shelf — and the decision is logged
+  (`shelf_owner_not_admitted`). Signal, Vesktop and Spotify stay global: no
+  `scene`, always opens on the focused monitor.
 - Signal, Vesktop, Steam, Lutris, Spotify and the Ankama Launcher are no
   longer scenes or workspaces.
+- **Never held:** `hypr/hyprfocus/hold.lua` never parks or restores a window
+  standing on a `special:shelf-*` workspace, nor one whose class matches a
+  configured shelf (`hypr/lib/shelf.lua`'s `M.exempt`, reused by both). A mode
+  switch that withdraws a shelf's owner scene must not sweep the shelf's app
+  into `special:hyprfocus-held` — the shelf, not the mode, owns that app's
+  lifecycle.
 
 ## Not yet
 

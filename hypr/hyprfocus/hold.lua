@@ -14,8 +14,16 @@
 -- never be admitted or withdrawn itself. That matters: a holding place that a
 -- mode could withdraw would strand exactly the windows it exists to protect.
 local store = require("hypr.lib.store")
+local shelf = require("hypr.lib.shelf")
 
 local M = {}
+
+---Shelves are runtime config, not this module's; a hold spec that never sets
+---`_G.config` sees none, which is the same as a desk with no shelves at all.
+---@return Shelf[]
+local function shelves()
+  return (rawget(_G, "config") or {}).shelves or {}
+end
 
 -- Windows go here. Special workspaces carry negative ids and are never a
 -- scene's home, so nothing else in the engine will try to arrange it.
@@ -67,7 +75,7 @@ function M.hold(workspace)
   local parked = 0
   for _, w in ipairs(hl.get_windows() or {}) do
     local ws = w.workspace
-    if ws and ws.name == workspace and w.address and not recorded[w.address] then
+    if ws and ws.name == workspace and w.address and not recorded[w.address] and not shelf.exempt(w, shelves()) then
       recorded[w.address] = workspace
       move(w.address, HELD)
       parked = parked + 1
@@ -108,7 +116,7 @@ function M.restore(workspace)
     local origin = recorded[address]
     if origin ~= workspace then
       remaining[address] = origin
-    elseif live[address] then
+    elseif live[address] and not shelf.exempt(live[address], shelves()) then
       move(address, "name:" .. origin)
       returned = returned + 1
     end

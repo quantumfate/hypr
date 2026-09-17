@@ -41,8 +41,8 @@ local function fresh(windows)
   return stub, require("hypr.hyprfocus.hold"), saved
 end
 
-local function win(address, workspace)
-  return { address = address, workspace = { id = 1, name = workspace } }
+local function win(address, workspace, class)
+  return { address = address, class = class, workspace = { id = 1, name = workspace } }
 end
 
 local function moves(stub)
@@ -165,5 +165,26 @@ t.describe("the record", function()
     hold.hold("code")
     hold.forget()
     t.eq(nil, hold.origin("0x1"))
+  end)
+end)
+
+t.describe("shelf windows are never held (LEO-370)", function()
+  local STEAM = { name = "steam", key = "t", class = "steam", cmd = "steam", desc = "Steam" }
+
+  t.it("a shelf-classed window on the withdrawn workspace is left standing", function()
+    _G.config = { shelves = { STEAM } }
+    local stub, hold = fresh({ win("0x1", "code"), win("0x2", "code", "steam") })
+    t.eq(1, hold.hold("code"), "only the non-shelf window is parked")
+    t.eq("address:0x1->special:hyprfocus-held", moves(stub))
+    t.eq(nil, hold.origin("0x2"))
+    _G.config = nil
+  end)
+
+  t.it("a window already on a shelf special workspace is left standing, class aside", function()
+    _G.config = { shelves = {} }
+    local stub, hold = fresh({ win("0x1", "special:shelf-ankama") })
+    t.eq(0, hold.hold("special:shelf-ankama"))
+    t.eq("", moves(stub))
+    _G.config = nil
   end)
 end)
