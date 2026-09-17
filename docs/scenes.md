@@ -202,6 +202,8 @@ The group already holding the most of a block's tiles wins, derived fresh from t
 
 Grouping is decided **once**, by the scene. Do not also write a `group` key in `windowrules.lua` for a class a block names; the runtime decision reads the declaration directly.
 
+**Bar style and reservation:** Hyprland styles the groupbar globally (`group.groupbar` in `hypr/conf.lua`), not per group, so there is one slim style for every group: 18px tall, small readable text, the focused member's title inside, no gradients. Colours come from the active palette's roles, resolved and pushed by `hypr/themes/colors.lua#apply_colors` alongside the border colours — active/inactive/locked variants and their text colours re-apply on every palette or accent change, the same call that repaints borders. Hyprland reserves the bar's height **inside** the group's own box; the scene layout (`hypr/scene/layout.lua`) gives every member of a group the same box it would give one ungrouped tile of that block — it does not know about or add a second reservation for the bar, and neighbouring tiles never shift because of it. Verified live in the nested e2e (`tests/e2e/hq`): a 3-member group's window box and an ungrouped tile's box on the same monitor share the same outer rectangle; only the group's content is inset from the top by the bar's height.
+
 ## Guard
 
 `guard` on a non-group member (`"barred"` default, `"deny"`) is declaration metadata; nothing reads it at runtime yet — the executor above only groups/ejects for `group = true` blocks. A non-group block's own class is simply never a group-block match, so it is never folded in or ejected by the executor either.

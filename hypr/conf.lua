@@ -82,23 +82,22 @@ hl.config({
     auto_group = true,
     groupbar = {
       enabled = true,
-      -- The defaults are 14px tall with 8px text, which is a decoration rather
-      -- than something you can read across a 5120px panel. The bar takes the
-      -- tile's top edge — the client's own top — and both Hypr's native bar
-      -- exactly this slot: one bar per tile, one reservation. The Dofus
-      -- editors live in panels, not painted over the bar (LEO-234).
-      height = 30,
+      -- Slim: a strip that names the active member, not a tab bar.
+      -- Hyprland reserves exactly `height` inside the group's own box (see
+      -- hypr/scene/layout.lua), so a group's box stays identical to an
+      -- ungrouped tile's — only its content shrinks by this much.
+      height = 18,
       font_family = "JetBrainsMono Nerd Font",
-      font_size = 14,
+      font_size = 10,
       font_weight_active = 600,
       font_weight_inactive = 400,
       render_titles = true,
       -- Only worth the vertical space once there is something to choose between.
       disable_when_only = true,
-      indicator_height = 4,
-      gaps_in = 4,
-      gaps_out = 6,
-      rounding = 3,
+      indicator_height = 2,
+      gaps_in = 2,
+      gaps_out = 4,
+      rounding = 2,
       gradients = false,
       -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
       scrolling = true,
