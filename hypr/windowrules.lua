@@ -398,3 +398,15 @@ require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
 
 -- Shelves last, so their workspace effect wins over any earlier class rule.
 require("hypr.lib.shelf").rules(config.shelves)
+
+-- Nested Hyprland instances started by the e2e harness (tests/e2e/hq) open as
+-- an `aquamarine` window. Keep them small, floating in a corner and out of
+-- focus, so an agent's live test never takes over the desk.
+hl.window_rule({
+  name = "e2e-nested-hyprland",
+  match = { class = "aquamarine" },
+  float = true,
+  size = { 960, 540 },
+  move = { "monitor_w - 980", "monitor_h - 580" },
+  no_initial_focus = true,
+})
