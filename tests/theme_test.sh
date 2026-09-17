@@ -367,6 +367,30 @@ contains "an empty wallpaper directory still reports unchanged" "wallpaper: unch
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
 teardown
 
+echo "wallpaper resolution: a bare bound name resolves against the wallpapers dir (LEO-372)"
+setup
+export THEME_MAGICK="$ROOT/no-such-magick-binary"
+awww_stub
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'bare' >"$XDG_CONFIG_HOME/hypr/wallpapers/Clearnight.jpg"
+printf '{"palette":"mocha","mode":"manual","wallpapers":{"mocha":"Clearnight.jpg"}}\n' >"$STORE"
+"$THEME" apply >/dev/null
+contains "a bare name resolves against \$CONFIG/hypr/wallpapers" "Clearnight.jpg" "$(cat "$AWWW_LOG")"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
+teardown
+
+echo "wallpaper resolution: a missing bound file falls through to a random pick"
+setup
+export THEME_MAGICK="$ROOT/no-such-magick-binary"
+awww_stub
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'fallback' >"$XDG_CONFIG_HOME/hypr/wallpapers/rain.png"
+printf '{"palette":"mocha","mode":"manual","wallpapers":{"mocha":"does-not-exist.jpg"}}\n' >"$STORE"
+"$THEME" apply >/dev/null
+contains "a nonexistent bound file falls through to the random pick, not a failure" "rain.png" "$(cat "$AWWW_LOG")"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
+teardown
+
 echo "wallpaper resolution: an unknown palette is refused"
 setup
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"

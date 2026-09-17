@@ -682,11 +682,23 @@ process_wallpaper() {
 # instead of forgetting it would re-roll on every palette switch. Shared with
 # `status` so the two can never disagree about what is bound.
 resolve_wallpaper() {
-    local palette=$1 wall
+    local palette=$1 wall dir="$CONFIG/hypr/wallpapers"
     wall=$(jq -r --arg p "$palette" '.wallpapers[$p] // ""' "$STATE" 2>/dev/null || echo "")
     [ -n "$wall" ] || wall=$(get wallpaper "")
+    if [ -n "$wall" ]; then
+        # A bound name with no "/" is bare (LEO-372: `theme.json` stores
+        # `Clearnight.jpg`, not a path) — resolve it against the wallpapers
+        # directory before checking it exists.
+        case "$wall" in
+        */*) : ;;
+        *) wall="$dir/$wall" ;;
+        esac
+        # A binding that does not exist on disk must not fail the whole
+        # resolution: fall through to the next step instead, same as no
+        # binding at all.
+        [ -f "$wall" ] || wall=""
+    fi
     if [ -z "$wall" ]; then
-        local dir="$CONFIG/hypr/wallpapers"
         for candidate in "$dir/$palette.jpg" "$dir/$palette.png"; do
             [ -f "$candidate" ] && {
                 wall=$candidate
@@ -695,7 +707,7 @@ resolve_wallpaper() {
         done
     fi
     if [ -z "$wall" ]; then
-        wall=$(find "$CONFIG/hypr/wallpapers" -maxdepth 1 -type f \
+        wall=$(find "$dir" -maxdepth 1 -type f \
             \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) 2>/dev/null |
             shuf -n 1)
     fi
