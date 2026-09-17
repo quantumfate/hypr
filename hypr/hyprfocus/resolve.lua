@@ -212,7 +212,12 @@ function M.validate(declaration, mode)
 
     for _, block in ipairs(catalog[name].blocks or {}) do
       for _, class in ipairs(block.classes or {}) do
-        local owner = claimed_by[class]
+        -- A slot-bearing block (LEO-364) claims the launch-identity tag, not
+        -- the bare class, so it keys separately: two scenes sharing a class
+        -- (pokemon and dofus, both `zen-gaming-media`) stay unflagged once a
+        -- slot disambiguates one side.
+        local key = block.slot and (class .. ":" .. block.slot) or class
+        local owner = claimed_by[key]
         if owner and owner ~= name then
           return refusal(
             mode,
@@ -221,7 +226,7 @@ function M.validate(declaration, mode)
             { class = class, scenes = { owner, name } }
           )
         end
-        claimed_by[class] = name
+        claimed_by[key] = name
       end
     end
   end

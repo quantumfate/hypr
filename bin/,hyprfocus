@@ -210,7 +210,12 @@ def validate(declaration: dict, mode: str) -> dict | None:
         listed.add(name)
         for block in catalog[name].get("blocks", []):
             for cls in block.get("classes", []):
-                owner = claimed_by.get(cls)
+                # A slot-bearing block (LEO-364) claims the launch-identity tag,
+                # not the bare class, so it keys separately: two scenes sharing a
+                # class stay unflagged once a slot disambiguates one side.
+                slot = block.get("slot")
+                key = f"{cls}:{slot}" if slot else cls
+                owner = claimed_by.get(key)
                 if owner and owner != name:
                     return refusal(
                         mode,
@@ -218,7 +223,7 @@ def validate(declaration: dict, mode: str) -> dict | None:
                         f"class '{cls}' claimed by {owner} and {name}",
                         **{"class": cls, "scenes": [owner, name]},
                     )
-                claimed_by[cls] = name
+                claimed_by[key] = name
     return None
 
 

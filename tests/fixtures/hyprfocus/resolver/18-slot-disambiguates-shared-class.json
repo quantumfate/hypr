@@ -1,0 +1,135 @@
+{
+  "name": "a slot on one side lets two active scenes share a class (LEO-364, dofus/pokemon)",
+  "declaration": {
+    "base": {
+      "bindings": [],
+      "services": [],
+      "projects": [],
+      "notify": {},
+      "scenes": {
+        "dofus": {
+          "blocks": [
+            {
+              "classes": [
+                "Dofus.x64"
+              ],
+              "order": 1
+            },
+            {
+              "classes": [
+                "zen-gaming-media"
+              ],
+              "order": 2
+            }
+          ]
+        },
+        "pokemon": {
+          "blocks": [
+            {
+              "classes": [
+                "com.libretro.RetroArch"
+              ],
+              "order": 1
+            },
+            {
+              "classes": [
+                "zen-gaming-media"
+              ],
+              "slot": "pokemon/chat",
+              "order": 2
+            },
+            {
+              "classes": [
+                "zen-gaming-media"
+              ],
+              "slot": "pokemon/stream",
+              "order": 3
+            }
+          ]
+        }
+      }
+    },
+    "modes": {
+      "gaming": {
+        "name": "Gaming",
+        "scenes": [
+          {
+            "name": "dofus",
+            "monitor": "primary"
+          },
+          {
+            "name": "pokemon",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "gaming",
+  "expected": {
+    "mode": "gaming",
+    "hidden": false,
+    "scenes": [
+      {
+        "name": "dofus",
+        "monitor": "primary"
+      },
+      {
+        "name": "pokemon",
+        "monitor": "primary"
+      }
+    ],
+    "scene_specs": {
+      "dofus": {
+        "blocks": [
+          {
+            "classes": [
+              "Dofus.x64"
+            ],
+            "order": 1
+          },
+          {
+            "classes": [
+              "zen-gaming-media"
+            ],
+            "order": 2
+          }
+        ]
+      },
+      "pokemon": {
+        "blocks": [
+          {
+            "classes": [
+              "com.libretro.RetroArch"
+            ],
+            "order": 1
+          },
+          {
+            "classes": [
+              "zen-gaming-media"
+            ],
+            "slot": "pokemon/chat",
+            "order": 2
+          },
+          {
+            "classes": [
+              "zen-gaming-media"
+            ],
+            "slot": "pokemon/stream",
+            "order": 3
+          }
+        ]
+      }
+    },
+    "workspaces": [
+      "dofus",
+      "pokemon"
+    ],
+    "bindings": [],
+    "services": [],
+    "projects": [],
+    "notify": {},
+    "revoke": {},
+    "presentation": {}
+  }
+}
