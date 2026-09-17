@@ -86,7 +86,7 @@ hl.config({
       -- Hyprland reserves exactly `height` inside the group's own box (see
       -- hypr/scene/layout.lua), so a group's box stays identical to an
       -- ungrouped tile's — only its content shrinks by this much.
-      height = 18,
+      height = 20,
       font_family = "JetBrainsMono Nerd Font",
       font_size = 10,
       font_weight_active = 600,
@@ -94,14 +94,15 @@ hl.config({
       render_titles = true,
       -- Only worth the vertical space once there is something to choose between.
       disable_when_only = true,
-      indicator_height = 0,
-      gaps_in = 2,
-      gaps_out = 4,
+      -- A title over an accent underline, with air between tabs and around
+      -- the strip: the look the nested e2e render showed.
+      indicator_height = 3,
+      indicator_gap = 2,
+      gaps_in = 10,
+      gaps_out = 6,
+      keep_upper_gap = true,
       rounding = 2,
-      -- Filled tabs: the accent block is the indicator, the title sits on it
-      -- (hypr/themes/colors.lua picks crust text for that ground).
-      gradients = true,
-      gradient_rounding = 2,
+      gradients = false,
       -- Scroll over the bar to walk the stack, the same gesture as a tab strip.
       scrolling = true,
     },
