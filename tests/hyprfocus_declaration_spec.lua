@@ -26,18 +26,16 @@ local function host_workspaces()
     local host = path:match("([^/]+)%.lua$")
     -- The e2e host is a nested-compositor fixture with its own tiny workspace
     -- set, not a machine the shipped declaration is written for.
-    if host == "e2e" then
-      goto continue
-    end
-    local spec = dofile(path)
-    local names = {}
-    for _, rule in ipairs((spec.workspaces or {}).workspace_specs or {}) do
-      if rule.default_name then
-        names[rule.default_name] = true
+    if host ~= "e2e" then
+      local spec = dofile(path)
+      local names = {}
+      for _, rule in ipairs((spec.workspaces or {}).workspace_specs or {}) do
+        if rule.default_name then
+          names[rule.default_name] = true
+        end
       end
+      hosts[host] = names
     end
-    hosts[host] = names
-    ::continue::
   end
   p:close()
   return hosts
@@ -150,5 +148,17 @@ t.describe("base.scenes is the single scene table", function()
     package.loaded["hypr.scene.spec"] = nil
     package.loaded["hypr.lib.store"] = nil
     t.eq("", table.concat(ambiguous, ","))
+  end)
+end)
+
+-- One module instance: `require("hypr.hyprfocus.init")` loads a second copy of
+-- the engine (its own apply guard and held-window record), which let a watcher
+-- tick nest an apply inside another and strand held windows.
+t.describe("hyprfocus is loaded under one module name", function()
+  t.it("nothing requires hypr.hyprfocus.init", function()
+    local p = assert(io.popen([[grep -rln 'require("hypr.hyprfocus.init")' hypr conf 2>/dev/null]]))
+    local hits = p:read("*a")
+    p:close()
+    t.eq("", hits)
   end)
 end)

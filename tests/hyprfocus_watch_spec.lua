@@ -45,7 +45,7 @@ local function fresh(declaration, pointer)
     "hypr.hyprfocus.hold",
     "hypr.hyprfocus.binds",
     "hypr.hyprfocus.workspaces",
-    "hypr.hyprfocus.init",
+    "hypr.hyprfocus",
     "hypr.hyprfocus.watch",
   }) do
     package.loaded[mod] = nil
@@ -105,7 +105,7 @@ local function fresh(declaration, pointer)
     workspaces.record(name, rules[name])
   end
 
-  return stub, require("hypr.hyprfocus.init"), require("hypr.hyprfocus.watch"), stores, rules
+  return stub, require("hypr.hyprfocus"), require("hypr.hyprfocus.watch"), stores, rules
 end
 
 t.describe("the watcher", function()

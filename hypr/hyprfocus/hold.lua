@@ -34,24 +34,47 @@ local HELD = "special:hyprfocus-held"
 -- turn a held window into a lost one.
 local RECORD = "hyprfocus-held"
 
+-- The record lives in memory for the life of the config: the compositor runs
+-- one Lua state, so every hold and restore within an apply sees the previous
+-- one's writes. The store is only a mirror that survives a restart; reading it
+-- back on every call raced its own mtime cache and dropped entries between two
+-- holds of the same apply.
+---@type table<string, string>?
+local record
+
 ---@return table<string, string> address -> the workspace it came from
 local function origins()
-  local ok, handle = pcall(store.define, RECORD)
-  if not ok then
-    return {}
+  if record then
+    return record
   end
-  local data = handle:get("windows")
-  return type(data) == "table" and data or {}
+  record = {}
+  local ok, handle = pcall(store.define, RECORD)
+  if ok then
+    local data = handle:get("windows")
+    if type(data) == "table" then
+      for address, origin in pairs(data) do
+        record[address] = origin
+      end
+    end
+  end
+  return record
 end
 
 ---@param windows table<string, string>
 local function remember(windows)
+  record = windows
   local ok, handle = pcall(store.define, RECORD)
   if ok then
     pcall(function()
       handle:set({ windows = windows })
     end)
   end
+end
+
+---Forget the in-memory record so the next read comes from the store. For
+---specs; a config reload starts a fresh Lua state anyway.
+function M.reset()
+  record = nil
 end
 
 ---@param address string
@@ -206,15 +229,15 @@ end
 ---@param windows { address: string, class: string?, workspace: string? }[]
 ---@param admitted table<string, true>
 ---@param known table<string, true> managed workspace names (the registry)
----@param record table<string, string> address -> origin
+---@param recorded table<string, string> address -> origin
 ---@return { address: string, class: string?, workspace: string?, reason: string }[]
-function M.unreachable(windows, admitted, known, record)
+function M.unreachable(windows, admitted, known, recorded)
   local out = {}
   for _, w in ipairs(windows or {}) do
     local ws = w.workspace
     local reason
     if ws == HELD then
-      local origin = record[w.address]
+      local origin = recorded[w.address]
       if not origin then
         reason = "no_origin"
       elseif admitted[origin] then

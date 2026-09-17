@@ -14,7 +14,11 @@
 -- convergence when it writes the pointer (Focus.qml's mode change), so the
 -- usual path does not even wait for the next event.
 local notify = require("hypr.lib.notify")
-local hyprfocus = require("hypr.hyprfocus.init")
+-- The same module name every other caller uses: requiring it by its file path
+-- (`hypr.hyprfocus.init`) loads a SECOND copy with its own apply guard, held
+-- record and applied desk, which let a watcher tick nest a whole apply inside
+-- another and drop held windows from the record.
+local hyprfocus = require("hypr.hyprfocus")
 
 local M = {}
 

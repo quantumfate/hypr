@@ -265,7 +265,7 @@ t.describe("boot dump is the admitted set", function()
       "hypr.hyprfocus.workspaces",
       "hypr.hyprfocus.resolve",
       "hypr.hyprfocus.plan",
-      "hypr.hyprfocus.init",
+      "hypr.hyprfocus",
       "hypr.lib.whichkey",
     }) do
       package.loaded[mod] = nil
@@ -343,7 +343,7 @@ t.describe("boot dump is the admitted set", function()
     wk.register("terminal", nil, { { key = "t", desc = "Terminal" } })
     wk.register("dofus", nil, { { key = "d", desc = "Dofus" } })
 
-    local hyprfocus = require("hypr.hyprfocus.init")
+    local hyprfocus = require("hypr.hyprfocus")
     local path = os.tmpname()
     wk.path = path
     local report = hyprfocus.apply("work")

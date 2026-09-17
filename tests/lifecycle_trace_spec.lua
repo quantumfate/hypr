@@ -136,7 +136,7 @@ t.describe("hyprfocus/init.lua wiring", function()
       "hypr.hyprfocus.hold",
       "hypr.hyprfocus.binds",
       "hypr.hyprfocus.workspaces",
-      "hypr.hyprfocus.init",
+      "hypr.hyprfocus",
     }) do
       package.loaded[mod] = nil
     end
@@ -183,7 +183,7 @@ t.describe("hyprfocus/init.lua wiring", function()
       workspaces.record(name, hl.workspace_rule({ workspace = name, default_name = name }))
     end
 
-    return calls, require("hypr.hyprfocus.init")
+    return calls, require("hypr.hyprfocus")
   end
 
   t.it("logs admitted and withheld workspaces on mode apply", function()

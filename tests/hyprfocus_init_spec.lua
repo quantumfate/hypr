@@ -51,7 +51,7 @@ local function fresh(declaration, pointer)
     "hypr.hyprfocus.hold",
     "hypr.hyprfocus.binds",
     "hypr.hyprfocus.workspaces",
-    "hypr.hyprfocus.init",
+    "hypr.hyprfocus",
   }) do
     package.loaded[mod] = nil
   end
@@ -110,7 +110,7 @@ local function fresh(declaration, pointer)
     workspaces.record(name, rules[name])
   end
 
-  return stub, require("hypr.hyprfocus.init"), rules, workspaces
+  return stub, require("hypr.hyprfocus"), rules, workspaces
 end
 
 t.describe("reading the declaration", function()
