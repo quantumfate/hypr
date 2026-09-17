@@ -5,8 +5,6 @@
 --   engine.layout_opts -- consumed by hypr/events/layout_opts.lua; workspace
 --     rules only implement layoutopt:orientation, and hl.workspace_rule rejects
 --     the nested per-layout tables outright.
---   engine.solo_gaps   -- consumed by hypr/events/solo_gaps.lua as the framing
---     opt-out.
 -- A spec with a `default_name` keys its rule on that name, not on the id. The
 -- rest of the environment addresses workspaces by name (binds, hold restore,
 -- window rules, the scene actuator), and when a mode withdrew an id-keyed

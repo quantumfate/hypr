@@ -191,7 +191,7 @@ The full editor contract (members, gaps, layout options) widens this document in
 
 ## Split
 
-The two-tile split is `layout_opts.dwindle.default_split_ratio` (`0.67`). That is what the user declares. A resize loop may correct drift internally; it is not the config language.
+The two-tile split is a block's declared `share` (fraction of the workspace's tiled span, see `hypr/scene/spec.lua`). That is what the user declares. A resize loop may correct drift internally; it is not the config language.
 
 ## Group
 
@@ -406,10 +406,9 @@ Grouping stays separate and declarative: a group is a compositor concept and
 arrives at the layout as one target.
 
 The layout only runs on the workspace running the scene layout: the same
-declaration on dwindle or master — where another layout owns the geometry —
-is inert there, because nothing asks the scene layout provider to place
-anything on a workspace it does not own. The runtime group decision stays
-layout-independent.
+declaration on scrolling — where another layout owns the geometry — is inert
+there, because nothing asks the scene layout provider to place anything on a
+workspace it does not own. The runtime group decision stays layout-independent.
 
 `mod+shift+h/l` (tile swap, LEO-344) asks the provider for a different order
 without touching the declaration: `hypr/scene/order.lua` holds a session-only

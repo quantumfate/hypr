@@ -227,8 +227,8 @@ bind.bind_workspace_row()
 -- across tiles in the scene layout's own left-to-right order, continuing
 -- onto the adjacent monitor at the edge; `mod+j/k` moves within the focused
 -- tile (a group's members, or a stacked block's windows). Off a scene
--- workspace (dwindle/master/scrolling), these fall back to the layout's own
--- directional focus/swap, which is what these chords did before.
+-- workspace (scrolling), these fall back to the layout's own directional
+-- focus/swap, which is what these chords did before.
 do
   local nav = require("hypr.lib.nav")
   local scene_spec = require("hypr.scene.spec")
@@ -290,11 +290,11 @@ do
       if not w then
         return
       end
-      -- Off a scene workspace (dwindle/master/scrolling): try the layout's
-      -- own directional focus first. If it left the active window unchanged
-      -- — there was nothing that way on this monitor — cross to the
-      -- adjacent monitor instead of stranding focus at the edge (LEO-372:
-      -- DP-2's `master` layout had no window to the right of the last tile).
+      -- Off a scene workspace (scrolling): try the layout's own directional
+      -- focus first. If it left the active window unchanged — there was
+      -- nothing that way on this monitor — cross to the adjacent monitor
+      -- instead of stranding focus at the edge (LEO-372: DP-2's edge tile
+      -- had no window to the right of it).
       local before = hl.get_active_window()
       layout_lib.dispatch(dir == "left" and "focus_left" or "focus_right")
       local after = hl.get_active_window()
@@ -444,8 +444,7 @@ do
     if not w or not w.group then
       return
     end
-    -- movegroupwindow takes the same bare-string argument dwindle's own
-    -- layoutmsg dispatchers do above ("f"/"b"), acting on the focused
+    -- movegroupwindow takes a bare "f"/"b" argument, acting on the focused
     -- window's own group — no focus-dance, since that window is already
     -- focused by definition of "its group".
     hl.dispatch(hl.dsp.movegroupwindow(dir == "forward" and "f" or "b"))
@@ -491,7 +490,7 @@ do
 end
 
 -- Layout messages, per layout, in a which-key submap tree:
---   SUPER+x  ->  d (dwindle) | m (master) | s (scrolling)  ->  layout op.
+--   SUPER+x  ->  s (scrolling)  ->  layout op.
 -- Each layout declares its own ops (see hypr/layouts/*); this just composes them
 -- into groups, so it never needs touching when a layout gains a new op.
 local layout_groups = {}
@@ -511,7 +510,7 @@ submap.tree({
 })
 
 local function cycle_workspace_layout()
-  local layouts = { "scrolling", "dwindle", "master", "monocle", "scene" }
+  local layouts = { "scrolling", "scene" }
   local workspace = hl.get_active_special_workspace() or hl.get_active_workspace()
   if not workspace then
     return
@@ -520,7 +519,7 @@ local function cycle_workspace_layout()
   -- tiled_layout reports the compositor's match key ("scene" comes back as
   -- "lua:scene"), so comparisons run against the same normalized form.
   local current = layout_lib.bare_layout(workspace.tiled_layout)
-  local next_layout = "dwindle"
+  local next_layout = "scrolling"
   for i = 1, #layouts do
     if layouts[i] == current then
       next_layout = layouts[(i % #layouts) + 1]

@@ -181,8 +181,8 @@ Workspaces are managed in the background; Quickshell presents them.
   workspace, `mod+h/l` first tries the layout's own directional focus
   (`focus_left`/`focus_right`); if that left the active window unchanged —
   nothing that way on this monitor — it crosses to the adjacent monitor the
-  same way, so a `master`/`dwindle`/`scrolling` workspace at a monitor's edge
-  does not strand focus there.
+  same way, so a `scrolling` workspace at a monitor's edge does not strand
+  focus there.
   Entering a group tile (crossing into it with `mod+h/l`, or landing on it as
   a monitor's edge tile) focuses its most recently focused member, not
   reliably its first: Hyprland's Lua binding never exposes `focusHistoryID`
@@ -219,8 +219,8 @@ Workspaces are managed in the background; Quickshell presents them.
 - The bar's side insets mirror each monitor's base tiled outer gap (LEO-340),
   published to the `geometry` store by `conf/host.lua`'s `build()` and read
   off resolved geometry, not a layout-specific option — workspace layouts are
-  headed to `scene`/`columns` only. This is the base gap only: the transient
-  solo widen (`hypr/events/solo_gaps.lua` framing a lone tile) is a
+  `scene` or `columns` only. This is the base gap only: the transient solo
+  widen (the scene layout's own `solo_extra` framing a lone tile) is a
   per-workspace correction, not part of a monitor's resting geometry, so the
   bar never follows it.
 - The same `build()` also publishes the monitor role map (LEO-368):

@@ -1,5 +1,4 @@
 require("hypr.events.start")
 require("hypr.events.opacity")
 require("hypr.events.layout_opts")
-require("hypr.events.solo_gaps")
 require("hypr.events.scene")

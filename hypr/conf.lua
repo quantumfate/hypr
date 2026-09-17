@@ -62,7 +62,10 @@ hl.config({
     gaps_in = 12,
     gaps_out = { top = 8, right = 40, bottom = 40, left = 40 },
     float_gaps = -1,
-    layout = "master",
+    -- Scene is the default layout (D3): a workspace opts into `columns`
+    -- explicitly, or is left as scene, which frames an undeclared workspace's
+    -- windows evenly rather than doing nothing.
+    layout = "scene",
     allow_tearing = false,
     resize_on_border = true,
     no_focus_fallback = true,

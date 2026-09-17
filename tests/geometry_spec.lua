@@ -59,7 +59,7 @@ t.describe("geometry.resolve", function()
   end)
 
   t.it("a spec with no monitor role is untouched", function()
-    local specs = { { workspace = "special:comms", layout = "dwindle" } }
+    local specs = { { workspace = "special:comms", layout = "scrolling" } }
     geometry.resolve(specs, aliases, { primary = { gaps_out = 8 } })
     t.eq(nil, specs[1].monitor)
     t.eq(nil, specs[1].gaps_out)

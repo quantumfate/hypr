@@ -16,7 +16,7 @@ local order = require("hypr.scene.order")
 local M = {}
 
 -- Registered under this name; a workspace opts in with `layout = "scene"`.
--- Workspaces that do not are untouched and keep dwindle, master or scrolling.
+-- Workspaces that do not are untouched and keep scrolling.
 local NAME = "scene"
 
 ---Live gap values. Read from the compositor rather than cached, so a reload

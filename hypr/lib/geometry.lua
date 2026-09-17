@@ -60,11 +60,10 @@ end
 
 ---Per-monitor left/right outer gap, read off *resolved* workspace_specs
 ---(after `M.resolve` has filled each spec's `monitor` and `gaps_out`) rather
----than from any layout-specific option: workspace layouts are headed to
----`scene`/`columns` only (docs/desktop-model.md), so this must not depend on
----dwindle/master-specific fields. The base gap only — never the solo widen
----(hypr/events/solo_gaps.lua), which is a transient per-workspace correction,
----not part of a monitor's resting geometry.
+---than from any layout-specific option: workspace layouts are `scene` or
+---`columns` only (docs/desktop-model.md). The base gap only — never the scene
+---layout's own solo widen, which is a transient per-workspace correction, not
+---part of a monitor's resting geometry.
 ---
 ---Specs share a monitor without disagreeing on its gap in every host file
 ---today, so the first spec seen for a monitor decides it.

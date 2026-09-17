@@ -18,37 +18,18 @@ return {
   kb_options = "caps:swapescape",
   workspaces = {
     workspace_specs = {
-      {
-        workspace = "1",
-        default = true,
-        default_name = "code",
-        -- To fall back, set this to "dwindle" and reload; the layout is
-        -- registered either way and nothing else depends on it.
-        layout = "scene",
-      },
+      -- Explicit "scene" here is redundant with conf/host.lua's default, but
+      -- spelled out since this is the primary workspace.
+      { workspace = "1", default = true, default_name = "code", layout = "scene" },
       { workspace = "3", default_name = "proton" },
-      {
-        workspace = "4",
-        default_name = "dofus",
-        engine = {
-          layout_opts = { dwindle = { default_split_ratio = 0.67 } },
-          solo_gaps = "none",
-        },
-      },
+      -- Dofus: the tile geometry is a fixed capture region, so this scene's
+      -- declaration must opt out of solo framing itself (`solo_frame =
+      -- false`) — see the matching note on quantum-desktop.lua.
+      { workspace = "4", default_name = "dofus" },
       { workspace = "5", default_name = "pokemon" },
       { workspace = "6", default_name = "steam-games" },
-      {
-        workspace = "8",
-        default_name = "obsidian-linear",
-        monitor = "secondary",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
-      },
-      {
-        workspace = "11",
-        default_name = "media",
-        monitor = "secondary",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
-      },
+      { workspace = "8", default_name = "obsidian-linear", monitor = "secondary" },
+      { workspace = "11", default_name = "media", monitor = "secondary" },
       { workspace = "12", default_name = "logs", monitor = "secondary" },
     },
     -- Communication, Lutris, Steam and the Ankama Launcher are shelves now

@@ -33,50 +33,26 @@ return {
         workspace = "1",
         default = true,
         default_name = "code",
-        engine = {
-          -- Two-tile ratio declaration; see docs/scenes.md.
-          layout_opts = {
-            dwindle = { default_split_ratio = 0.67 },
-            scrolling = { column_width = 0.67 },
-          },
-        },
+        -- Two-tile ratio is the scene's declared `share` (docs/scenes.md), not
+        -- a layout_opts field; only scrolling's own column width lives here.
+        engine = { layout_opts = { scrolling = { column_width = 0.67 } } },
       },
       -- Proton shared across gaming + work + study modes. The 50/50 split
       -- (mail left, pass companion right) is declared by the scene.
-      {
-        workspace = "3",
-        default_name = "proton",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
-      },
-      -- Dofus: the primary gaming workspace. Opt out of solo framing
-      -- (LEO-190/191) — the tile geometry is a fixed capture region, and
-      -- framing gaps would move the OBS crop under you.
-      {
-        workspace = "4",
-        default_name = "dofus",
-        engine = {
-          layout_opts = { dwindle = { default_split_ratio = 0.67 } },
-          solo_gaps = "none",
-        },
-      },
+      { workspace = "3", default_name = "proton" },
+      -- Dofus: the primary gaming workspace. The tile geometry is a fixed
+      -- capture region, so this scene's declaration must opt out of solo
+      -- framing itself (`solo_frame = false`); the per-host opt-out field
+      -- that used to live here belonged to a now-retired framing module.
+      { workspace = "4", default_name = "dofus" },
       -- Pokemon: emulator + streaming media. On primary beside dofus.
       { workspace = "5", default_name = "pokemon" },
       -- Steam games: fullscreen proton/steam windows, no split.
       { workspace = "6", default_name = "steam-games" },
       -- Obsidian + Linear side-by-side. Shared by work + study modes.
-      {
-        workspace = "8",
-        default_name = "obsidian-linear",
-        monitor = "secondary",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 0.5 } } },
-      },
+      { workspace = "8", default_name = "obsidian-linear", monitor = "secondary" },
       -- Media: fullscreen media player.
-      {
-        workspace = "11",
-        default_name = "media",
-        monitor = "secondary",
-        engine = { layout_opts = { dwindle = { default_split_ratio = 1.0 } } },
-      },
+      { workspace = "11", default_name = "media", monitor = "secondary" },
       -- Logs: tmux log workspace, secondary.
       { workspace = "12", default_name = "logs", monitor = "secondary" },
     },

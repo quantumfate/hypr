@@ -26,10 +26,9 @@ local M = {}
 -- default; this literal only backs the case hl has no value loaded yet.
 local DEFAULT_GAPS_OUT = { top = 8, right = 40, bottom = 40, left = 40 }
 
--- LEO-340: the bar's side insets follow each monitor's tiled outer gap, base
--- gap only (never the solo widen from hypr/events/solo_gaps.lua). Quickshell
--- reads this store and falls back to Theme.barInset*2 when a monitor has no
--- entry.
+-- The bar's side insets follow each monitor's tiled outer gap, base gap only
+-- (never the scene layout's own solo widen). Quickshell reads this store and
+-- falls back to Theme.barInset*2 when a monitor has no entry.
 local geometry_store = Store.define("geometry")
 
 ---@param hostname string

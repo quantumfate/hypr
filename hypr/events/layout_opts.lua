@@ -1,36 +1,31 @@
 -- Per-workspace layout options.
 --
--- Hyprland's layout settings (dwindle.default_split_ratio, master.mfact, ...)
--- are globals. Workspace rules accept a layoutopt field, but Hyprland only
--- ever implements layoutopt:orientation, so anything else there is parsed and
--- dropped without a warning. This module emulates the missing feature: it
--- reads layout_opts off the workspace specs' `engine` sub-table (see
--- workspaces.lua for why engine fields never reach the rule) and rewrites the
--- matching globals around the moments a layout reads them.
+-- Hyprland's layout settings (scrolling.column_width, ...) are globals.
+-- Workspace rules accept a layoutopt field, but Hyprland only ever implements
+-- layoutopt:orientation, so anything else there is parsed and dropped without
+-- a warning. This module emulates the missing feature: it reads layout_opts
+-- off the workspace specs' `engine` sub-table (see workspaces.lua for why
+-- engine fields never reach the rule) and rewrites the matching globals around
+-- the moments a layout reads them.
 --
 -- A spec declares options either flat, for its own layout:
 --
---   { workspace = "1", layout = "dwindle",
---     engine = { layout_opts = { default_split_ratio = 1.25 } } }
+--   { workspace = "1", layout = "scrolling",
+--     engine = { layout_opts = { column_width = 0.67 } } }
 --
 -- or keyed by layout, for a workspace whose layout is cycled at runtime
 -- (SUPER+x -> e), so each layout gets its own settings on that workspace:
 --
---   { workspace = "1", layout = "dwindle", engine = { layout_opts = {
---       dwindle = { default_split_ratio = 1.25 },
---       master = { mfact = 0.6, orientation = "left" },
+--   { workspace = "1", layout = "scrolling", engine = { layout_opts = {
+--       scrolling = { column_width = 0.67 },
 --   } } }
 --
 -- Options are only read by a layout when it (re)tiles, so these take effect on
 -- the next window open or resize; already-tiled windows keep their geometry.
 
--- Layout name -> config namespace holding its options. monocle is our own
--- layout (hypr/layouts/master.lua) running on Hyprland's master algorithm, so
--- it is tuned through master.*.
+-- Layout name -> config namespace holding its options. Scene and columns own
+-- their geometry directly and have no config namespace here.
 local namespaces = {
-  dwindle = "dwindle",
-  master = "master",
-  monocle = "master",
   scrolling = "scrolling",
 }
 
@@ -102,7 +97,7 @@ local function baseline_of(key)
 end
 
 ---Nested config table from flat "namespace.option" keys, the shape hl.config
----expects: { dwindle = { default_split_ratio = 1.25 } }.
+---expects: { scrolling = { column_width = 0.6 } }.
 ---@param values table<string, any>
 ---@return table
 local function nest(values)

@@ -20,7 +20,7 @@ local geometry_profiles = {
     -- primary is now doubled to 80 and spelled out explicitly rather than
     -- left to fall through. top stays 8 on both: the bar reserves its own
     -- height, so a full outer gap on top would stack two margins into a
-    -- canyon (see hypr/events/solo_gaps.lua for the same rule).
+    -- canyon (see hypr/scene/layout.lua's solo framing for the same rule).
     gaps_by_monitor = {
       primary = { gaps_in = 12, gaps_out = { top = 8, right = 80, bottom = 80, left = 80 } },
       secondary = { gaps_in = 6, gaps_out = 14 },
