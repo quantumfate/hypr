@@ -137,6 +137,20 @@ t.describe("nav.workspaces_on_monitor / nth_workspace", function()
   end)
 end)
 
+t.describe("nav.focus_unchanged", function()
+  t.it("true when the active window's address did not move", function()
+    t.eq(true, nav.focus_unchanged("0x1", "0x1"))
+  end)
+
+  t.it("true when there was, or is, no active window", function()
+    t.eq(true, nav.focus_unchanged(nil, nil))
+  end)
+
+  t.it("false when the directional dispatch actually focused another window", function()
+    t.eq(false, nav.focus_unchanged("0x1", "0x2"))
+  end)
+end)
+
 t.describe("nav.symbol_for", function()
   t.it("spells workspace-row keys as their symbol, never a digit", function()
     t.eq("+", nav.symbol_for("plus"))

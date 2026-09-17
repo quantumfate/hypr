@@ -174,6 +174,19 @@ function M.monitor_order(monitors)
   return out
 end
 
+---Whether a directional-focus dispatch actually moved focus, by comparing
+---the active window's address before and after it ran. False (unchanged, or
+---gone) is the caller's cue to cross to the adjacent monitor instead — the
+---layout's own `focus_left`/`focus_right` silently does nothing when there is
+---no window that way, which off a scene workspace otherwise strands focus at
+---a monitor edge (LEO-372).
+---@param before string?
+---@param after string?
+---@return boolean
+function M.focus_unchanged(before, after)
+  return before == after
+end
+
 ---The monitor adjacent to `name` in `dir`, or nil at the outer edge.
 ---@param ordered { name: string }[] from `monitor_order`
 ---@param name string

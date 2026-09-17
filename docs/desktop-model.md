@@ -133,7 +133,14 @@ Workspaces are managed in the background; Quickshell presents them.
   and of windows within a workspace (counted left to right), per monitor, so a
   window is reached by position instead of searched for. Implemented:
   `mod+h/l` moves across tiles in the scene layout's own order, continuing
-  onto the adjacent monitor's nearest-edge tile past the last one;
+  onto the adjacent monitor's nearest-edge tile past the last one — or, when
+  the adjacent monitor has no scene workspace focused (or that scene has no
+  tiles), focusing the monitor itself rather than doing nothing. Off a scene
+  workspace, `mod+h/l` first tries the layout's own directional focus
+  (`focus_left`/`focus_right`); if that left the active window unchanged —
+  nothing that way on this monitor — it crosses to the adjacent monitor the
+  same way, so a `master`/`dwindle`/`scrolling` workspace at a monitor's edge
+  does not strand focus there;
   `mod+j/k` moves within the focused tile (a group's members, or a stacked
   block's windows); `mod+shift+h/l` swaps a tile with its neighbour
   (session-only, `hypr/scene/order.lua` — never written to the scene

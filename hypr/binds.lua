@@ -245,6 +245,16 @@ do
     return w, scene_spec.load()[w.workspace.name]
   end
 
+  ---The monitor adjacent to `monitor` in `dir`, or nil — the shared lookup
+  ---both branches of `focus_tile` cross to.
+  ---@param monitor table
+  ---@param dir "left"|"right"
+  ---@return table?
+  local function adjacent_monitor(monitor, dir)
+    local ordered = nav.monitor_order(hl.get_monitors() or {})
+    return nav.adjacent_monitor(ordered, monitor.name, dir)
+  end
+
   ---@param dir "left"|"right"
   local function focus_tile(dir)
     local w, scene = focused_scene()
@@ -252,7 +262,21 @@ do
       return
     end
     if not scene then
+      -- Off a scene workspace (dwindle/master/scrolling): try the layout's
+      -- own directional focus first. If it left the active window unchanged
+      -- — there was nothing that way on this monitor — cross to the
+      -- adjacent monitor instead of stranding focus at the edge (LEO-372:
+      -- DP-2's `master` layout had no window to the right of the last tile).
+      local before = hl.get_active_window()
       layout_lib.dispatch(dir == "left" and "focus_left" or "focus_right")
+      local after = hl.get_active_window()
+      if nav.focus_unchanged(before and before.address, after and after.address) then
+        local monitor = w.workspace and w.workspace.monitor
+        local adjacent = monitor and adjacent_monitor(monitor, dir)
+        if adjacent then
+          hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
+        end
+      end
       return
     end
     local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name))
@@ -268,22 +292,25 @@ do
     -- At the tile-order edge: continue onto the adjacent monitor's nearest
     -- edge tile, per the decision comment. No `movewindow`-at-edge trick
     -- (AGENTS.md: that moves the WINDOW, not focus) — this addresses a
-    -- window on the other monitor's workspace directly.
+    -- window on the other monitor's workspace directly. When the adjacent
+    -- monitor has no scene workspace focused, or that scene has no tiles,
+    -- focus the monitor itself instead of doing nothing (LEO-372).
     local monitor = w.workspace.monitor
     if not monitor then
       return
     end
-    local ordered = nav.monitor_order(hl.get_monitors() or {})
-    local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
-    local active = adjacent and adjacent.activeWorkspace
-    local other_scene = active and active.name and scene_spec.load()[active.name]
-    if not other_scene then
+    local adjacent = adjacent_monitor(monitor, dir)
+    if not adjacent then
       return
     end
-    local other_tiles = nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name))
-    local edge = nav.edge_tile(other_tiles, dir)
+    local active = adjacent.activeWorkspace
+    local other_scene = active and active.name and scene_spec.load()[active.name]
+    local edge = other_scene
+      and nav.edge_tile(nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name)), dir)
     if edge then
       hl.dispatch(hl.dsp.focus({ window = "address:" .. edge.addresses[1] }))
+    else
+      hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
     end
   end
 
