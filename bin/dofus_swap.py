@@ -3,9 +3,11 @@
 
 Watches the on-screen "current actor" popup, hashes the name region with phash,
 matches against per-character reference hashes captured via `learn`, then
-focuses the matching window using the iterate_windows.sh / do.sh pattern:
-    animations off -> batched (focuswindow title:... ; alterzorder top) -> animations on
-Floating stacked windows need alterzorder; focuswindow alone won't raise.
+focuses the matching window:
+    animations off -> focus by title + bring_to_top -> animations on
+Dofus clients form one real Hyprland group (hypr/scene/grouping.lua); focusing
+a member by title raises its tab within the group, the same pattern
+hypr/services/dofus/team.lua uses for the F-key walk and press macro.
 
 Workflow:
     ./dofus_swap.py calibrate                    # slurp tight box around name pill
