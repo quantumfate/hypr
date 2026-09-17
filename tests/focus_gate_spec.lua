@@ -75,12 +75,25 @@ t.describe("the launch gate", function()
     t.eq(nil, gate.block_reason("media"))
   end)
 
-  t.it("an expired pointer lapses the block on its own", function()
+  t.it("an expired pointer falls back to `previous`, lapsing the block", function()
     local gate = fresh(POLICY, {
       mode = "work",
       ["until"] = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - 60),
+      previous = "neutral", -- the mode `work` was timed over; neutral has no block
     })
     t.eq(nil, gate.block_reason("media"), "a stale mood stops blocking")
+  end)
+
+  t.it("an expired pointer with no `previous` falls back to `work`, which may itself block", function()
+    -- Pointer contract: expiry with no recorded `previous` lands on `work`,
+    -- not on a mode that always blocks nothing. Work blocking media/games
+    -- from login is accepted behaviour.
+    local gate = fresh(POLICY, {
+      mode = "gaming",
+      ["until"] = os.date("!%Y-%m-%dT%H:%M:%SZ", os.time() - 60),
+    })
+    local reason = gate.block_reason("media")
+    t.ok(reason and reason:match("Work"), tostring(reason))
   end)
 
   t.it("a malformed expiry is still live, not a free pass", function()

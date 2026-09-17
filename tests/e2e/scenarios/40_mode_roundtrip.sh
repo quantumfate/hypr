@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# neutral -> gaming -> neutral -> gaming keeps every window reachable: after
-# each apply, every test window is on a workspace that exists and none is left
-# parked on the hold special once its scene is admitted again.
+# work -> gaming -> work (with a neutral hop) keeps every window reachable:
+# after each apply, every test window is on a workspace that exists and none
+# is left parked on the hold special once its scene is admitted again. `work`
+# is the boot/resting mode; `neutral` is the hidden recovery mode, still
+# reachable but never a default.
 # NEEDS EVAL (hyprctl eval drives hyprfocus.enter); coordinator-run only.
 . "$(dirname "$0")/../lib.sh"
 
@@ -31,18 +33,18 @@ assert_reachable() {
     [[ $(clients | jq '[.[] | select(.class | startswith("e2e-"))] | length') == 3 ]] ||
         e2e_fail "$mode: a test window was lost"
     held=$(clients | jq -r 'map(select(.workspace.name == "special:hyprfocus-held")) | map(.class) | join(",")')
-    if [[ $mode == neutral && -n $held ]]; then
-        e2e_fail "neutral: windows still held: $held"
+    if [[ ($mode == work || $mode == neutral) && -n $held ]]; then
+        e2e_fail "$mode: windows still held: $held"
     fi
     if [[ $mode == gaming && $held == *e2e-grp-a* ]]; then
         e2e_fail "gaming: e2e-grp-a held although 'grouped' is admitted"
     fi
 }
 
-for mode in gaming neutral gaming; do
+for mode in work gaming work neutral gaming; do
     enter_mode "$mode"
     assert_reachable "$mode"
 done
-enter_mode neutral
-assert_reachable neutral
+enter_mode work
+assert_reachable work
 e2e_log "PASS mode round-trip"

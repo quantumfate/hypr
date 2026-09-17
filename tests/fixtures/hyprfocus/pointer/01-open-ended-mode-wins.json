@@ -1,0 +1,5 @@
+{
+  "description": "an open-ended mode (no `until`) is simply the effective mode",
+  "pointer": { "mode": "gaming", "until": null, "previous": null },
+  "effective": "gaming"
+}

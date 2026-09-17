@@ -1,0 +1,5 @@
+{
+  "description": "an expired timed mode falls back to the mode it was layered over",
+  "pointer": { "mode": "gaming", "until": "2000-01-01T00:00:00Z", "previous": "study" },
+  "effective": "study"
+}

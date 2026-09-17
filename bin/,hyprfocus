@@ -435,7 +435,31 @@ def active(declaration: dict) -> dict:
     try:
         return read_store("focus.json")
     except (FileNotFoundError, json.JSONDecodeError):
-        return {"mode": "neutral"}
+        return {"mode": "work"}
+
+
+def effective_mode(pointer: dict) -> str:
+    """The mode actually in effect, resolving a timed mode's expiry.
+
+    Pointer contract (shared with quickshell, hypr's Lua writer and the shell
+    helpers): `mode` if `until` is unset or not yet passed; otherwise
+    `previous` (the mode a timed mode was layered over) if the pointer
+    carries one; otherwise `work`, the desk's resting mode. `neutral` is never
+    a fallback — it stays a hidden recovery mode, reached only deliberately.
+    """
+    mode = pointer.get("mode") or "work"
+    until = pointer.get("until")
+    if until:
+        try:
+            expires = datetime.fromisoformat(until.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            if expires.tzinfo is None:
+                expires = expires.replace(tzinfo=timezone.utc)
+            if now > expires:
+                return pointer.get("previous") or "work"
+        except ValueError:
+            pass  # malformed expiry: treat the mode as still live
+    return mode
 
 
 def lifecycle_log(trace: str | None, follow: bool) -> int:
@@ -707,7 +731,7 @@ def main() -> None:
     declaration = load(args.declaration)
 
     if args.verb == "modes":
-        current = active(declaration).get("mode")
+        current = effective_mode(active(declaration))
         for name, spec in sorted(declaration.get("modes", {}).items()):
             # Hidden modes (neutral, the recovery fallback) are never a peer.
             if spec.get("hidden"):
@@ -718,14 +742,21 @@ def main() -> None:
 
     if args.verb == "explain":
         pointer = active(declaration)
-        mode = pointer.get("mode", "neutral")
+        mode = pointer.get("mode", "work")
         print(f"{'mode':<10}{mode}")
+        effective = effective_mode(pointer)
+        if effective != mode:
+            # A timed mode has expired; what is actually in effect fell back
+            # to `previous` (or `work`), not to the stale pointer value.
+            print(f"{'effective':<10}{effective}")
         # Provenance matters once a schedule can change the mode on its own:
         # "why did my desk just change" needs an answer that is not guesswork.
         print(f"{'set by':<10}{pointer.get('source', 'unknown')}")
         if pointer.get("set_at"):
             print(f"{'at':<10}{pointer['set_at']}")
         print(f"{'until':<10}{pointer.get('until') or 'open-ended'}")
+        if pointer.get("previous"):
+            print(f"{'previous':<10}{pointer['previous']}")
         # A declared unit that no converge has installed shows up as a
         # transition that quietly did less than it said (LEO-290): name the
         # absent units here too, so "why did that mode not do anything"
@@ -752,7 +783,7 @@ def main() -> None:
         sys.exit(apply(declaration, args.mode, args.dry_run))
 
     desired = resolve(declaration, args.mode)
-    running = resolve(declaration, active(declaration).get("mode", "neutral"))
+    running = resolve(declaration, effective_mode(active(declaration)))
     steps = plan(desired, running)
     if not steps:
         print(f"already {args.mode}; nothing to do")

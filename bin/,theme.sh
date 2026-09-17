@@ -195,32 +195,37 @@ is_light() {
 # --- which palette --------------------------------------------------------
 
 # The pointer, resolved exactly like the mode policy reads it everywhere else:
-# the held mode, or "" at rest — a timed mode whose `until` already passed
-# reads as neutral. Shared by both lease applications (the palette and the
-# wallpaper) so two readers can never disagree about which mode is on.
+# the held mode, falling back to `work` at rest. A timed mode whose `until`
+# already passed resolves to its `previous` mode (the one it was layered
+# over) if the pointer carries one, else to `work`. `neutral` is never a
+# fallback — it is a hidden recovery mode, reached only deliberately. Shared
+# by both lease applications (the palette and the wallpaper) so two readers
+# can never disagree about which mode is on.
 lease_state() {
-    local mode until until_ms file="$FOCUS"
+    local mode until until_ms previous file="$FOCUS"
     [ -f "$file" ] || { [ ! -f "$LEGACY_FOCUS" ] || file="$LEGACY_FOCUS"; }
-    [ -f "$file" ] && mode=$(jq -r '.mode // "neutral"' "$file" 2>/dev/null) || mode=neutral
+    [ -f "$file" ] && mode=$(jq -r '.mode // "work"' "$file" 2>/dev/null) || mode=work
     until=$(jq -r '.until // ""' "$file" 2>/dev/null)
-    if [ "$mode" != neutral ] && [ -n "$until" ]; then
+    if [ -n "$until" ]; then
         until_ms=$(date -d "$until" +%s%3N 2>/dev/null || echo 0)
-        [ "$(date +%s%3N)" -gt "$until_ms" ] && mode=neutral
+        if [ "$(date +%s%3N)" -gt "$until_ms" ]; then
+            previous=$(jq -r '.previous // "work"' "$file" 2>/dev/null)
+            mode="$previous"
+        fi
     fi
     printf '%s' "$mode"
 }
 
 # The palette a mode leases while it runs (LEO-288). The declaration names a
 # day/night pair (or one palette for both) in the mode's `presentation`; the
-# pointer (focus.json) says the mode is on, and a timed mode whose `until`
-# already passed reads as neutral — the same rule the mode policy keeps
-# everywhere else. The pair follows `daytime`, so the sun timer flips a mode's
-# palette exactly as it flips the baseline. "" means no lease held, and an
-# unknown lease palette reads as no lease: resolution never fails.
+# pointer (focus.json) says which mode is on, resolved by `lease_state`
+# (timed-expiry aware). Work still leases a palette like any other mode. The
+# pair follows `daytime`, so the sun timer flips a mode's palette exactly as
+# it flips the baseline. "" means no lease held, and an unknown lease palette
+# reads as no lease: resolution never fails.
 lease() {
     local mode palette half=night
     mode=$(lease_state)
-    [ "$mode" != neutral ] || return 0
     ! daytime || half=day
     palette=$(jq -r --arg m "$mode" --arg h "$half" \
         '.modes[$m].presentation.palette // "" | if type == "object" then .[$h] // "" else . end' \

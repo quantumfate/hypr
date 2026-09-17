@@ -51,6 +51,14 @@
         { "name": "aside", "monitor": "secondary" }
       ]
     },
+    "work": {
+      "name": "Work",
+      "scenes": [
+        { "name": "grouped", "monitor": "primary" },
+        { "name": "loose", "monitor": "primary" },
+        { "name": "aside", "monitor": "secondary" }
+      ]
+    },
     "gaming": {
       "name": "Gaming",
       "scenes": [

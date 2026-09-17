@@ -28,9 +28,30 @@ controls exactly four things:
 
 Later: permissions (what may launch) and notification routing per mode.
 
+The modes a user picks between are `work`, `study` and `gaming`. The desk
+boots and rests in `work`; a timed mode's expiry falls back to whichever mode
+was active before it (`previous`, see "Pointer" below), or to `work` if
+nothing was recorded. Work blocking media/game launches from login is
+accepted behaviour, not a gap.
+
 `neutral` is a hidden fallback for recovery (scenes: `code`, `proton`,
-`logs`; validated like every mode), reachable from a submap, not a
-peer choice.
+`logs`; validated like every mode), reachable from a submap, not a peer
+choice and never a default or expiry fallback.
+
+### Pointer
+
+`focus.json` is the pointer: `{ mode, until, source, set_at, previous }`.
+`previous` is written only when a mode is entered with an `until` — it holds
+the mode active at that moment. If that mode was itself timed and still
+unexpired, `previous` is set to _its_ `previous` instead (the chain always
+collapses to an open-ended mode, never to another timed one). Setting an
+open-ended mode (no `until`) clears `previous`.
+
+Effective mode: `mode` if `until` is unset or not yet passed; otherwise
+`previous` if the pointer carries one; otherwise `work`. Both the Lua
+resolver (`hypr/hyprfocus/init.lua`'s `M.effective_mode`) and the Python CLI
+(`bin/,hyprfocus`'s `effective_mode`) implement this identically, pinned by
+shared fixtures under `tests/fixtures/hyprfocus/pointer/`.
 
 ## Scene
 

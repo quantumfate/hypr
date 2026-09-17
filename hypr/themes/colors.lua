@@ -42,7 +42,7 @@ end
 --- resolved one (and for tests, which pin a mode without touching the real
 --- theme store).
 ---@param palette_name string? defaults to the theme store's `palette`
----@param mode string? defaults to the focus store's `mode`, or "neutral"
+---@param mode string? defaults to the focus store's `mode`, or "work"
 ---@return table theme the resolved palette
 ---@return string accent the resolved accent colour
 function M.apply_colors(palette_name, mode)
@@ -52,7 +52,7 @@ function M.apply_colors(palette_name, mode)
   end
   local theme = require("hypr.themes." .. palette_name)
 
-  mode = mode or Store.define("focus"):get("mode") or "neutral"
+  mode = mode or Store.define("focus"):get("mode") or "work"
   local accent = resolve_accent(theme, mode)
 
   hl.config({

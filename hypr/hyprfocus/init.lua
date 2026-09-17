@@ -72,13 +72,59 @@ function M.declaration()
   return data, nil
 end
 
+--- Whether an ISO-8601 UTC (`Z`) stamp is in the past. Malformed input reads
+--- as not-yet-expired, the same tolerant rule `hypr/lib/focus_gate.lua` uses.
+---
+--- `os.time(t)` treats `t`'s fields as LOCAL time, but `until_at`'s fields are
+--- UTC — feeding them straight in silently shifts the comparison by the
+--- host's UTC offset (wrong by 2h on a CEST machine, say). `local_utc_gap`
+--- is that offset, computed once by round-tripping "now" through both
+--- calendars, then added back to correct the parsed stamp.
+---@param until_at string?
+---@return boolean
+local function expired(until_at)
+  if type(until_at) ~= "string" then
+    return false
+  end
+  local y, mo, d, h, mi = until_at:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+)")
+  if not y then
+    return false
+  end
+  local now = os.time()
+  local local_utc_gap = now - os.time(os.date("!*t", now))
+  local stamp = os.time({
+    year = tonumber(y),
+    month = tonumber(mo),
+    day = tonumber(d),
+    hour = tonumber(h),
+    min = tonumber(mi),
+  }) + local_utc_gap
+  return stamp < now
+end
+
+---The mode actually in effect: the pointer's `mode`, unless a timed mode has
+---expired, in which case `previous` (the mode it was layered over) applies,
+---falling back to `work`, the desk's resting mode. `neutral` is never a
+---fallback here — it is a hidden recovery mode, reached only deliberately.
+---@param pointer table? the pointer document, as read from the store
+---@return string
+local function effective_mode(pointer)
+  pointer = pointer or {}
+  local mode = pointer.mode or "work"
+  if expired(pointer["until"]) then
+    return pointer.previous or "work"
+  end
+  return mode
+end
+M.effective_mode = effective_mode
+
 ---@return string the mode the pointer names, or the resting state
 function M.active()
   local ok, handle = pcall(store.define, POINTER)
   if not ok then
-    return "neutral"
+    return "work"
   end
-  return handle:get("mode") or "neutral"
+  return effective_mode(handle:get())
 end
 
 ---Resolve a mode, emitting a structured refusal when its scene set is
@@ -565,8 +611,9 @@ end
 ---blocked on that would drop every keypress meanwhile.
 ---@param mode string
 ---@param source string? who is asking: "manual" (default), "timer", "schedule"
+---@param until_at string? ISO-8601 expiry; open-ended when nil
 ---@return table? report, string? error
-function M.enter(mode, source)
+function M.enter(mode, source, until_at)
   local declaration, err = M.declaration()
   if not declaration then
     return nil, err
@@ -581,11 +628,28 @@ function M.enter(mode, source)
   local wrote, handle = pcall(store.define, POINTER)
   if wrote then
     pcall(function()
-      handle:set({
+      local pointer = {
         mode = mode,
         source = source or "manual",
         set_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
-      })
+      }
+      if until_at then
+        pointer["until"] = until_at
+        -- Pointer contract: `previous` holds the mode ACTUALLY active right
+        -- now (`effective_mode` of the prior pointer, not its raw `mode`),
+        -- so a later expiry falls back to it. This is what collapses a
+        -- timed-over-timed chain to an open-ended mode on its own: an
+        -- already-expired prior pointer resolves through ITS OWN `previous`
+        -- (or `work`), never re-using a lapsed timed mode as the fallback.
+        pointer.previous = effective_mode(handle:get())
+      end
+      -- A full replace, not `set`'s shallow merge: entering an open-ended
+      -- mode must drop a previous timed mode's `until`/`previous`, and
+      -- `set` would leave them stale since they are simply absent from
+      -- `pointer` above.
+      handle:update(function()
+        return pointer
+      end)
     end)
   end
 

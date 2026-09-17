@@ -517,7 +517,16 @@ printf '{"modes":{"work":{"name":"work","presentation":{"palette":"latte"}}}}\n'
 # mode picks up.
 "$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" mocha >/dev/null
 "$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/latte.jpg" latte >/dev/null
-contains "at rest the baseline palette's binding answers" \
+
+# No pointer file at all reads as `work`, the boot/resting mode — its own
+# lease applies from the very first read, not the baseline.
+contains "at rest (no pointer) the boot mode's own lease answers" \
+    "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/latte.jpg" "$("$THEME" status)"
+
+# `neutral` is the hidden recovery mode: reachable deliberately, never a
+# fallback, and (having no presentation here) holds no lease of its own.
+printf '{"mode":"neutral","until":null}' >"$XDG_STATE_HOME/quantum-store/focus.json"
+contains "a deliberate neutral entry falls through to the baseline palette" \
     "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/mocha.jpg" "$("$THEME" status)"
 
 printf '{"mode":"work","until":null}' >"$XDG_STATE_HOME/quantum-store/focus.json"

@@ -116,17 +116,22 @@ trim_log() {
 
 # Resolve the mood for this apply: an explicit arg wins (tests/manual runs);
 # otherwise read the store's focus.json exactly like Focus.active does — a
-# timed mood whose `until` already passed reads as neutral.
+# timed mood whose `until` already passed falls back to `previous` (the mode
+# it was layered over) if the pointer carries one, else to `work`, the desk's
+# resting mode. `neutral` is never a fallback; it is a hidden recovery mode,
+# reached only deliberately.
 if [ -z "$mode_arg" ]; then
     if [ -f "$focus_file" ]; then
-        mode=$(jq -r '.mode // "neutral"' "$focus_file")
+        mode=$(jq -r '.mode // "work"' "$focus_file")
         until=$(jq -r '.until // ""' "$focus_file")
-        if [ "$mode" != neutral ] && [ -n "$until" ]; then
+        if [ -n "$until" ]; then
             until_ms=$(date -d "$until" +%s%3N 2>/dev/null || echo 0)
-            [ "$(date +%s%3N)" -gt "$until_ms" ] && mode=neutral
+            if [ "$(date +%s%3N)" -gt "$until_ms" ]; then
+                mode=$(jq -r '.previous // "work"' "$focus_file")
+            fi
         fi
     else
-        mode=neutral
+        mode=work
     fi
 else
     mode="$mode_arg"

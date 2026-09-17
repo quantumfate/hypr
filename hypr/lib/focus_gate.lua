@@ -16,7 +16,10 @@
 -- LEO-287 tracks the pair.
 --
 -- Mode semantics (mirroring Focus.qml, LEO-236):
---   * neutral never blocks anything;
+--   * `neutral` never blocks anything — it is the hidden recovery mode, never
+--     a boot default; `work` IS the boot/resting mode but is an ordinary mood
+--     otherwise, so a `mood-policy` entry for it may block (media/games
+--     blocked from login is accepted behaviour);
 --   * a mood never blocks launching into its own kind (`kindOwner` links the
 --     launch vocabulary to the mood ids after the trim);
 --   * `until` expiry lapses the block on its own — a stale mood stops
@@ -31,36 +34,52 @@ local M = {}
 --- The launch kind a mood id owns — same table, same reason.
 local KIND_OWNER = { game = "gaming" }
 
----@param pointer table pointer document ({ mode, until, ... })
----@return string? reason nil unless the pointer is a non-expired, non-neutral mood
+---@param until_at string? ISO-8601 UTC (`Z`) expiry
+---@return boolean expired? tolerant of malformed input (treated as live)
+local function past(until_at)
+  if type(until_at) ~= "string" then
+    return false
+  end
+  -- os.time parses ISO via epoch math; a malformed expiry is treated as
+  -- still live, because an expired-with-future-stamp fallback is safer than
+  -- a stale block. Lua has no ISO parser in the standard library; the
+  -- quickshell side owns formatting, so this comparator stays tolerant.
+  --
+  -- `os.time(t)` reads `t`'s fields as LOCAL time, but `until_at`'s fields
+  -- are UTC, so the raw parse is off by the host's UTC offset. `gap` is that
+  -- offset (round-tripping "now" through both calendars), added back to the
+  -- parsed stamp before comparing.
+  local y, mo, d, h, mi = until_at:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+)")
+  if not y then
+    return false
+  end
+  local now = os.time()
+  local gap = now - os.time(os.date("!*t", now))
+  return os.time({
+    year = tonumber(y),
+    month = tonumber(mo),
+    day = tonumber(d),
+    hour = tonumber(h),
+    min = tonumber(mi),
+  }) + gap < now
+end
+
+---@param pointer table pointer document ({ mode, until, previous, ... })
+---@return string? reason nil unless the effective mode is an active, non-neutral mood
 local function active_reason(pointer)
   if type(pointer) ~= "table" then
     return nil
   end
+  -- Effective mode: the pointer's own, unless a timed mode expired, in which
+  -- case `previous` (the mode it was layered over) applies, falling back to
+  -- `work` — which, unlike `neutral`, is a real mood and may carry its own
+  -- policy (work blocking media/games from login is accepted behaviour).
   local mode = pointer.mode
+  if past(pointer["until"]) then
+    mode = pointer.previous or "work"
+  end
   if not mode or mode == "neutral" then
     return nil
-  end
-  local until_at = pointer["until"]
-  if until_at and type(until_at) == "string" then
-    -- os.time parses ISO via epoch math; a malformed expiry is treated as
-    -- still live, because an expired-with-future-stamp fallback is safer than
-    -- a stale block. Lua has no ISO parser in the standard library; the
-    -- quickshell side owns formatting, so this comparator stays tolerant.
-    local y, mo, d, h, mi = until_at:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+)")
-    if
-      y
-      and os.time({
-          year = tonumber(y),
-          month = tonumber(mo),
-          day = tonumber(d),
-          hour = tonumber(h),
-          min = tonumber(mi),
-        })
-        < os.time()
-    then
-      return nil -- expired: the mood lapses itself
-    end
   end
   return mode
 end

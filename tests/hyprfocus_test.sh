@@ -11,15 +11,48 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cli="$here/../bin/,hyprfocus"
 [[ -x $cli ]] || cli="$here/../,hyprfocus"
+
+# Pointer-expiry conformance (mode fallback rule): shared fixtures with the
+# Lua resolver's `M.effective_mode` (tests/hyprfocus_init_spec.lua), covering
+# expiry -> `previous` and expiry -> `work`. Runs with no sibling checkout, so
+# it sits ahead of the quickshell-declaration guard below.
+pointer_fixtures="$here/fixtures/hyprfocus/pointer"
+pointer_fail=0
+for fixture in "$pointer_fixtures"/*.json; do
+    result=$(
+        python3 - "$cli" "$fixture" <<'PY'
+import importlib.util
+import json
+import sys
+from importlib.machinery import SourceFileLoader
+
+cli_path, fixture_path = sys.argv[1], sys.argv[2]
+loader = SourceFileLoader("hyprfocus_cli", cli_path)
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+loader.exec_module(module)
+
+case = json.loads(open(fixture_path).read())
+print(module.effective_mode(case["pointer"]))
+PY
+    )
+    if [[ $result == "$(python3 -c "import json;print(json.load(open('$fixture'))['effective'])")" ]]; then
+        echo "  ok   $(basename "$fixture")"
+    else
+        echo "  FAIL $(basename "$fixture") -> got $result"
+        pointer_fail=1
+    fi
+done
+
 # Overridable so a quickshell worktree can be checked before it merges.
 declaration="${HYPRFOCUS_DECLARATION:-$here/../../quickshell/assets/hyprfocus.default.json}"
 
 if [[ ! -f $declaration ]]; then
     echo "skip: sibling quickshell checkout not found at $declaration" >&2
-    exit 0
+    exit "$pointer_fail"
 fi
 
-fail=0
+fail=$pointer_fail
 check() {
     local name=$1 expected=$2 actual=$3
     if [[ $actual == "$expected" ]]; then

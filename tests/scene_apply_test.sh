@@ -108,10 +108,16 @@ not_contains "task-gate-less moods leave the desk's units alone" "--user stop ob
 not_contains "and nothing is started during a no-op apply" "--user start" "$(stopper)"
 teardown
 
-echo "a lapsed timed mood reads as neutral and applies nothing"
+echo "a lapsed timed mood with no previous falls back to work"
 setup
-printf '{"mode":"work","until":"2000-01-01T00:00:00.000Z"}' >"$XDG_STATE_HOME/focus.json"
-contains "stale until resolves to neutral" "PLAN mood=neutral stop=<none>" "$(run --dry-run 2>&1)"
+printf '{"mode":"gaming","until":"2000-01-01T00:00:00.000Z"}' >"$XDG_STATE_HOME/focus.json"
+contains "stale until with no previous resolves to work" "PLAN mood=work stop=<none>" "$(run --dry-run 2>&1)"
+teardown
+
+echo "a lapsed timed mood falls back to the mode it was layered over"
+setup
+printf '{"mode":"gaming","until":"2000-01-01T00:00:00.000Z","previous":"study"}' >"$XDG_STATE_HOME/focus.json"
+contains "stale until resolves to previous" "PLAN mood=study stop=<none>" "$(run --dry-run 2>&1)"
 teardown
 
 echo "a prevented background task maps to its contract units at apply time"

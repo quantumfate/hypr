@@ -1,0 +1,5 @@
+{
+  "description": "an expired timed mode with no `previous` recorded falls back to `work`, never `neutral`",
+  "pointer": { "mode": "gaming", "until": "2000-01-01T00:00:00Z", "previous": null },
+  "effective": "work"
+}

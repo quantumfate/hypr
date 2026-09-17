@@ -1,0 +1,5 @@
+{
+  "description": "an empty/missing pointer reads as `work`, the boot and resting mode",
+  "pointer": {},
+  "effective": "work"
+}

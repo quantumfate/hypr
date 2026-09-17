@@ -10,6 +10,11 @@
 --- report rather than half-apply, and the half of a desk this runtime does not
 --- own must be left alone.
 local t = require("tests.harness")
+local json = require("hypr.lib.json")
+
+-- Shared with the Python CLI's `effective_mode` (tests/hyprfocus_test.sh):
+-- the pointer-expiry fallback rule, one fixture file per case.
+local pointer_fixtures_dir = (debug.getinfo(1, "S").source:sub(2):match("^(.*)/") .. "/fixtures/hyprfocus/pointer")
 
 local DECLARATION = {
   version = 3,
@@ -79,6 +84,9 @@ local function fresh(declaration, pointer)
             stores[name][k] = v
           end
         end,
+        update = function(_, fn)
+          stores[name] = fn(stores[name] or {}) or stores[name]
+        end,
       }
     end,
   }
@@ -135,8 +143,20 @@ t.describe("reading the declaration", function()
   end)
 
   t.it("falls back to the resting state when the pointer says nothing", function()
+    -- `work` is the boot/resting mode; `neutral` is a hidden recovery mode,
+    -- never a fallback.
     local _, hyprfocus = fresh(DECLARATION, {})
+    t.eq("work", hyprfocus.active())
+  end)
+
+  t.it("an expired timed mode falls back to `previous`", function()
+    local _, hyprfocus = fresh(DECLARATION, { mode = "game", ["until"] = "2000-01-01T00:00:00Z", previous = "neutral" })
     t.eq("neutral", hyprfocus.active())
+  end)
+
+  t.it("an expired timed mode with no `previous` falls back to `work`", function()
+    local _, hyprfocus = fresh(DECLARATION, { mode = "game", ["until"] = "2000-01-01T00:00:00Z" })
+    t.eq("work", hyprfocus.active())
   end)
 end)
 
@@ -391,5 +411,23 @@ t.describe("monitor placement", function()
     hyprfocus.replace()
     restore()
     t.eq("name:logs>DP-2", moves(stub), "re-placed once the monitor returned")
+  end)
+end)
+
+t.describe("pointer expiry fallback (shared with the Python CLI)", function()
+  t.it("resolves every shared fixture the same way `effective_mode` documents", function()
+    local pipe = io.popen(('find "%s" -maxdepth 1 -name "*.json" | sort'):format(pointer_fixtures_dir))
+    local files = {}
+    for line in pipe:lines() do
+      files[#files + 1] = line
+    end
+    pipe:close()
+    t.ok(#files > 0, "no pointer fixtures found — the gate runs on no data")
+
+    local _, hyprfocus = fresh(DECLARATION)
+    for _, path in ipairs(files) do
+      local fixture = json.decode(assert(io.open(path, "r"):read("*a")))
+      t.eq(fixture.effective, hyprfocus.effective_mode(fixture.pointer), fixture.description or path)
+    end
   end)
 end)

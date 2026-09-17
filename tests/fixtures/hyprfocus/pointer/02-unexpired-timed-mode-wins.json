@@ -1,0 +1,5 @@
+{
+  "description": "a timed mode still before its `until` stays the effective mode",
+  "pointer": { "mode": "gaming", "until": "2999-01-01T00:00:00Z", "previous": "work" },
+  "effective": "gaming"
+}
