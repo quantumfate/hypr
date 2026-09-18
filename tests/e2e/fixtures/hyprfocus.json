@@ -7,6 +7,10 @@
     "requires": {},
     "wants": {},
     "notify": { "default": "show" },
+    "drawers": {
+      "signal": { "key": "s", "class": "signal", "desc": "Signal", "launch": "signal-desktop" },
+      "gizmo": { "key": "g", "class": "e2e-gizmo", "desc": "Gizmo", "launch": "e2e-gizmo" }
+    },
     "scenes": {
       "grouped": {
         "blocks": [
@@ -31,7 +35,8 @@
         "blocks": [{ "classes": ["e2e-game"], "order": 1, "share": 1 }],
         "barred": [],
         "strays": "float",
-        "bindings": []
+        "bindings": [],
+        "drawers": ["gizmo"]
       },
       "aside": {
         "blocks": [{ "classes": ["e2e-aside"], "order": 1, "share": 1 }],

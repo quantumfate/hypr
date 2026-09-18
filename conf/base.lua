@@ -68,50 +68,12 @@ return {
   primary_mod = "CTRL",
   secondary_mod = "SHIFT",
   tertiary_mod = "ALT",
-  -- Shelves (hypr/lib/shelf.lua, docs/shelves.md): one key each in the
-  -- `shelf` submap. A `tree` is admitted per mode by the hyprfocus
-  -- declaration; a shelf without one is always there.
-  ---@type Shelf[]
-  shelves = {
-    { name = "signal", key = "s", class = "signal", cmd = "signal-desktop", desc = "Signal" },
-    { name = "vesktop", key = "v", class = "vesktop", cmd = "vesktop", desc = "Vesktop" },
-    {
-      name = "ankama",
-      key = "a",
-      class = "Ankama Launcher",
-      cmd = ",ankama-launcher.sh",
-      desc = "Ankama Launcher",
-      tree = "shelf-ankama",
-      scene = "dofus",
-    },
-    {
-      name = "steam",
-      key = "t",
-      class = "steam",
-      cmd = "steam",
-      desc = "Steam",
-      tree = "shelf-steam",
-      scene = "steam-games",
-    },
-    {
-      name = "lutris",
-      key = "l",
-      class = "net.lutris.Lutris",
-      cmd = "lutris",
-      desc = "Lutris",
-      tree = "shelf-lutris",
-      scene = "dofus",
-    },
-    { name = "music", key = "m", class = "([Ss]potify)", cmd = "spotify", desc = "Spotify" },
-    { name = "ckb-next", key = "k", class = "ckb-next", cmd = "ckb-next", desc = "ckb-next" },
-    {
-      name = "copyq",
-      key = "c",
-      class = "com.github.hluk.copyq",
-      cmd = "copyq",
-      desc = "CopyQ",
-    },
-  },
+  -- Shelves (docs/shelves.md) are declared drawers now (LEO-363): key, class,
+  -- launch command and scene assignment all live in the hyprfocus declaration
+  -- (`base.drawers`, `scenes.<name>.drawers`), read at runtime by
+  -- `hypr/lib/drawer.lua`. Nothing host-specific remains here — window
+  -- geometry (float, centered, 60% x 70%) is engine policy in that module,
+  -- not per-drawer data.
   ---@type table<string, AppScope>
   apps = {
     media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },

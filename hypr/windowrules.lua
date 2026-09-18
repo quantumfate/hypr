@@ -172,7 +172,7 @@ windowrule.tag_set_effects("gaming", {
   },
 })
 
--- Steam and Lutris live on shelves (hypr/lib/shelf.lua, rules at the end of
+-- Steam and Lutris live on shelves (hypr/lib/drawer.lua, rules at the end of
 -- this file). The ESO launcher is Steam's, so it opens on the Steam shelf.
 hl.window_rule({ match = eso_launcher, workspace = "special:shelf-steam", float = true, center = true })
 
@@ -237,7 +237,7 @@ windowrule.tag_props({
 }, "+comms")
 
 windowrule.tag_set_effects("comms", {
-  -- Signal and Vesktop live on shelves (hypr/lib/shelf.lua); the tag only
+  -- Signal and Vesktop live on shelves (hypr/lib/drawer.lua); the tag only
   -- keeps them from stealing focus when a message arrives.
   static = { suppress_event = "activate activatefocus" },
 })
@@ -321,7 +321,7 @@ hl.window_rule({
   opacity = "1 override 1 override",
 })
 
--- Spotify lives on the "music" shelf (conf/base.lua shelves, hypr/lib/shelf.lua).
+-- Spotify lives on the "music" shelf (declared drawer, hypr/lib/drawer.lua).
 
 -- Terminals stack, the browser does not.
 --
@@ -394,7 +394,8 @@ hl.window_rule({
 require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
 
 -- Shelves last, so their workspace effect wins over any earlier class rule.
-require("hypr.lib.shelf").rules(config.shelves)
+local drawer = require("hypr.lib.drawer")
+drawer.rules(drawer.load())
 
 -- Nested Hyprland instances started by the e2e harness (tests/e2e/hq) open as
 -- an `aquamarine` window. Keep them small, floating in a corner and out of

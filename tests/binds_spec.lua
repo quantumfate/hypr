@@ -16,10 +16,6 @@ _G.config = {
   primary_mod = "CTRL",
   secondary_mod = "SHIFT",
   tertiary_mod = "ALT",
-  shelves = {
-    { name = "signal", key = "s", class = "signal", cmd = "signal-desktop", desc = "Signal" },
-    { name = "steam", key = "t", class = "steam", cmd = "steam", desc = "Steam", tree = "shelf-steam" },
-  },
   apps = {
     media_browser = { cmd = "zen-twilight", class = "" },
     main_browser = { cmd = "zen-twilight", class = "" },

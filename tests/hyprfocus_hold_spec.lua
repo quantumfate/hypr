@@ -179,23 +179,40 @@ t.describe("the record", function()
 end)
 
 t.describe("shelf windows are never held (LEO-370)", function()
-  local STEAM = { name = "steam", key = "t", class = "steam", cmd = "steam", desc = "Steam" }
+  local STEAM = { id = "steam", key = "t", class = "steam", launch = "steam", desc = "Steam", scenes = {} }
+
+  -- Drawers are declared data now (LEO-363), read live off the store; a hold
+  -- spec fixes the list by overriding `drawer.load` on the shared module
+  -- table, which is the same one `hold.lua` captured at require time.
+  ---@param drawers Drawer[]
+  local function with_drawers(drawers, fn)
+    local drawer = require("hypr.lib.drawer")
+    local original = drawer.load
+    drawer.load = function()
+      return drawers
+    end
+    local ok, err = pcall(fn)
+    drawer.load = original
+    if not ok then
+      error(err, 0)
+    end
+  end
 
   t.it("a shelf-classed window on the withdrawn workspace is left standing", function()
-    _G.config = { shelves = { STEAM } }
-    local stub, hold = fresh({ win("0x1", "code"), win("0x2", "code", "steam") })
-    t.eq(1, hold.hold("code"), "only the non-shelf window is parked")
-    t.eq("address:0x1->special:hyprfocus-held", moves(stub))
-    t.eq(nil, hold.origin("0x2"))
-    _G.config = nil
+    with_drawers({ STEAM }, function()
+      local stub, hold = fresh({ win("0x1", "code"), win("0x2", "code", "steam") })
+      t.eq(1, hold.hold("code"), "only the non-shelf window is parked")
+      t.eq("address:0x1->special:hyprfocus-held", moves(stub))
+      t.eq(nil, hold.origin("0x2"))
+    end)
   end)
 
   t.it("a window already on a shelf special workspace is left standing, class aside", function()
-    _G.config = { shelves = {} }
-    local stub, hold = fresh({ win("0x1", "special:shelf-ankama") })
-    t.eq(0, hold.hold("special:shelf-ankama"))
-    t.eq("", moves(stub))
-    _G.config = nil
+    with_drawers({}, function()
+      local stub, hold = fresh({ win("0x1", "special:shelf-ankama") })
+      t.eq(0, hold.hold("special:shelf-ankama"))
+      t.eq("", moves(stub))
+    end)
   end)
 end)
 

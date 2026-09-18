@@ -288,7 +288,10 @@ end
 ---registry refuses to do it — so without step 3, step 4 would silently do
 ---nothing at all.
 ---@param mode string
----Binding trees declared by a scene, normalized to a set.
+---Binding trees declared by a scene, plus a synthetic `drawer:<id>` tree per
+---drawer the scene's `drawers` list assigns to it (LEO-363) — the mechanism
+---that replaced the hand-named `shelf-ankama`/`shelf-steam`/`shelf-lutris`
+---trees: a drawer is admitted exactly like any other scene-owned binding.
 ---@param declaration table
 ---@param name string?
 ---@return table<string, true>
@@ -301,12 +304,18 @@ local function scene_binding_set(declaration, name)
       out[tree] = true
     end
   end
+  if scene and type(scene.drawers) == "table" then
+    for _, id in ipairs(scene.drawers) do
+      out["drawer:" .. id] = true
+    end
+  end
   return out
 end
 
 ---Every binding tree that is under any form of admission control: mode
----control (base.bindings) plus scene control (any scene's bindings). A tree
----named by a scene but not by base.bindings is still conditional on the scene.
+---control (base.bindings) plus scene control (any scene's bindings and
+---drawer assignments). A tree named by a scene but not by base.bindings is
+---still conditional on the scene.
 ---@param declaration table
 ---@return table<string, true>
 local function conditional_binding_set(declaration)
@@ -318,6 +327,11 @@ local function conditional_binding_set(declaration)
     if type(scene.bindings) == "table" then
       for _, name in ipairs(scene.bindings) do
         out[name] = true
+      end
+    end
+    if type(scene.drawers) == "table" then
+      for _, id in ipairs(scene.drawers) do
+        out["drawer:" .. id] = true
       end
     end
   end
@@ -634,6 +648,15 @@ apply_mode = function(mode)
 
   applied = mode
   applied_desk = desk
+
+  -- Background drawers (LEO-363: Signal, Vesktop, Spotify) start silently now
+  -- that the desk's admitted scenes are known. Wrapped in pcall: a launch
+  -- failure is logged by `drawer.bring_up` itself and must never fail an
+  -- otherwise-successful mode transition.
+  pcall(function()
+    local drawer = require("hypr.lib.drawer")
+    drawer.bring_up(drawer.load(), desk)
+  end)
 
   -- Bring every claimed window home, whatever workspace it drifted to while
   -- nothing admitted claimed it (LEO-353). Folded into `moves` so the

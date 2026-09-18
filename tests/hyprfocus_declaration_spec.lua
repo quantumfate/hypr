@@ -167,7 +167,7 @@ t.describe("scene-owned binding trees are attached (LEO-346)", function()
   local expected = {
     ["obsidian-linear"] = { "obsidian" },
     logs = { "logs" },
-    dofus = { "dofus", "shelf-ankama", "shelf-lutris" },
+    dofus = { "dofus" },
   }
   for scene, trees in pairs(expected) do
     t.it(scene .. " declares " .. table.concat(trees, "/"), function()
@@ -178,6 +178,25 @@ t.describe("scene-owned binding trees are attached (LEO-346)", function()
       t.eq(table.concat(want, ","), table.concat(declared, ","))
     end)
   end
+end)
+
+-- LEO-363: ankama and lutris are drawers assigned to dofus, not hand-named
+-- trees in its `bindings` list — the synthetic `drawer:<id>` tree
+-- (hypr/hyprfocus/init.lua) is what admits them now.
+t.describe("dofus's ankama/lutris drawers are assigned by reference (LEO-363)", function()
+  local raw = read_file(declaration_path)
+  if not raw then
+    t.it("skip: sibling quickshell checkout not found at " .. declaration_path, function() end)
+    return
+  end
+  local declaration = json.decode(raw)
+  local scenes = (declaration.base or {}).scenes or {}
+
+  t.it("dofus assigns ankama and lutris in its `drawers` list", function()
+    local drawers = (scenes.dofus or {}).drawers or {}
+    table.sort(drawers)
+    t.eq("ankama,lutris", table.concat(drawers, ","))
+  end)
 end)
 
 -- One module instance: `require("hypr.hyprfocus.init")` loads a second copy of

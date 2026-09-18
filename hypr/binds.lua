@@ -198,14 +198,29 @@ submap.tree({
   },
 })
 
--- Shelves: one key per app in a single submap. Shelves carrying a `tree`
--- (Ankama Launcher, Steam, Lutris) are admitted by the mode, so their keys
--- exist only where the mode enables them.
+-- Shelves: one key per declared drawer (LEO-363) in a single submap, fed
+-- from the hyprfocus declaration rather than host data. A scene-owned drawer
+-- carries a synthetic `drawer:<id>` tree (wired in hypr/hyprfocus/init.lua),
+-- so its key exists only while one of its owner scenes is active; a global
+-- drawer's key is always there.
 do
-  local shelf = require("hypr.lib.shelf")
+  local drawer = require("hypr.lib.drawer")
+  local drawers = drawer.load()
   local entries = {}
-  for _, s in ipairs(config.shelves) do
-    entries[#entries + 1] = shelf.entry(s)
+  if #drawers == 0 then
+    -- No declaration yet — say so rather than showing an empty submap that
+    -- looks like the feature is broken (mirrors `mode_entries` below).
+    entries[1] = {
+      key = "s",
+      desc = "No declaration — run ,hyprfocus seed",
+      action = function()
+        notify:notify("hyprfocus: no declaration; run ,hyprfocus seed", 5000, notify.level.WARNING)
+      end,
+    }
+  else
+    for _, d in ipairs(drawers) do
+      entries[#entries + 1] = drawer.entry(d)
+    end
   end
   submap.tree({ name = "shelf", desc = "Shelves", entries = entries })
 end
