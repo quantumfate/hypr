@@ -66,7 +66,9 @@ A scene is a plug-in unit that maps to one workspace. It owns:
 - **Layout** — the scene is its own registered layout. Workspaces use `scene`
   (fixed blocks) or `deck` (one to three vertically scrolling columns,
   [deck.md](deck.md)); not dwindle, master or monocle. A scene opts into
-  `deck` explicitly; Dofus stays on `scene` and never scrolls.
+  `deck` explicitly; Dofus stays on `scene` and never scrolls. Both layouts
+  present columns a single resolver sized from the scene's declared
+  priorities and the monitor's real width ([columns.md](columns.md)).
 - **Bring-up / teardown** — what it launches so the usual windows are in place
   without manual work, and how it releases them. Bring-up launches missing
   apps only on mode entry; a scene binding "complete the scene" relaunches

@@ -447,6 +447,9 @@ This is one of the desk's two workspace layouts. The other is `deck`
 vertically through its subscribed windows one at a time. A scene opts into
 `deck` explicitly in its own declaration (`layout = "deck"`); every scene
 defaults to `scene`, and Dofus stays there on purpose — it never scrolls.
+Both layouts are presentations over what a resolver decides a monitor's
+width can carry — see [columns.md](columns.md) for the contract, still a
+document and not yet wired.
 
 This replaced a corrective loop that measured another layout's output and
 dispatched fixes at it (`hypr/scene/schedule.lua` + `model.lua` +

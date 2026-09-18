@@ -5,7 +5,10 @@ pure decision below; nothing registers it with the compositor yet, no scene
 declares `layout = "deck"`, and no bind reads scroll state. This document is
 the deliverable for that first step — read [scenes.md](scenes.md) and
 [desktop-model.md](desktop-model.md) first; this widens both in place rather
-than starting a third document.
+than starting a third document. [columns.md](columns.md) widens this one in
+turn: the duplicated share arithmetic and missing solo framing this document
+flags in "Is this a second layout" below are exactly what that resolver
+replaces.
 
 ## What `deck` adds over `scene`
 
