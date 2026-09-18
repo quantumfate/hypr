@@ -278,30 +278,6 @@ local function apply_group_decision(w)
   end
 end
 
----Execute one `strays.decide` decision (LEO-367): float the window
----address-targeted, no focus-dance. Tiled layout targets never include a
----floated window (`hypr/scene/provider.lua` reads `hl.get_windows()`'s own
----`floating` field), so once this dispatch lands the stray drops out of the
----scene layout's split on the next `recalculate` for free.
----@param w HL.Window?
-local function apply_stray_decision(w)
-  local spec = w and w.workspace and specs[w.workspace.name]
-  if not spec then
-    return
-  end
-  local decision = strays.decide(spec, w)
-  if decision.action ~= "float" then
-    return
-  end
-  hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address }))
-  trace.emit(window_fields(w, spec.name, {
-    stage = "arrange",
-    event = "stray_float",
-    decision = "float",
-    reason = "unblocked window on a strays=float scene",
-  }))
-end
-
 ---Scene names admitted by the mode last applied, or an empty set before the
 ---first apply — a re-home never claims a window into a scene the mode is not
 ---currently running.
@@ -313,6 +289,30 @@ local function active_scenes()
     out[placement.name] = true
   end
   return out
+end
+
+---Execute one `strays.decide` decision (LEO-367): float the window
+---address-targeted, no focus-dance. Tiled layout targets never include a
+---floated window (`hypr/scene/provider.lua` reads `hl.get_windows()`'s own
+---`floating` field), so once this dispatch lands the stray drops out of the
+---scene layout's split on the next `recalculate` for free.
+---@param w HL.Window?
+local function apply_stray_decision(w)
+  local spec = w and w.workspace and specs[w.workspace.name]
+  if not spec then
+    return
+  end
+  local decision = strays.decide(spec, w, specs, active_scenes())
+  if decision.action ~= "float" then
+    return
+  end
+  hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address }))
+  trace.emit(window_fields(w, spec.name, {
+    stage = "arrange",
+    event = "stray_float",
+    decision = "float",
+    reason = "unblocked window on a strays=float scene",
+  }))
 end
 
 ---Execute one `home.decide` decision (LEO-353): a claimed window is moved,
@@ -336,6 +336,14 @@ local function apply_home_decision(w)
     workspace = "name:" .. decision.workspace,
     follow = false,
   }))
+  if decision.settle then
+    -- The window arrived floating (it was stray-floated on the wrong
+    -- workspace before this claim fired). Its own scene never declared it
+    -- floating, so clear it explicitly — `action = "off"`, not a toggle,
+    -- since a toggle would float an already-tiled window instead (spiked
+    -- live). Address-targeted: no focus-dance.
+    hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address, action = "off" }))
+  end
   trace.emit(window_fields(w, decision.workspace, {
     stage = "route",
     event = "collected",

@@ -487,6 +487,13 @@ local function collect_home(mode, admitted)
         workspace = "name:" .. decision.workspace,
         follow = false,
       }))
+      if decision.settle then
+        -- Same reasoning as the open-time re-home in hypr/events/scene.lua:
+        -- a window that was stray-floated before this scene claimed it must
+        -- land tiled, not floating, on its own workspace. `action = "off"`,
+        -- not a toggle, address-targeted, no focus-dance.
+        hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address, action = "off" }))
+      end
       moved[w.address] = decision.workspace
       trace.emit({
         stage = "route",

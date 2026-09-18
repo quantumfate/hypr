@@ -14,6 +14,7 @@ local function win(over)
     class = over.class,
     tags = over.tags,
     workspace = over.workspace,
+    floating = over.floating,
   }
 end
 
@@ -54,5 +55,19 @@ t.describe("scene.home", function()
   t.it("has nothing to say about a window with no workspace", function()
     local w = win({ class = "ProtonMail-native", workspace = nil })
     t.eq("none", home.decide(SPECS, ACTIVE, w).action)
+  end)
+
+  t.it("settles a float it arrives with", function()
+    local w = win({ class = "ProtonMail-native", workspace = { name = "obsidian-linear" }, floating = true })
+    local d = home.decide(SPECS, ACTIVE, w)
+    t.eq("move", d.action)
+    t.ok(d.settle, "move carries settle")
+  end)
+
+  t.it("does not settle a window that arrives already tiled", function()
+    local w = win({ class = "ProtonMail-native", workspace = { name = "obsidian-linear" }, floating = false })
+    local d = home.decide(SPECS, ACTIVE, w)
+    t.eq("move", d.action)
+    t.eq(nil, d.settle)
   end)
 end)

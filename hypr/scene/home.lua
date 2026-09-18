@@ -18,6 +18,7 @@ local M = {}
 ---@field action "move"|"none"
 ---@field window HL.Window the window the decision is about
 ---@field workspace string? move: the scene workspace it belongs on
+---@field settle boolean? move: also clear a float the window is carrying
 
 ---The name of the one active scene whose block claims `class`/`tags`, or nil.
 ---Only scenes active in the current mode are searched: a scene not admitted
@@ -63,7 +64,15 @@ function M.decide(spec_by_scene, active, w)
   if not home or w.workspace.name == home then
     return { action = "none", window = w }
   end
-  return { action = "move", window = w, workspace = home }
+  -- A claimed window can arrive floating: it opened before this
+  -- decision claimed it, so the open-time stray-float path on its wrong
+  -- workspace floated it for real. Re-homing must not just relocate a float
+  -- to the right desk — the scene it belongs to never declared it floating,
+  -- so it must land tiled. `w.floating` is only ever true here for a window
+  -- this decision itself is about to move: a window already on its scene's
+  -- workspace never reaches this branch, so a deliberate user float there is
+  -- never touched.
+  return { action = "move", window = w, workspace = home, settle = w.floating or nil }
 end
 
 return M

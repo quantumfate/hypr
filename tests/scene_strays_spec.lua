@@ -7,6 +7,7 @@ _G.hl = require("tests.hl_stub").new()
 package.loaded["hypr.scene.strays"] = nil
 package.loaded["hypr.scene.layout"] = nil
 package.loaded["hypr.scene.spec"] = nil
+package.loaded["hypr.scene.home"] = nil
 local strays = require("hypr.scene.strays")
 
 local FLOAT_SCENE = {
@@ -68,5 +69,22 @@ t.describe("strays.decide", function()
   t.it("returns none for a window with no workspace", function()
     local decision = strays.decide(FLOAT_SCENE, { address = "0x1", class = "mpv" }, {})
     t.eq("none", decision.action)
+  end)
+
+  t.it("does not float a window another active scene claims", function()
+    local PROTON = { name = "proton", blocks = { { classes = { "Proton%-Mail" }, order = 1 } } }
+    local spec_by_scene = { capture = FLOAT_SCENE, proton = PROTON }
+    local active = { capture = true, proton = true }
+    local w = win({ address = "0x1", class = "Proton-Mail" })
+    local decision = strays.decide(FLOAT_SCENE, w, spec_by_scene, active)
+    t.eq("none", decision.action)
+  end)
+
+  t.it("still floats a real stray when spec_by_scene/active are given", function()
+    local spec_by_scene = { capture = FLOAT_SCENE }
+    local active = { capture = true }
+    local w = win({ address = "0x1", class = "mpv" })
+    local decision = strays.decide(FLOAT_SCENE, w, spec_by_scene, active)
+    t.eq("float", decision.action)
   end)
 end)

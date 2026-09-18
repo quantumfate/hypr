@@ -18,6 +18,7 @@
 -- (hypr/events/scene.lua) dispatches and logs it.
 local spec_lib = require("hypr.scene.spec")
 local layout = require("hypr.scene.layout")
+local home = require("hypr.scene.home")
 
 local M = {}
 
@@ -30,11 +31,18 @@ local M = {}
 ---the stray path) and is not `barred` (a scene-level class that legitimately
 ---opens unblocked, e.g. a launcher overlay — it stays exactly what it is),
 ---and it is not already floating (nothing to do, and re-dispatching a toggle
----on an already-floating window would tile it back).
+---on an already-floating window would tile it back), and no *other* active
+---scene claims it: a class another active scene's block owns is not a real
+---stray here, just a window that hasn't been re-homed yet
+---(`hypr/scene/home.lua`) — floating it first would leave it floating once
+---re-homing relocates it, since re-homing itself never fires (`action` stays
+---`"none"`) for a window already standing on its own scene's workspace.
 ---@param spec Scene.Spec
 ---@param w HL.Window
+---@param spec_by_scene table<string, Scene.Spec>? every scene, for the claim check above
+---@param active table<string, true>? scene names active in the current mode
 ---@return Scene.StrayDecision
-function M.decide(spec, w)
+function M.decide(spec, w, spec_by_scene, active)
   if not w or not w.workspace or not layout.floats_strays(spec) then
     return { action = "none", window = w }
   end
@@ -45,6 +53,9 @@ function M.decide(spec, w)
     return { action = "none", window = w }
   end
   if w.floating then
+    return { action = "none", window = w }
+  end
+  if spec_by_scene and active and home.claim(spec_by_scene, active, w.class, w.tags) then
     return { action = "none", window = w }
   end
   return { action = "float", window = w }
