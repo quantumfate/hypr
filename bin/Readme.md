@@ -21,6 +21,22 @@ integrate with the shared state / UI:
   (`pick --inline`, used internally for that re-exec). Full reference in the
   script's own header comment.
 
+- `bin/,theme.sh` — the palette/wallpaper fan-out (full verb list in the
+  script's own header). Wallpapers live per palette (`wallpapers/<palette>/*`
+  at the repo root, which is `$CONFIG/hypr/wallpapers/<palette>` once
+  `ansible/roles/hypr` symlinks this whole repo in as `~/.config/hypr`); an
+  image may join more than one palette via a symlink into a second palette's
+  folder rather than a copy or a shared/ bucket — so listing one palette's
+  folder is always its whole set. `wallpaper list|next|prev|random` are
+  per-monitor (`theme.json`'s `wallpapers[palette][output]`, `"*"` meaning
+  every monitor); cycling is a shuffled, deterministic-per-session order
+  (`wallpaper_shuffle[palette]`) that never repeats until the set is
+  exhausted. `wallpaper F [P]` still binds a file directly, refusing one
+  outside `P`'s set once that palette has a set folder; a bare legacy name or
+  a flat (pre-palette-folders) binding still resolves — the Quickshell store's
+  older writes are not stranded. `bin/,wallpaper.sh` is now a thin wrapper
+  over `,theme.sh wallpaper` for keybinds.
+
 - `bin/dofus_swap.py` — Dofus auto turn-swap detector. Reads its roster from the
   shared team source of truth (`$QF_STORE/dofus/team.json`), the same file
   the Quickshell UI edits, so team changes take effect live.

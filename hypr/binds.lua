@@ -863,6 +863,21 @@ submap.tree({
         qs.notify("Theme", "theme", "get")
       end,
     },
+    -- Wallpaper cycling (LEO-366): every known monitor steps together through
+    -- the active palette's shuffled set. `,wallpaper.sh` is the thin wrapper
+    -- over `,theme.sh wallpaper next|prev`.
+    {
+      key = "n",
+      desc = "Next wallpaper",
+      stay = true,
+      action = hl.dsp.exec_cmd(",wallpaper.sh next"),
+    },
+    {
+      key = "p",
+      desc = "Previous wallpaper",
+      stay = true,
+      action = hl.dsp.exec_cmd(",wallpaper.sh prev"),
+    },
     {
       key = "h",
       desc = "IPC help",

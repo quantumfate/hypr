@@ -17,6 +17,9 @@
 #   ,theme.sh toggle                swap between the day and night palettes
 #   ,theme.sh get                   print the resolved palette
 #   ,theme.sh wallpaper F [P]       bind a wallpaper to a palette (default: current)
+#   ,theme.sh wallpaper list [P]    print the palette's set and each monitor's pick (JSON)
+#   ,theme.sh wallpaper next|prev|random [P] [--output NAME]
+#                                   cycle the palette's set, shuffled, one pick per monitor
 #   ,theme.sh status                print what each surface is currently set to
 #
 # Writes go through the same store the shell uses, so setting a palette here and
@@ -145,6 +148,10 @@ put() {
 RESULT_APPLIED=()
 RESULT_PENDING=()
 RESULT_FAILED=()
+# One entry per monitor a wallpaper command actually resolved (cycled or
+# bound), across the whole run — separate from applied/pending/failed since a
+# wallpaper pick is "what was chosen", not "did a surface accept it".
+RESULT_WALLPAPER=()
 
 record_applied() { RESULT_APPLIED+=("$(jq -n --arg s "$1" --arg t "$2" '{surface: $s, tier: $t}')"); }
 record_pending() { RESULT_PENDING+=("$(jq -n --arg s "$1" --arg t "$2" --arg r "$3" '{surface: $s, tier: $t, reason: $r}')"); }
@@ -175,7 +182,8 @@ write_result() {
         --argjson applied "$(json_array RESULT_APPLIED)" \
         --argjson pending "$(json_array RESULT_PENDING)" \
         --argjson failed "$(json_array RESULT_FAILED)" \
-        '{ok: $ok, ts: $ts, adapter: $adapter, applied: $applied, pending: $pending, failed: $failed}' >"$tmp"
+        --argjson wallpaper "$(json_array RESULT_WALLPAPER)" \
+        '{ok: $ok, ts: $ts, adapter: $adapter, applied: $applied, pending: $pending, failed: $failed, wallpaper: $wallpaper}' >"$tmp"
     mv -f "$tmp" "$RESULT"
 }
 
@@ -690,25 +698,95 @@ process_wallpaper() {
     fi
 }
 
-# Which wallpaper this palette should show: the palette binding, then the
-# single fallback, then <palette>.jpg. Wallpapers belong to palettes, not to
-# modes, so a mode changes the wallpaper only by leasing a palette. A palette
-# with none of those is legitimate configuration, so the last fallback is a
-# random pick from the wallpapers directory — the same semantics
-# `,wallpaper.sh` gives a user who asked for anything — rather than an error.
-# The pick is not persisted: a binding is a user decision, and applying it
-# instead of forgetting it would re-roll on every palette switch. Shared with
-# `status` so the two can never disagree about what is bound.
+# --- wallpaper sets and per-monitor picks ------------------------------------
+#
+# Sets live per palette (`hypr/wallpapers/<palette>/*`, i.e. this repo's own
+# `wallpapers/<palette>/*` — the config root IS the repo, symlinked in by
+# `ansible/roles/hypr`). An image may belong to several palettes; that's a
+# symlink from one palette's folder to another's file, not a second copy or a
+# shared/ bucket — `find`ing a palette's own folder is then always the whole
+# answer for that palette, with no union step anywhere else that reads it.
+
+WALLPAPER_GLOB=(-iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png')
+
+# The monitor names a wallpaper pick applies to. THEME_OUTPUTS (space
+# separated) is the test injection, the same pattern as THEME_HOUR — hyprctl
+# addresses the live session by name, so a test must be able to force a fixed
+# set of monitors without querying one. Empty (no override, no live hyprctl,
+# or sandboxed) means "one virtual output", printed as nothing here and
+# handled by callers as the "*" fallback — the single-wallpaper-for-everything
+# shape every existing binding and test already assumes.
+outputs_list() {
+    if [ -n "${THEME_OUTPUTS-}" ]; then
+        printf '%s' "$THEME_OUTPUTS"
+        return
+    fi
+    sandboxed && return 0
+    have hyprctl || return 0
+    hyprctl monitors -j 2>/dev/null | jq -r '.[].name' | tr '\n' ' '
+}
+
+# A palette's own wallpaper set, sorted by name (the `list` order; cycling
+# order is the separate shuffle below). Symlinks count — that's how a shared
+# image joins a second palette.
+palette_wallpaper_files() {
+    local palette=$1 dir="$CONFIG/hypr/wallpapers/$palette"
+    [ -d "$dir" ] || return 0
+    find -L "$dir" -maxdepth 1 -type f \( "${WALLPAPER_GLOB[@]}" \) 2>/dev/null | sort
+}
+
+# A path relative to the wallpapers root, when it is under one — otherwise
+# unchanged (an absolute path bound from outside the set, the pre-palette-
+# folders shape every existing test still uses).
+relativize() {
+    local f=$1 dir=$2
+    case "$f" in
+    "$dir"/*) printf '%s' "${f#"$dir"/}" ;;
+    *) printf '%s' "$f" ;;
+    esac
+}
+
+# Whether $file is a member of $palette's own set — by path, not by name, so a
+# same-named file elsewhere does not pass. A palette with no set folder yet
+# (a host mid-migration, or a test's scratch layout) cannot be validated
+# against, so it is let through rather than refused: the membership rule only
+# bites once the folder exists.
+in_palette_set() {
+    local file=$1 palette=$2 dir="$CONFIG/hypr/wallpapers/$palette"
+    [ -d "$dir" ] || return 0
+    [ "$file" = "$dir/$(basename "$file")" ] && [ -e "$file" ]
+}
+
+# Which wallpaper this palette shows on one monitor: the per-output binding,
+# then the palette's "*" (every-monitor) binding, then the legacy single
+# fallback, then <palette>.jpg. Wallpapers belong to palettes, not to modes, so
+# a mode changes the wallpaper only by leasing a palette. A palette with none
+# of those is legitimate configuration, so the last fallback is a random pick
+# — the palette's own set if it has a folder, else the whole flat directory
+# (a pre-migration host) — rather than an error. The pick is not persisted: a
+# binding is a user decision, and applying it instead of forgetting it would
+# re-roll on every palette switch. Shared with `status` and `list` so none of
+# the three can ever disagree about what is bound.
 resolve_wallpaper() {
-    local palette=$1 wall dir="$CONFIG/hypr/wallpapers"
-    wall=$(jq -r --arg p "$palette" '.wallpapers[$p] // ""' "$STATE" 2>/dev/null || echo "")
-    [ -n "$wall" ] || wall=$(get wallpaper "")
+    local palette=$1 output=${2:-*} wall dir="$CONFIG/hypr/wallpapers" raw kind
+    raw=$(jq -c --arg p "$palette" '.wallpapers[$p] // empty' "$STATE" 2>/dev/null)
+    if [ -n "$raw" ]; then
+        kind=$(printf '%s' "$raw" | jq -r 'type')
+        if [ "$kind" = "string" ]; then
+            # The pre-per-output shape: one binding for every monitor.
+            wall=$(printf '%s' "$raw" | jq -r '.')
+        else
+            wall=$(printf '%s' "$raw" | jq -r --arg o "$output" \
+                '.[$o] // .["*"] // ([.[]] | first) // ""')
+        fi
+    fi
+    [ -n "${wall-}" ] || wall=$(get wallpaper "")
     if [ -n "$wall" ]; then
-        # A bound name with no "/" is bare (LEO-372: `theme.json` stores
-        # `Clearnight.jpg`, not a path) — resolve it against the wallpapers
-        # directory before checking it exists.
+        # A bound name with no leading "/" is either bare (LEO-372:
+        # `theme.json` stored `Clearnight.jpg`, not a path) or the new
+        # `<palette>/<file>` shape — both resolve against the wallpapers root.
         case "$wall" in
-        */*) : ;;
+        /*) : ;;
         *) wall="$dir/$wall" ;;
         esac
         # A binding that does not exist on disk must not fail the whole
@@ -725,19 +803,83 @@ resolve_wallpaper() {
         done
     fi
     if [ -z "$wall" ]; then
-        wall=$(find "$dir" -maxdepth 1 -type f \
-            \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) 2>/dev/null |
-            shuf -n 1)
+        if [ -d "$dir/$palette" ]; then
+            wall=$(palette_wallpaper_files "$palette" | shuf -n 1)
+        fi
+        [ -n "$wall" ] || wall=$(find "$dir" -maxdepth 1 -type f \( "${WALLPAPER_GLOB[@]}" \) 2>/dev/null | shuf -n 1)
     fi
     printf '%s' "$wall"
 }
 
+# --- the shuffle --------------------------------------------------------------
+#
+# One shuffled order per palette (`wallpaper_shuffle[P].order`), shared by
+# every monitor cycling that palette; a per-output `pos` says where that
+# monitor currently sits in it. Persisted in theme.json, so the order survives
+# across script invocations for as long as the set does not change — that is
+# what "deterministic per session" means here: not reseeded on every call, only
+# when the set's membership changes or the order is exhausted.
+shuffle_order() {
+    jq -c --arg p "$1" '.wallpaper_shuffle[$p].order // []' "$STATE" 2>/dev/null || echo '[]'
+}
+
+shuffle_pos() {
+    jq -r --arg p "$1" --arg o "$2" '.wallpaper_shuffle[$p].pos[$o] // -1' "$STATE" 2>/dev/null || echo -1
+}
+
+# $1 = palette, $2.. = the set's file names. Writes and returns a fresh order.
+reshuffle() {
+    local palette=$1 order
+    shift
+    order=$(printf '%s\n' "$@" | shuf | jq -R -s 'split("\n") | map(select(length > 0))')
+    put "$(jq -n --arg p "$palette" --argjson o "$order" '{wallpaper_shuffle: {($p): {order: $o}}}')"
+    printf '%s' "$order"
+}
+
+# Ensures $palette's persisted order still names exactly the current set
+# (a file added or removed invalidates it), reshuffling if not. $2.. are the
+# set's file names. Returns the (possibly just-written) order as JSON.
+current_shuffle_order() {
+    local palette=$1 order have want
+    shift
+    order=$(shuffle_order "$palette")
+    have=$(printf '%s' "$order" | jq 'sort')
+    want=$(printf '%s\n' "$@" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
+    if [ "$have" = "$want" ]; then
+        printf '%s' "$order"
+    else
+        reshuffle "$palette" "$@"
+    fi
+}
+
+# One image per monitor: each output in outputs_list() gets its own resolve
+# and its own `awww img --outputs`. With no known outputs (no THEME_OUTPUTS,
+# no live hyprctl, or sandboxed) this loops once over the "*" pseudo-output —
+# the single-wallpaper-for-everything shape every pre-multi-monitor binding
+# and test still uses, so the label stays plain "wallpaper" for it and only
+# gains a "[NAME]" tag for a real, named output.
 apply_wallpaper() {
-    local palette=$1 role=$2 wall
-    wall=$(resolve_wallpaper "$palette")
+    local palette=$1 role=$2 outs out
+    local -a outs_arr
+    outs=$(outputs_list)
+    [ -n "$outs" ] || outs='*'
+    # Word-split into an array rather than an unquoted `for out in $outs`: the
+    # "*" fallback is a literal token here, not a glob, and an unquoted
+    # expansion would have the shell replace it with the working directory's
+    # file listing.
+    read -r -a outs_arr <<<"$outs"
+    for out in "${outs_arr[@]}"; do
+        apply_wallpaper_output "$palette" "$role" "$out"
+    done
+}
+
+apply_wallpaper_output() {
+    local palette=$1 role=$2 out=$3 wall label="wallpaper"
+    [ "$out" = "*" ] || label="wallpaper[$out]"
+    wall=$(resolve_wallpaper "$palette" "$out")
     [ -n "$wall" ] && [ -f "$wall" ] || {
-        echo "wallpaper: unchanged"
-        record_failed wallpaper "no wallpaper bound to the palette and no default found"
+        echo "$label: unchanged"
+        record_failed "$label" "no wallpaper bound to the palette and no default found"
         return
     }
     wall=$(process_wallpaper "$palette" "$wall" "$role")
@@ -747,12 +889,12 @@ apply_wallpaper() {
     # exception GSETTINGS gets in apply_gtk. A bare sandboxed run with no
     # THEME_AWWW override therefore never touches the real binary.
     if sandboxed && [ -z "${THEME_AWWW-}" ]; then
-        echo "wallpaper: skipped (sandboxed)"
+        echo "$label: skipped (sandboxed)"
         return
     fi
     have "$AWWW" || {
-        echo "wallpaper: awww not available"
-        record_failed wallpaper "awww not installed"
+        echo "$label: awww not available"
+        record_failed "$label" "awww not installed"
         return
     }
     # `img` is a no-op against a dead daemon. The session unit
@@ -766,9 +908,11 @@ apply_wallpaper() {
     }
     # step/fps stand in for the 240ms crossfade the focus-modes spec calls
     # for — awww has no direct duration knob, only step size and frame rate.
-    "$AWWW" img "$wall" --transition-type simple --transition-step 2 --transition-fps 30 >/dev/null 2>&1 || true
-    echo "wallpaper: ${wall##*/}"
-    record_applied wallpaper immediate
+    local outflag=()
+    [ "$out" = "*" ] || outflag=(--outputs "$out")
+    "$AWWW" img "$wall" "${outflag[@]}" --transition-type simple --transition-step 2 --transition-fps 30 >/dev/null 2>&1 || true
+    echo "$label: ${wall##*/}"
+    record_applied "$label" immediate
 }
 
 # The mode currently holding the lease's declared accent role (one
@@ -878,16 +1022,127 @@ cmd_toggle() {
     if [ "$current" = "$day" ]; then cmd_set "$night"; else cmd_set "$day"; fi
 }
 
-# Bind a wallpaper to a palette: `,theme.sh wallpaper <file> [palette]`.
+# Bind a wallpaper to a palette: `,theme.sh wallpaper <file> [palette]`. A
+# palette that has its own set folder refuses a file from outside it — the
+# membership in_palette_set() checks. Binds to every currently known output
+# (or the "*" fallback), same image everywhere, since the caller named no
+# monitor; `next`/`prev`/`random` below are how a monitor gets its own pick.
 cmd_wallpaper() {
-    local file=${1-} palette=${2-}
+    local file=${1-} palette=${2-} abs rel outs out patch='{}'
     [ -n "$file" ] || die "wallpaper needs a file"
     [ -f "$file" ] || die "no such file: $file"
     [ -n "$palette" ] || palette=$(resolve)
     is_palette "$palette" || die "unknown palette '$palette'"
-    put "$(jq -n --arg p "$palette" --arg f "$file" '{wallpapers: {($p): $f}}')"
+    abs="$(cd "$(dirname "$file")" && pwd)/$(basename "$file")"
+    in_palette_set "$abs" "$palette" || die "$file is not in $palette's wallpaper set"
+    rel=$(relativize "$abs" "$CONFIG/hypr/wallpapers")
+    outs=$(outputs_list)
+    if [ -z "$outs" ]; then
+        patch=$(jq -n --arg f "$rel" '{"*": $f}')
+    else
+        for out in $outs; do
+            patch=$(jq -n --argjson base "$patch" --arg o "$out" --arg f "$rel" '$base * {($o): $f}')
+        done
+    fi
+    put "$(jq -n --arg p "$palette" --argjson m "$patch" '{wallpapers: {($p): $m}}')"
     echo "wallpaper: $palette -> ${file##*/}"
     cmd_apply
+}
+
+# `,theme.sh wallpaper list [P]`: the palette's set and each known monitor's
+# current pick, as JSON — `{palette, monitors: {NAME: {current, index}}, count,
+# items}`. Shared resolve_wallpaper/palette_wallpaper_files with the cycle
+# commands and `status`, so none of them can disagree about what is bound.
+cmd_wallpaper_list() {
+    local palette=$1 outs out items count monitors='{}' names
+    local -a outs_arr
+    names=$(palette_wallpaper_files "$palette")
+    items=$(printf '%s\n' "$names" | jq -R -s --arg p "$palette" \
+        'split("\n") | map(select(length > 0) | (split("/") | last) | {name: ., file: ($p + "/" + .)})')
+    count=$(printf '%s' "$items" | jq 'length')
+    outs=$(outputs_list)
+    [ -n "$outs" ] || outs='*'
+    read -r -a outs_arr <<<"$outs" # see apply_wallpaper: "*" is a literal, not a glob
+    for out in "${outs_arr[@]}"; do
+        local cur idx=-1 rel=null
+        cur=$(resolve_wallpaper "$palette" "$out")
+        if [ -n "$cur" ] && [ -f "$cur" ]; then
+            rel=$(jq -n --arg f "$(relativize "$cur" "$CONFIG/hypr/wallpapers")" '$f')
+            idx=$(printf '%s' "$items" | jq --arg n "$(basename "$cur")" '[.[].name] | index($n) // -1')
+        fi
+        monitors=$(jq -n --argjson base "$monitors" --arg o "$out" --argjson f "$rel" --argjson i "$idx" \
+            '$base * {($o): {current: $f, index: $i}}')
+    done
+    jq -n --arg p "$palette" --argjson monitors "$monitors" --argjson items "$items" --argjson count "$count" \
+        '{palette: $p, monitors: $monitors, count: $count, items: $items}'
+}
+
+# `,theme.sh wallpaper next|prev|random [P] [--output NAME]`: advances one or
+# every known monitor through $palette's shuffled set (random: an independent
+# random pick, not a step in the shuffle), saves the choice per output, and
+# repaints only if $palette is the one currently resolved — a cycle on a
+# palette nobody is showing just updates what it would show next.
+cmd_wallpaper_cycle() {
+    local op=$1 palette=$2 only_output=$3 outs out
+    local -a outs_arr
+    outs=${only_output:-$(outputs_list)}
+    [ -n "$outs" ] || outs='*'
+    read -r -a outs_arr <<<"$outs" # see apply_wallpaper: "*" is a literal, not a glob
+    for out in "${outs_arr[@]}"; do
+        cycle_one_output "$op" "$palette" "$out"
+    done
+    if [ "$palette" = "$(resolve)" ]; then
+        apply_wallpaper "$palette" "$(accent_role)"
+    fi
+    sandboxed || write_result
+}
+
+cycle_one_output() {
+    local op=$1 palette=$2 out=$3
+    local -a files
+    mapfile -t files < <(palette_wallpaper_files "$palette")
+    local len=${#files[@]}
+    if [ "$len" -eq 0 ]; then
+        echo "wallpaper[$out]: $palette has no wallpaper set"
+        record_failed "wallpaper:$out" "no wallpapers in $palette's set"
+        RESULT_WALLPAPER+=("$(jq -n --arg p "$palette" --arg o "$out" --arg f "" --argjson i -1 --argjson c 0 \
+            '{palette: $p, output: $o, file: $f, index: $i, count: $c}')")
+        return
+    fi
+    local -a names=("${files[@]##*/}")
+    local order pos idx newfile rel
+    order=$(current_shuffle_order "$palette" "${names[@]}")
+    pos=$(shuffle_pos "$palette" "$out")
+    case "$op" in
+    random)
+        idx=$((RANDOM % len))
+        ;;
+    next)
+        if [ "$pos" -lt 0 ] || [ "$((pos + 1))" -ge "$len" ]; then
+            # Exhausted (or never started): a fresh shuffle, so a long-running
+            # session cycles through the whole set before any repeat.
+            order=$(reshuffle "$palette" "${names[@]}")
+            idx=0
+        else
+            idx=$((pos + 1))
+        fi
+        ;;
+    prev)
+        if [ "$pos" -le 0 ]; then
+            order=$(reshuffle "$palette" "${names[@]}")
+            idx=$((len - 1))
+        else
+            idx=$((pos - 1))
+        fi
+        ;;
+    esac
+    newfile=$(printf '%s' "$order" | jq -r --argjson i "$idx" '.[$i]')
+    rel="$palette/$newfile"
+    put "$(jq -n --arg p "$palette" --arg o "$out" --arg f "$rel" '{wallpapers: {($p): {($o): $f}}}')"
+    put "$(jq -n --arg p "$palette" --arg o "$out" --argjson i "$idx" '{wallpaper_shuffle: {($p): {pos: {($o): $i}}}}')"
+    RESULT_WALLPAPER+=("$(jq -n --arg p "$palette" --arg o "$out" --arg f "$newfile" --argjson i "$idx" --argjson c "$len" \
+        '{palette: $p, output: $o, file: $f, index: $i, count: $c}')")
+    echo "wallpaper[$out]: $palette -> $newfile ($((idx + 1))/$len)"
 }
 
 cmd_status() {
@@ -915,13 +1170,41 @@ auto) cmd_auto ;;
 toggle) cmd_toggle ;;
 wallpaper)
     shift
-    cmd_wallpaper "${1-}" "${2-}"
+    sub=${1-}
+    case "$sub" in
+    list | next | prev | random)
+        shift
+        palette="" output=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+            --output)
+                output=${2-}
+                shift 2
+                ;;
+            *)
+                palette=$1
+                shift
+                ;;
+            esac
+        done
+        [ -n "$palette" ] || palette=$(resolve)
+        is_palette "$palette" || die "unknown palette '$palette'"
+        if [ "$sub" = "list" ]; then
+            cmd_wallpaper_list "$palette"
+        else
+            cmd_wallpaper_cycle "$sub" "$palette" "$output"
+        fi
+        ;;
+    *)
+        cmd_wallpaper "${1-}" "${2-}"
+        ;;
+    esac
     ;;
 get)
     resolve
     echo
     ;;
 status) cmd_status ;;
--h | --help | help) sed -n '3,23p' "$0" | sed 's/^# \{0,1\}//' ;;
+-h | --help | help) sed -n '3,25p' "$0" | sed 's/^# \{0,1\}//' ;;
 *) die "unknown command '${1}' — try --help" ;;
 esac

@@ -558,6 +558,81 @@ contains "a held lease shows the leased palette's own binding" \
     "wallpaper $XDG_CONFIG_HOME/hypr/wallpapers/latte.jpg" "$("$THEME" status)"
 teardown
 
+echo "wallpaper sets: list, per-monitor picks, shuffled cycling (LEO-366)"
+setup
+export THEME_OUTPUTS="DP-1 eDP-1"
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/a.jpg"
+printf 'b' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/b.jpg"
+printf 'c' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/c.jpg"
+
+list=$("$THEME" wallpaper list mocha)
+check "list: three items" "3" "$(printf '%s' "$list" | jq '.count')"
+check "list: both monitors present" "2" "$(printf '%s' "$list" | jq '.monitors | length')"
+
+# Cycle a fresh output through the whole set (3 files) via `next` before
+# anything else touches it: the shuffled order is a permutation of the set,
+# so exactly `count` steps from a cold start show every distinct file once
+# before the order is exhausted and reshuffled.
+seen=""
+for _ in 1 2 3; do
+    "$THEME" wallpaper next mocha --output DP-1 >/dev/null
+    f=$(jq -r '.wallpapers.mocha["DP-1"]' "$STORE")
+    seen="$seen $f"
+done
+uniq_count=$(printf '%s\n' $seen | sort -u | wc -l | tr -d ' ')
+check "three next steps from a cold start show three distinct files" "3" "$uniq_count"
+
+before=$(jq -r '.wallpaper_shuffle.mocha.order' "$STORE")
+"$THEME" wallpaper prev mocha --output DP-1 >/dev/null
+after=$(jq -r '.wallpaper_shuffle.mocha.order' "$STORE")
+check "the shuffled order persists across calls (deterministic per session)" "$before" "$after"
+
+# A second, still-untouched output cycles independently of the first.
+out=$("$THEME" wallpaper next mocha --output eDP-1)
+contains "the other monitor reports its own name" "eDP-1" "$out"
+edp1_first=$(jq -r '.wallpapers.mocha["eDP-1"]' "$STORE")
+contains "eDP-1 got one of mocha's own files" "mocha/" "$edp1_first"
+unset THEME_OUTPUTS
+teardown
+
+echo "wallpaper sets: an out-of-set file is refused once the palette has a set folder"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/a.jpg"
+printf 'x' >"$ROOT/outside.jpg"
+if "$THEME" wallpaper "$ROOT/outside.jpg" mocha >/dev/null 2>&1; then
+    printf '  FAIL a file outside the palette set was accepted\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   a file outside the palette set is refused\n'
+    pass=$((pass + 1))
+fi
+"$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/mocha/a.jpg" mocha >/dev/null
+check "a file inside the palette set is accepted" "mocha/a.jpg" "$(jq -r '.wallpapers.mocha["*"]' "$STORE")"
+teardown
+
+echo "wallpaper sets: an empty set fails open, honestly"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+if out=$("$THEME" wallpaper next mocha 2>&1); then
+    contains "an empty set is reported, not silently skipped" "no wallpaper set" "$out"
+else
+    printf '  FAIL cycling an empty set aborted instead of reporting\n'
+    fail=$((fail + 1))
+fi
+teardown
+
+echo "wallpaper sets: the legacy flat-name binding still resolves (migration path)"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'legacy' >"$XDG_CONFIG_HOME/hypr/wallpapers/Clearnight.jpg"
+printf '{"palette":"mocha","mode":"manual","wallpapers":{"mocha":"Clearnight.jpg"}}\n' >"$STORE"
+list=$("$THEME" wallpaper list mocha)
+check "the flat bare-name binding is still the resolved current pick" "Clearnight.jpg" \
+    "$(printf '%s' "$list" | jq -r '.monitors["*"].current')"
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
 

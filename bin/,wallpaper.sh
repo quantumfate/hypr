@@ -1,35 +1,14 @@
 #!/usr/bin/env bash
-# ,wallpaper.sh — pick a wallpaper at random and bind it.
+# ,wallpaper.sh — a thin wrapper over `,theme.sh wallpaper` for keybinds.
 #
-# Was ,hyprpaper.sh, and called `hyprctl hyprpaper` directly. Two reasons it
-# does not any more: hyprpaper is being replaced by awww (it cannot crossfade),
-# and a second writer of the wallpaper would bypass everything ,theme.sh does
-# on the way — the blur/desaturate/tint pass that keeps a translucent bar
-# legible, the per-palette binding, and the result record.
+# All the logic (sets, shuffling, per-monitor picks, validation) lives in
+# ,theme.sh now; this is just the short names a Hyprland bind wants to spawn.
 #
-# So this only chooses. ,theme.sh applies.
-#
-#   ,wallpaper.sh              bind a random wallpaper to the current palette
+#   ,wallpaper.sh              next wallpaper on every monitor, current palette
+#   ,wallpaper.sh next|prev|random [palette] [--output NAME]
 
 set -euo pipefail
 
-WALLPAPER_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/wallpapers"
-[ -d "$WALLPAPER_DIR" ] || {
-    printf '%s: no wallpaper directory at %s\n' "${0##*/}" "$WALLPAPER_DIR" >&2
-    exit 1
-}
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# Exclude whatever is bound now, so "random" never picks the current one and
-# looks like it did nothing.
-current=$(,theme.sh status 2>/dev/null | sed -n 's/^wallpaper *//p' || true)
-
-wallpaper=$(find "$WALLPAPER_DIR" -type f \
-    \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) \
-    ! -name "$(basename "${current:-none}")" | shuf -n 1)
-
-[ -n "$wallpaper" ] || {
-    printf '%s: no wallpapers found in %s\n' "${0##*/}" "$WALLPAPER_DIR" >&2
-    exit 1
-}
-
-exec ,theme.sh wallpaper "$wallpaper"
+exec "$SCRIPT_DIR/,theme.sh" wallpaper "${1:-next}" "${@:2}"
