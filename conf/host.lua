@@ -20,12 +20,6 @@ local nav = require("hypr.lib.nav")
 
 local M = {}
 
--- Mirrors hypr/conf.lua's `general.gaps_out`: the fallback for a monitor role
--- geometry_profiles never overrides. Read live via hl.get_config where
--- possible so a future edit to conf.lua can't silently drift from this
--- default; this literal only backs the case hl has no value loaded yet.
-local DEFAULT_GAPS_OUT = { top = 8, right = 40, bottom = 40, left = 40 }
-
 -- The bar's side insets follow each monitor's tiled outer gap, base gap only
 -- (never the scene layout's own solo widen). Quickshell reads this store and
 -- falls back to Theme.barInset*2 when a monitor has no entry.
@@ -125,7 +119,11 @@ function M.build()
   geometry_store:put({
     monitors = geometry.monitor_gaps(
       config.host.workspaces.workspace_specs,
-      hl.get_config("general.gaps_out") or DEFAULT_GAPS_OUT
+      -- Read live where possible so a future edit to conf/base.lua's
+      -- `default_gaps` can't silently drift from what the compositor
+      -- actually has loaded; the literal only backs a cold start with
+      -- nothing loaded yet.
+      hl.get_config("general.gaps_out") or config.default_gaps.gaps_out
     ),
     roles = monitor_roles(config.host),
   })

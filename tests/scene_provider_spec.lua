@@ -158,9 +158,11 @@ t.describe("gaps", function()
     t.eq(50, placed(a).x, "the new value took effect with no reload of our own")
   end)
 
-  t.it("reads the sided table the compositor actually pushes", function()
-    -- Hyprland marshals a gap as named sides with no array part; reading it
-    -- by position silently produced zero gaps on every scene workspace.
+  t.it("reads the sided table the compositor actually pushes, side by side", function()
+    -- Hyprland marshals a gap as named sides with no array part; the layout
+    -- now honours each side (left for x) instead of collapsing the whole
+    -- table to `top`, which used to flatten every outer gap to the bar's
+    -- tight top value on every scene workspace.
     local _, provider = fresh({ CODE }, {
       ["general:gaps_in"] = { top = 12, right = 12, bottom = 12, left = 12 },
       ["general:gaps_out"] = { top = 8, right = 40, bottom = 40, left = 40 },
@@ -168,7 +170,24 @@ t.describe("gaps", function()
     local a = target("0x1", "Kitty-Main", "code")
     local b = target("0x9", "zen-twilight", "code")
     provider.recalculate({ area = AREA, targets = { a, b } })
-    t.eq(8, placed(a).x, "the outer gap reached the layout")
+    t.eq(40, placed(a).x, "the left outer gap reached the layout")
+    t.eq(8, placed(a).y, "the tighter top gap reached the layout, not the sides")
+  end)
+
+  t.it("prefers a workspace's own resolved spec gaps over the global config", function()
+    -- The per-monitor gaps conf/base.lua's geometry_profiles declares are
+    -- resolved onto workspace_specs at load time (hypr/lib/geometry.lua);
+    -- this is what makes them reach a tiled window at all -- the global
+    -- general:gaps_out below is what every workspace used to get regardless.
+    local _, provider = fresh({ CODE }, { ["general:gaps_in"] = 12, ["general:gaps_out"] = 40 })
+    _G.config.host.workspaces.workspace_specs = {
+      { default_name = "code", gaps_in = 60, gaps_out = { top = 12, right = 80, bottom = 72, left = 80 } },
+    }
+    local a = target("0x1", "Kitty-Main", "code")
+    local b = target("0x9", "zen-twilight", "code")
+    provider.recalculate({ area = AREA, targets = { a, b } })
+    t.eq(80, placed(a).x, "the spec's own left gap won over the global fallback")
+    t.eq(12, placed(a).y, "the spec's own tighter top gap won too")
   end)
 
   t.it("survives a compositor that will not answer for a key", function()

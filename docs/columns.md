@@ -115,8 +115,9 @@ resolver's widths and offsets instead of `fractions`' shares.
 **Host < monitor < scene intent.** Concretely:
 
 - **Host** supplies only fallback numbers nothing more specific overrides:
-  `DEFAULT_GAPS_OUT` in `conf/host.lua`, and a `geometry_profiles` entry's
-  `gaps_by_monitor` keyed by fingerprint, not by hostname (`hypr/lib/profile.lua`).
+  `default_gaps` in `conf/base.lua` (the one place gap numbers are declared),
+  and a `geometry_profiles` entry's `gaps_by_monitor` keyed by fingerprint,
+  not by hostname (`hypr/lib/profile.lua`).
   Host data never states a width — `conf/hosts/*.lua` has never named a
   resolution, only monitor roles and outputs. This is the weakest voice
   because it is a guess made at declaration time about a machine that might
@@ -209,11 +210,11 @@ edge, or sits centred in whatever width it did not ask for.
 
 Three real widths, computed once and reused for every scene below:
 
-| Profile           | Output | Panel width                                                                                                                                      | Profile gaps                                 | `available_width` (`W`) | `gaps_in` |
-| ----------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------- | ----------------------- | --------- |
-| Desktop primary   | DP-1   | 5120                                                                                                                                             | `desk-dual` primary: `gaps_out={8,80,80,80}` | `5120 - 80*2 = 4960`    | 12        |
-| Desktop secondary | DP-2   | 2560                                                                                                                                             | `desk-dual` secondary: `gaps_out=14`         | `2560 - 14*2 = 2532`    | 6         |
-| Laptop            | eDP-1  | 1920×1200 (`tests/scene_layout_spec.lua`'s fixture work area; `conf/hosts/quantum-laptop.lua` states no literal resolution — see the note below) | `laptop-solo`: `gaps_out=8`                  | `1920 - 8*2 = 1904`     | 4         |
+| Profile           | Output | Panel width                                                                                                                                      | Profile gaps                                    | `available_width` (`W`) | `gaps_in` |
+| ----------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | ----------------------- | --------- |
+| Desktop primary   | DP-1   | 5120                                                                                                                                             | `desk-dual` primary: `gaps_out={12,80,72,80}`   | `5120 - 80*2 = 4960`    | 60        |
+| Desktop secondary | DP-2   | 2560                                                                                                                                             | `desk-dual` secondary: `gaps_out={12,64,64,64}` | `2560 - 64*2 = 2432`    | 48        |
+| Laptop            | eDP-1  | 1920×1200 (`tests/scene_layout_spec.lua`'s fixture work area; `conf/hosts/quantum-laptop.lua` states no literal resolution — see the note below) | `laptop-solo`: `gaps_out={12,48,48,48}`         | `1920 - 48*2 = 1824`    | 40        |
 
 `conf/hosts/quantum-laptop.lua` never states a pixel size — geometry is
 fingerprinted from live monitors (`hypr/lib/profile.lua`), never read off a

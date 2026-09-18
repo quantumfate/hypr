@@ -205,13 +205,31 @@ local function fractions(slots)
   return out
 end
 
+---A CssGap: either a single number applied to all four sides, or a table
+---naming each side explicitly (Hyprland's own `general:gaps_out` shape).
+---@alias Scene.CssGap number|{top: number?, right: number?, bottom: number?, left: number?}
+
 ---@class Scene.LayoutOpts
 ---@field gaps_in number gap between tiles
----@field gaps_out number gap between the tiles and the screen edge
+---@field gaps_out Scene.CssGap gap between the tiles and the screen edge; a
+---table lets the top differ from the sides (the bar reserves its own height
+---via layer-shell exclusive zone, so top must not also carry a full outer gap)
 ---@field solo_extra number? extra outer gap for a lone tile (default SOLO_EXTRA)
 ---@field solo_frame boolean? whether a lone tile is framed at all (default true)
 ---@field override string[]? desired left-to-right entry-key order
 ---(see `M.entry_key`, `M.reorder`); nil keeps the declared order
+
+---A CssGap -> its four sides. A bare number applies to all of them.
+---@param gaps Scene.CssGap?
+---@return number top, number right, number bottom, number left
+local function sides(gaps)
+  if type(gaps) == "table" then
+    return gaps.top or 0, gaps.right or 0, gaps.bottom or 0, gaps.left or 0
+  end
+  local n = tonumber(gaps) or 0
+  return n, n, n, n
+end
+M.sides = sides
 
 ---Place every tile.
 ---
@@ -223,7 +241,7 @@ end
 function M.boxes(scene, tiles, area, opts)
   opts = opts or {}
   local gaps_in = opts.gaps_in or 0
-  local gaps_out = opts.gaps_out or 0
+  local top, right, bottom, left = sides(opts.gaps_out)
 
   local representatives, members = collapse_groups(tiles)
   -- `strays = "float"` is no longer a layout concern (LEO-367): a floated
@@ -243,13 +261,14 @@ function M.boxes(scene, tiles, area, opts)
   -- tile here, so the Dofus group alone on its workspace frames like a single
   -- window — which is the behaviour an event layer used to approximate.
   if #slots == 1 and opts.solo_frame ~= false then
-    gaps_out = gaps_out + (opts.solo_extra or SOLO_EXTRA)
+    local extra = opts.solo_extra or SOLO_EXTRA
+    top, right, bottom, left = top + extra, right + extra, bottom + extra, left + extra
   end
 
-  local inner_x = area.x + gaps_out
-  local inner_y = area.y + gaps_out
-  local inner_w = area.w - gaps_out * 2
-  local inner_h = area.h - gaps_out * 2
+  local inner_x = area.x + left
+  local inner_y = area.y + top
+  local inner_w = area.w - left - right
+  local inner_h = area.h - top - bottom
   local usable = inner_w - gaps_in * (#slots - 1)
 
   local out = {}

@@ -13,7 +13,12 @@ return {
   primary_monitor = "DP-1",
   secondary_monitor = "DP-2",
   -- The case panel: connected, never a target. Nothing is placed, shown or
-  -- focused there; a window that lands on it moves to the primary.
+  -- focused there; a window that lands on it moves to the primary. It is
+  -- rotated 800x1280 and carries no bar (quickshell's Bar.qml excludes it the
+  -- same way); were it ever un-ignored it would want a tight gap profile of
+  -- its own (roughly gaps_in 16, gaps_out 16 -- there is little panel to
+  -- spend on air), added to conf/base.lua's `geometry_profiles` alongside
+  -- primary/secondary rather than invented here.
   ignored_monitors = { "HDMI-A-1" },
   hyprlock_conf = os.getenv("HOME") .. "/.config/hypr/hyprlock.conf",
   -- #engine-block-layoutopts: Hyprland drops layoutopt on workspace rules

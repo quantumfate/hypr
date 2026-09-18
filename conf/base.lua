@@ -7,30 +7,58 @@
 -- is what this file cannot know: its monitors, and any workspace engine
 -- options it wants different from the spec defaults conf/host applies.
 
+-- The one place gap numbers are invented (AGENTS.md: nothing else does).
+-- `hypr/conf.lua`'s `general` block and `conf/host.lua`'s pre-load fallback
+-- both read this rather than carrying their own literal, so widening a gap
+-- here is the whole change.
+--
+-- top stays deliberately tighter than the other three sides: the bar is a
+-- WlrLayershell top-layer surface with no explicit `exclusiveZone`, so
+-- Quickshell's PanelWindow reserves its own height (`Theme.barReserved`,
+-- ~46px) from the compositor's work area automatically -- that reservation
+-- already lands in the `ctx.area` the scene layout is handed. A full outer
+-- gap on top of that stacks two margins into a canyon (the bug this profile
+-- used to have: top and the sides shared one number). This default is what a
+-- monitor with no `gaps_by_monitor` entry -- and the compositor's own boot-time
+-- gaps, before any host resolves -- gets.
+---@type { gaps_in: number, gaps_out: { top: number, right: number, bottom: number, left: number } }
+local default_gaps = { gaps_in = 48, gaps_out = { top = 12, right = 56, bottom = 56, left = 56 } }
+
 ---The desk's geometry half, keyed by hypr.lib.profile's fingerprint of
 ---hl.get_monitors(), not by hostname. desk-dual's numbers are the former
 ---quantum-desktop ones, laptop-solo's the former quantum-laptop ones.
+---
+---LEO note: these used to be dead for the scene layout (only the bar's side
+---inset ever read them) -- `hypr/scene/provider.lua` fed the compositor's
+---*global* `general:gaps_in`/`general:gaps_out` into every scene regardless
+---of workspace, so a monitor's own entry here never reached a tiled window.
+---The provider now looks a workspace's own spec up by `default_name` first
+---(`hypr/lib/geometry.lua`'s `M.resolve` already filled these onto
+---`workspace_specs` at load time), so per-monitor gaps finally apply.
+---
+---Numbers are roughly 5x the pre-fix live values (gaps_in 12, gaps_out top 8 /
+---sides+bottom 40) per the user's ask, scaled a little by panel size: the
+---5120x1440 ultrawide gets the widest sides, everything else lands around
+---48-64 inner / 48-80 outer. top is 12 wherever the bar shows (every output
+---except a laptop's external secondary, which quickshell/modules/bar/Bar.qml
+---excludes from the bar the same way it excludes the desktop's case panel) --
+---see the module comment above for why top stays small rather than doubling
+---the bar's own reservation.
 ---@type table<string, { gaps_by_monitor?: table<string, table<string, any>> }>
 local geometry_profiles = {
   [require("hypr.lib.profile").DESK_DUAL] = {
-    -- Separation is a property of the panel, not of the config: air on a
-    -- 5120x1440 ultrawide is a wasted third of a laptop lid. hypr/conf.lua's
-    -- global (40px) used to be the ultrawide's own value by omission here;
-    -- 40 read as air rather than intentional framing on a panel this wide, so
-    -- primary is now doubled to 80 and spelled out explicitly rather than
-    -- left to fall through. top stays 8 on both: the bar reserves its own
-    -- height, so a full outer gap on top would stack two margins into a
-    -- canyon (see hypr/scene/layout.lua's solo framing for the same rule).
     gaps_by_monitor = {
-      primary = { gaps_in = 12, gaps_out = { top = 8, right = 80, bottom = 80, left = 80 } },
-      secondary = { gaps_in = 6, gaps_out = 14 },
+      primary = { gaps_in = 60, gaps_out = { top = 12, right = 80, bottom = 72, left = 80 } },
+      secondary = { gaps_in = 48, gaps_out = { top = 12, right = 64, bottom = 64, left = 64 } },
     },
   },
   [require("hypr.lib.profile").LAPTOP_SOLO] = {
-    -- A lid has no room to give away.
     gaps_by_monitor = {
-      primary = { gaps_in = 4, gaps_out = 8 },
-      secondary = { gaps_in = 4, gaps_out = 8 },
+      primary = { gaps_in = 40, gaps_out = { top = 12, right = 48, bottom = 48, left = 48 } },
+      -- The laptop's secondary (external monitor, HDMI-A-1) never carries a
+      -- bar (Bar.qml's excludedScreens), so nothing reserves height there --
+      -- top can match the other three sides.
+      secondary = { gaps_in = 40, gaps_out = { top = 48, right = 48, bottom = 48, left = 48 } },
     },
   },
 }
@@ -125,4 +153,5 @@ return {
     package_manager_tui = { cmd = "kitty --class Kitty-Parui parui", class = "Kitty-Parui" },
   },
   geometry_profiles = geometry_profiles,
+  default_gaps = default_gaps,
 }

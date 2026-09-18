@@ -19,26 +19,52 @@ local M = {}
 -- Workspaces that do not are untouched and keep scrolling.
 local NAME = "scene"
 
----Live gap values. Read from the compositor rather than cached, so a reload
----that changes them is picked up on the next recalculate without a second
----mechanism to keep in sync.
----@return number gaps_in, number gaps_out
-local function gaps()
-  local function number(key, fallback)
+---A workspace's own gaps, from the resolved host data (`conf/host.lua`'s
+---`geometry.resolve()` already filled each spec's per-monitor gaps at load
+---time -- see `hypr/lib/geometry.lua`), keyed by scene name == workspace
+---`default_name`. nil when the workspace has no spec, or the spec left a
+---field unset.
+---@param scene_name string?
+---@return number? gaps_in, Scene.CssGap? gaps_out
+local function spec_gaps(scene_name)
+  if not scene_name then
+    return nil, nil
+  end
+  local specs = config and config.host and config.host.workspaces and config.host.workspaces.workspace_specs
+  for _, spec in ipairs(specs or {}) do
+    if spec.default_name == scene_name then
+      return spec.gaps_in, spec.gaps_out
+    end
+  end
+  return nil, nil
+end
+
+---Live gap values for one scene's workspace. Falls back to the compositor's
+---global config (read live, not cached, so a reload is picked up on the next
+---recalculate) when the workspace declares no gaps of its own -- an
+---undeclared workspace, or a spec that left the field unset.
+---@param scene_name string? scene name == workspace `default_name`
+---@return number gaps_in, Scene.CssGap gaps_out
+local function gaps(scene_name)
+  local function raw(key, fallback)
     local ok, value = pcall(hl.get_config, key)
     if not ok or value == nil then
       return fallback
     end
-    -- Hyprland marshals a CSS-style gap to a table of named sides with no
-    -- array part at all, so indexing it by position always read nil and every
-    -- gap silently fell back to zero. A single-number layout wants `top`,
-    -- which is the value itself for a uniform gap.
-    if type(value) == "table" then
-      value = value.top or value[1]
-    end
-    return tonumber(value) or fallback
+    return value
   end
-  return number("general:gaps_in", 0), number("general:gaps_out", 0)
+  local spec_in, spec_out = spec_gaps(scene_name)
+  local global_in = raw("general:gaps_in", 0)
+  -- gaps_in has no directional meaning here (only the space between tiles),
+  -- so a sided table (Hyprland marshals gaps this way regardless of whether
+  -- the config set them uniformly) collapses to its `top`, same as a uniform
+  -- number would read.
+  if type(global_in) == "table" then
+    global_in = global_in.top or 0
+  end
+  local gaps_in = spec_in or tonumber(global_in) or 0
+  local gaps_out = spec_out or raw("general:gaps_out", 0)
+  return gaps_in, gaps_out
 end
 
 ---The scene a set of targets belongs to, or nil when the workspace has none.
@@ -129,22 +155,23 @@ function M.register(scenes)
         -- windows out evenly rather than leaving them stacked at the origin.
         -- Doing nothing here would look like the compositor had hung.
         local gaps_in, gaps_out = gaps()
+        local top, right, bottom, left = layout.sides(gaps_out)
         local area = ctx.area
-        local usable = area.w - gaps_out * 2 - gaps_in * (#targets - 1)
+        local usable = area.w - left - right - gaps_in * (#targets - 1)
         local width = math.floor(usable / #targets)
         for i, target in ipairs(targets) do
           target:place({
-            x = area.x + gaps_out + (i - 1) * (width + gaps_in),
-            y = area.y + gaps_out,
+            x = area.x + left + (i - 1) * (width + gaps_in),
+            y = area.y + top,
             w = width,
-            h = area.h - gaps_out * 2,
+            h = area.h - top - bottom,
           })
         end
         return
       end
 
       local tiles, by_address = tiles_of(targets)
-      local gaps_in, gaps_out = gaps()
+      local gaps_in, gaps_out = gaps(scene.name)
       local boxes = layout.boxes(scene, tiles, ctx.area, {
         gaps_in = gaps_in,
         gaps_out = gaps_out,

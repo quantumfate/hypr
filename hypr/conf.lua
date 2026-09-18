@@ -52,15 +52,14 @@ hl.config({
   general = {
     -- The edge is what makes it read as a sheet, so it stays crisp and single.
     border_size = 1,
-    -- Separation, not decoration: on the 5120x1440 panel these are roughly 1cm
-    -- inner and 3.5cm outer at ~110 DPI. Per-monitor overrides live with the
-    -- workspace rules; this is the value everything else deviates from.
-    --
-    -- The top is the exception. The bar already floats clear of the screen edge
-    -- and reserves its own height, so a full outer gap on top of that stacks two
-    -- margins and leaves a canyon between the bar and the first window.
-    gaps_in = 12,
-    gaps_out = { top = 8, right = 40, bottom = 40, left = 40 },
+    -- Separation, not decoration. This is only the boot-time / no-override
+    -- default (conf/base.lua's `default_gaps`, the one place gap numbers are
+    -- declared) -- every monitor role gets its own, wider, entry in
+    -- `geometry_profiles`, applied per workspace by
+    -- `hypr/scene/provider.lua`. See `default_gaps`'s comment for why top
+    -- stays tighter than the other three sides.
+    gaps_in = config.default_gaps.gaps_in,
+    gaps_out = config.default_gaps.gaps_out,
     float_gaps = -1,
     -- Scene is the default layout (D3): a workspace opts into `columns`
     -- explicitly, or is left as scene, which frames an undeclared workspace's
