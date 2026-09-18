@@ -74,19 +74,19 @@ Token-saving guidance for agents:
 
 ## Scenarios
 
-| Script                    | Checks                                                                                                                      | Eval |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `00_boot.sh`              | boots under the e2e host; no shell/uwsm launch                                                                              | no   |
-| `10_group.sh`             | two group-block windows form one group                                                                                      | no   |
-| `20_float_strays.sh`      | `strays = "float"` floats an unmatched window                                                                               | no   |
-| `30_shelf_silent.sh`      | a shelf class routes to its special without showing it                                                                      | no   |
-| `40_mode_roundtrip.sh`    | work/gaming (+ neutral hop) round trips keep every window reachable                                                         | yes  |
-| `50_headless_output.sh`   | a headless secondary output takes its scene; removal                                                                        | no   |
-| `60_navigation.sh`        | mod+h/l/j/k across tiles, into/out of a group, onto an empty monitor                                                        | yes  |
-| `65_focus_transitions.sh` | work→study→gaming→work, timed expiry falls back to `previous`, neutral recovery — held sets and pointer fields at each step | yes  |
-| `70_boot_pointer.sh`      | boot: a stale pointer lands on `work`; an unexpired timed mode survives a restart                                            | no   |
-| `75_undeclared_workspace.sh` | a window on a workspace the host never declared moves to its monitor's own                                               | no   |
-| `80_collect_home.sh`      | a claimed window standing elsewhere is re-homed to its scene, focus unmoved                                                 | no   |
+| Script                       | Checks                                                                                                                      | Eval |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `00_boot.sh`                 | boots under the e2e host; no shell/uwsm launch                                                                              | no   |
+| `10_group.sh`                | two group-block windows form one group                                                                                      | no   |
+| `20_float_strays.sh`         | `strays = "float"` floats an unmatched window                                                                               | no   |
+| `30_shelf_silent.sh`         | a shelf class routes to its special without showing it                                                                      | no   |
+| `40_mode_roundtrip.sh`       | work/gaming (+ neutral hop) round trips keep every window reachable                                                         | yes  |
+| `50_headless_output.sh`      | a headless secondary output takes its scene; removal                                                                        | no   |
+| `60_navigation.sh`           | mod+h/l/j/k across tiles, into/out of a group, onto an empty monitor                                                        | yes  |
+| `65_focus_transitions.sh`    | work→study→gaming→work, timed expiry falls back to `previous`, neutral recovery — held sets and pointer fields at each step | yes  |
+| `70_boot_pointer.sh`         | boot: a stale pointer lands on `work`; an unexpired timed mode survives a restart                                           | no   |
+| `75_undeclared_workspace.sh` | a window on a workspace the host never declared moves to its monitor's own                                                  | no   |
+| `80_collect_home.sh`         | a claimed window standing elsewhere is re-homed to its scene, focus unmoved                                                 | no   |
 
 A scenario is a script that sources `lib.sh`, calls `e2e_start`, and exits
 non-zero on failure (`e2e_fail`). Each gets its own nested compositor.
