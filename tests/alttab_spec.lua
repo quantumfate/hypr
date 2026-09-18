@@ -27,7 +27,7 @@ end
 ---same as a real ALT+TAB press — through the bind it registered.
 ---@param windows table[]
 ---@param active table?
----@return fun() press_alt_tab, string alttab_dir
+---@return fun() press_alt_tab, string alttab_dir, table stub
 local function fresh(windows, active)
   for k in pairs(package.loaded) do
     if k == "hypr" or k:match("^hypr%.") then
@@ -53,7 +53,7 @@ local function fresh(windows, active)
     end
   end
   assert(action, "expected ALT + TAB to be bound")
-  return action, os.getenv("XDG_RUNTIME_DIR") .. "/hypr/alttab"
+  return action, os.getenv("XDG_RUNTIME_DIR") .. "/hypr/alttab", stub
 end
 
 ---@param dir string
@@ -126,5 +126,48 @@ t.describe("alttab", function()
     press()
 
     t.eq({ "0x1" }, picked(dir))
+  end)
+
+  -- LEO-375 (part 2): ALT+TAB is bound `submap_universal`, so a repeat press
+  -- while the picker is already open reaches this same handler instead of
+  -- falling through to fzf's own tab/shift-tab binds — the old early
+  -- `return` swallowed it and the selection could never move. It must
+  -- forward the press into the picker window instead.
+  t.it("forwards a repeat press to the picker instead of swallowing it", function()
+    local windows = { win("0x1", 1, { id = 1, name = "code", monitor = { name = "DP-1" } }) }
+    local press, _, stub = fresh(windows)
+
+    press() -- opens the picker
+    stub.get_current_submap = function()
+      return "alttab"
+    end
+    press() -- a second ALT+TAB while already open: must cycle, not no-op
+
+    local forwarded = stub.dispatched[#stub.dispatched]
+    t.eq("dsp.send_shortcut", forwarded.name)
+    t.eq({ mods = "", key = "tab", window = "class:alttab" }, forwarded.args[1])
+  end)
+
+  t.it("forwards the reverse direction on shift+repeat", function()
+    local windows = { win("0x1", 1, { id = 1, name = "code", monitor = { name = "DP-1" } }) }
+    local _, _, stub = fresh(windows)
+
+    local up_action
+    for _, b in ipairs(stub.binds) do
+      if b.key == "ALT + SHIFT + TAB" then
+        up_action = b.action
+      end
+    end
+    assert(up_action, "expected ALT + SHIFT + TAB to be bound")
+
+    up_action() -- opens the picker
+    stub.get_current_submap = function()
+      return "alttab"
+    end
+    up_action() -- a second ALT+SHIFT+TAB while already open: must reverse
+
+    local forwarded = stub.dispatched[#stub.dispatched]
+    t.eq("dsp.send_shortcut", forwarded.name)
+    t.eq({ mods = "SHIFT", key = "tab", window = "class:alttab" }, forwarded.args[1])
   end)
 end)

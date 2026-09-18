@@ -1,3 +1,5 @@
+local cycle = require("hypr.services.alttab.cycle")
+
 ---@class AltTab
 ---@field alttab_dir string runtime directory for pipes
 ---@field preview_png string runtime directory for pipes
@@ -57,6 +59,13 @@ end
 function M:alttab(direction)
   local prev_submap = hl.get_current_submap()
   if prev_submap == "alttab" then
+    -- ALT+TAB is bound `submap_universal`, on purpose, so it can open the
+    -- picker from anywhere — but that also means every repeat press while
+    -- the picker is already open fires this same handler instead of falling
+    -- through to fzf's own tab/shift-tab binds. Forward it there instead of
+    -- swallowing the press, or the selection can never move (LEO-375).
+    local shortcut = cycle.shortcut_for(direction)
+    hl.dispatch(hl.dsp.send_shortcut({ mods = shortcut.mods, key = shortcut.key, window = "class:alttab" }))
     return
   end
 
