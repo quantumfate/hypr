@@ -88,6 +88,8 @@ Token-saving guidance for agents:
 | `75_undeclared_workspace.sh` | a window on a workspace the host never declared moves to its monitor's own                                                  | no   |
 | `80_collect_home.sh`         | a claimed window standing elsewhere is re-homed to its scene, focus unmoved                                                 | no   |
 | `90_live_gaps.sh`            | editing `conf/base.lua` gap numbers + reload applies them live (general + scene rule gaps)                                            | no   |
+| `90_deck.sh`                 | deck layout: exactly one member visible, flip changes it and follows focus                                                                                                          | yes  |
+| `95_whichkey.sh`             | submap enter/leave against `hypr/lib/submap.lua`+`whichkey.lua`: enter is a real submap event, exit unwinds a nested chain and dismisses, a withheld tree never appears in the dump | yes  |
 
 A scenario is a script that sources `lib.sh`, calls `e2e_start`, and exits
 non-zero on failure (`e2e_fail`). Each gets its own nested compositor.
