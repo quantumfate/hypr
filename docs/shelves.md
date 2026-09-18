@@ -38,6 +38,12 @@ first implementation of the **drawers** in
   special is not already showing on that monitor, read off
   `hl.get_monitors()`'s `specialWorkspace`) and clears the pending entry. No
   timer: the launch and the window's `window.open` are the only two ends.
+  While a launch is pending, `decide` does nothing at all on a further press
+  (no launch, no toggle) rather than re-launching: the pending window is not
+  yet in `hl.get_windows()`, so without this check a repeat press during a
+  slow launch reads as "not running" and fires the launcher again. Ankama's
+  launcher is slow enough to start that this was the shelf where a second
+  press routinely landed mid-launch and visibly failed to toggle shut.
 - **Admission:** a shelf with a `tree` is one leaf attributed to that binding
   tree (`SubmapEntry.tree`), so a mode withholds that key alone and which-key
   hides it. The hyprfocus declaration lists the trees in `base.bindings`;

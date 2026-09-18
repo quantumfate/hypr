@@ -147,11 +147,22 @@ end
 ---is not part of the active desk at all (a mode that does not include it),
 ---no focus is dispatched: the shelf opens on the focused monitor, and `reason`
 ---explains why for the caller to log.
+---A press while `pending` is true does nothing: the launch is already in
+---flight (its window hasn't opened, so `windows` can't see it as running yet)
+---and repeating it would spawn a second process. `window.open`'s handler
+---(`M.show_decision`) shows the shelf once the window lands, so this never
+---leaves a second press stuck. Ankama's slow-starting launcher is what made
+---this land in practice: a second press routinely arrived mid-launch and hit
+---the launch branch below again instead of doing nothing.
 ---@param shelf Shelf
 ---@param windows table[]
 ---@param ctx Shelf.Ctx? omitted or scene-less shelves behave as before
+---@param pending? boolean a launch for this shelf has not yet landed its window
 ---@return { launch: string?, toggle: string?, monitor: string?, focus: string?, reason: string? }
-function M.decide(shelf, windows, ctx)
+function M.decide(shelf, windows, ctx, pending)
+  if pending then
+    return {}
+  end
   local out = M.running(shelf, windows) and { toggle = M.workspace(shelf) } or { launch = shelf.cmd }
   if not shelf.scene then
     out.monitor = away_from_ignored(ctx)
@@ -266,7 +277,7 @@ function M.entry(shelf)
         primary = ((rawget(_G, "config") or {}).host or {}).primary_monitor,
         ignored = ((rawget(_G, "config") or {}).host or {}).ignored_monitors,
       }
-      local d = M.decide(shelf, hl.get_windows(), ctx)
+      local d = M.decide(shelf, hl.get_windows(), ctx, pending[shelf.name] ~= nil)
       if d.reason then
         trace.emit({
           stage = "interact",
