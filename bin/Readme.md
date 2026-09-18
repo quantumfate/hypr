@@ -30,12 +30,32 @@ integrate with the shared state / UI:
   folder is always its whole set. `wallpaper list|next|prev|random` are
   per-monitor (`theme.json`'s `wallpapers[palette][output]`, `"*"` meaning
   every monitor); cycling is a shuffled, deterministic-per-session order
-  (`wallpaper_shuffle[palette]`) that never repeats until the set is
-  exhausted. `wallpaper F [P]` still binds a file directly, refusing one
-  outside `P`'s set once that palette has a set folder; a bare legacy name or
-  a flat (pre-palette-folders) binding still resolves — the Quickshell store's
-  older writes are not stranded. `bin/,wallpaper.sh` is now a thin wrapper
-  over `,theme.sh wallpaper` for keybinds.
+  (`wallpaper_shuffle[palette].orders[output]`) that never repeats until that
+  output's fitting subset is exhausted. `wallpaper F [P]` still binds a file
+  directly, refusing one outside `P`'s set once that palette has a set folder,
+  and now also refusing one that does not fit an already-known output; a bare
+  legacy name or a flat (pre-palette-folders) binding still resolves — the
+  Quickshell store's older writes are not stranded. `bin/,wallpaper.sh` is now
+  a thin wrapper over `,theme.sh wallpaper` for keybinds.
+
+  A palette's folder is one pool; each monitor draws from it at random, but
+  only from the images that actually fit that monitor's live pixel size read
+  from `hyprctl monitors -j` (aspect and scale, never a hardcoded output
+  list). `fits_output()` in `,theme.sh` applies two documented numbers:
+  `FIT_ASPECT_TOLERANCE` (0.20 — the image's aspect ratio may differ from the
+  output's by at most 20% relative) and `FIT_MIN_SCALE` (0.5 — the image must
+  supply at least half the output's width and height after aspect-matched
+  scaling, so it is never upscaled more than 2x). An ultrawide image and a
+  16:9/16:10 output differ by well over 20%, so they never cross. If nothing
+  in a palette's pool fits an output, that output's binding is left alone and
+  the honest gap is recorded in `theme.result.json`'s `failed` list (surface
+  `wallpaper:<output>`) rather than stretching or cropping something that
+  does not belong there. `wallpaper list` reports, per monitor, which of the
+  pool's images fit (`monitors[output].fits`) and which one is current.
+  Image and output sizes are cached (`image_size()`/`output_size()`, keyed by
+  mtime) so listing a large pool stays fast; tests inject fixed sizes via
+  `THEME_IMAGE_SIZES`/`THEME_OUTPUT_SIZES` rather than probing real images or
+  the live session.
 
 - `bin/dofus_swap.py` — Dofus auto turn-swap detector. Reads its roster from the
   shared team source of truth (`$QF_STORE/dofus/team.json`), the same file

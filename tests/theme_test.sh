@@ -583,9 +583,9 @@ done
 uniq_count=$(printf '%s\n' $seen | sort -u | wc -l | tr -d ' ')
 check "three next steps from a cold start show three distinct files" "3" "$uniq_count"
 
-before=$(jq -r '.wallpaper_shuffle.mocha.order' "$STORE")
+before=$(jq -r '.wallpaper_shuffle.mocha.orders["DP-1"]' "$STORE")
 "$THEME" wallpaper prev mocha --output DP-1 >/dev/null
-after=$(jq -r '.wallpaper_shuffle.mocha.order' "$STORE")
+after=$(jq -r '.wallpaper_shuffle.mocha.orders["DP-1"]' "$STORE")
 check "the shuffled order persists across calls (deterministic per session)" "$before" "$after"
 
 # A second, still-untouched output cycles independently of the first.
@@ -616,7 +616,7 @@ echo "wallpaper sets: an empty set fails open, honestly"
 setup
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
 if out=$("$THEME" wallpaper next mocha 2>&1); then
-    contains "an empty set is reported, not silently skipped" "no wallpaper set" "$out"
+    contains "an empty set is reported, not silently skipped" "nothing in mocha's set fits" "$out"
 else
     printf '  FAIL cycling an empty set aborted instead of reporting\n'
     fail=$((fail + 1))
@@ -631,6 +631,67 @@ printf '{"palette":"mocha","mode":"manual","wallpapers":{"mocha":"Clearnight.jpg
 list=$("$THEME" wallpaper list mocha)
 check "the flat bare-name binding is still the resolved current pick" "Clearnight.jpg" \
     "$(printf '%s' "$list" | jq -r '.monitors["*"].current')"
+teardown
+
+echo "wallpaper fit: an ultrawide-only pool has nothing for a 16:9 output"
+setup
+export THEME_OUTPUTS="DP-1"
+export THEME_OUTPUT_SIZES="DP-1:2560x1440"
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/ultrawide.jpg"
+export THEME_IMAGE_SIZES="ultrawide.jpg:5120x1440"
+out=$("$THEME" wallpaper next mocha --output DP-1 2>&1 || true)
+contains "nothing fits: reported honestly" "nothing in mocha's set fits DP-1" "$out"
+check "no binding was written for the output" "null" "$(jq -r '.wallpapers.mocha["DP-1"] // "null"' "$STORE" 2>/dev/null || echo null)"
+unset THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES
+teardown
+
+echo "wallpaper fit: a mixed pool only draws the fitting subset per output"
+setup
+export THEME_OUTPUTS="DP-1 DP-2"
+export THEME_OUTPUT_SIZES="DP-1:5120x1440 DP-2:2560x1440"
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/ultrawide.jpg"
+printf 'b' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/sixteennine.jpg"
+export THEME_IMAGE_SIZES="ultrawide.jpg:5120x1440 sixteennine.jpg:2560x1440"
+
+list=$("$THEME" wallpaper list mocha)
+check "DP-1 (ultrawide) sees only the ultrawide image" "ultrawide.jpg" \
+    "$(printf '%s' "$list" | jq -r '.monitors["DP-1"].fits[0]')"
+check "DP-1 sees exactly one fitting image" "1" "$(printf '%s' "$list" | jq '.monitors["DP-1"].fits | length')"
+check "DP-2 (16:9) sees only the 16:9 image" "sixteennine.jpg" \
+    "$(printf '%s' "$list" | jq -r '.monitors["DP-2"].fits[0]')"
+
+"$THEME" wallpaper next mocha --output DP-1 >/dev/null
+"$THEME" wallpaper next mocha --output DP-2 >/dev/null
+check "DP-1 (ultrawide) was bound the ultrawide image" "mocha/ultrawide.jpg" \
+    "$(jq -r '.wallpapers.mocha["DP-1"]' "$STORE")"
+check "DP-2 (16:9) was bound the 16:9 image" "mocha/sixteennine.jpg" \
+    "$(jq -r '.wallpapers.mocha["DP-2"]' "$STORE")"
+
+# Each output's own fitting subset (one image apiece) exhausts and reshuffles
+# independently: a second `next` on either output still returns its one image.
+"$THEME" wallpaper next mocha --output DP-1 >/dev/null
+check "DP-1's single-image pool reshuffles onto the same image, not the other output's" \
+    "mocha/ultrawide.jpg" "$(jq -r '.wallpapers.mocha["DP-1"]' "$STORE")"
+unset THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES
+teardown
+
+echo "wallpaper fit: binding a file rejects one that does not fit the named output"
+setup
+export THEME_OUTPUTS="DP-2"
+export THEME_OUTPUT_SIZES="DP-2:2560x1440"
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/ultrawide.jpg"
+export THEME_IMAGE_SIZES="ultrawide.jpg:5120x1440"
+if "$THEME" wallpaper "$XDG_CONFIG_HOME/hypr/wallpapers/mocha/ultrawide.jpg" mocha >/dev/null 2>&1; then
+    printf '  FAIL a file that does not fit the named output was accepted\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   a file that does not fit the named output is refused\n'
+    pass=$((pass + 1))
+fi
+unset THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES
 teardown
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

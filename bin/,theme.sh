@@ -20,6 +20,8 @@
 #   ,theme.sh wallpaper list [P]    print the palette's set and each monitor's pick (JSON)
 #   ,theme.sh wallpaper next|prev|random [P] [--output NAME]
 #                                   cycle the palette's set, shuffled, one pick per monitor
+#                                   (only from the subset that fits that monitor's real
+#                                   pixel size — see FIT_ASPECT_TOLERANCE/FIT_MIN_SCALE)
 #   ,theme.sh status                print what each surface is currently set to
 #
 # Writes go through the same store the shell uses, so setting a palette here and
@@ -709,6 +711,120 @@ process_wallpaper() {
 
 WALLPAPER_GLOB=(-iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png')
 
+# --- fit: does an image belong on this output? -------------------------------
+#
+# A palette's folder is one pool; every monitor draws from it at random, but
+# only from the images whose real pixel size actually fits that monitor's
+# geometry. Two numbers decide fit, chosen to keep a crop-to-fill sane without
+# rejecting ordinary photos shot a little off the output's exact ratio:
+#
+#   FIT_ASPECT_TOLERANCE  0.20  the image's aspect ratio may differ from the
+#                                output's by at most 20% (relative) — an
+#                                ultrawide (32:9 ≈ 3.56) and a 16:9 (≈1.78) or
+#                                16:10 (1.6) output differ by 100%+, so they
+#                                never cross; a 3:2 photo (1.5) on a 16:10
+#                                output (1.6) differs by ~6% and passes.
+#   FIT_MIN_SCALE          0.5  after aspect-matched scaling, the image must
+#                                supply at least half the output's width and
+#                                half its height — anything smaller would be
+#                                upscaled more than 2x to cover the screen.
+#
+# Both are documented here rather than buried in the arithmetic below because
+# they are a product decision, not an implementation detail.
+FIT_ASPECT_TOLERANCE=0.20
+FIT_MIN_SCALE=0.5
+
+# The output's live pixel size as "WxH". THEME_OUTPUT_SIZES (space-separated
+# "NAME:WxH" tokens) is the test injection, the same pattern as THEME_OUTPUTS —
+# hyprctl addresses the live session, so a test must be able to force sizes
+# without a real monitor. Empty/unknown output geometry returns failure so
+# callers can fail open (permissive) rather than reject on missing data.
+output_size() {
+    local out=$1 tok
+    if [ -n "${THEME_OUTPUT_SIZES-}" ]; then
+        for tok in $THEME_OUTPUT_SIZES; do
+            [ "${tok%%:*}" = "$out" ] && {
+                printf '%s' "${tok#*:}"
+                return 0
+            }
+        done
+        return 1
+    fi
+    sandboxed && return 1
+    have hyprctl || return 1
+    local dims
+    dims=$(hyprctl monitors -j 2>/dev/null | jq -r --arg n "$out" '.[] | select(.name==$n) | "\(.width)x\(.height)"' 2>/dev/null)
+    [ -n "$dims" ] || return 1
+    printf '%s' "$dims"
+}
+
+# An image's real pixel size as "WxH", cached beside the wallpaper cache so
+# listing a large pool stays cheap — keyed by the file's own path and mtime,
+# so a replaced file re-measures itself. THEME_IMAGE_SIZES (space-separated
+# "basename:WxH" tokens) is the test injection: fixtures in tests are not real
+# images, so a test names their sizes instead of relying on `identify` to read
+# pixels that are not there.
+image_size() {
+    local file=$1 tok
+    if [ -n "${THEME_IMAGE_SIZES-}" ]; then
+        for tok in $THEME_IMAGE_SIZES; do
+            [ "${tok%%:*}" = "$(basename "$file")" ] && {
+                printf '%s' "${tok#*:}"
+                return 0
+            }
+        done
+    fi
+    have "$MAGICK" || return 1
+    local dims_dir="$CACHE/.dims" key mtime cached
+    key=$(printf '%s' "$file" | tr '/' '_')
+    mtime=$(stat -c %Y "$file" 2>/dev/null || echo 0)
+    cached="$dims_dir/$key.$mtime"
+    if [ -f "$cached" ]; then
+        cat "$cached"
+        return 0
+    fi
+    dims=$("$MAGICK" identify -format '%wx%h' "$file" 2>/dev/null) || return 1
+    [ -n "$dims" ] || return 1
+    mkdir -p "$dims_dir" 2>/dev/null || true
+    printf '%s' "$dims" >"$cached" 2>/dev/null || true
+    printf '%s' "$dims"
+}
+
+# Whether $file fits $out. "*" (no known single geometry) and any output or
+# image whose size cannot be determined both fail open — fit only bites once
+# there is real geometry to check against, matching in_palette_set's own
+# "cannot validate, so let it through" rule. Otherwise both FIT_ASPECT_TOLERANCE
+# and FIT_MIN_SCALE must hold.
+fits_output() {
+    local file=$1 out=$2 idims odims iw ih ow oh
+    [ "$out" = "*" ] && return 0
+    idims=$(image_size "$file") || return 0
+    odims=$(output_size "$out") || return 0
+    [ -n "$idims" ] && [ -n "$odims" ] || return 0
+    iw=${idims%x*} ih=${idims#*x}
+    ow=${odims%x*} oh=${odims#*x}
+    case "$iw$ih$ow$oh" in *[!0-9]*) return 0 ;; esac
+    [ "$iw" -gt 0 ] && [ "$ih" -gt 0 ] && [ "$ow" -gt 0 ] && [ "$oh" -gt 0 ] || return 0
+    awk -v iw="$iw" -v ih="$ih" -v ow="$ow" -v oh="$oh" \
+        -v tol="$FIT_ASPECT_TOLERANCE" -v minscale="$FIT_MIN_SCALE" 'BEGIN {
+        ia = iw / ih; oa = ow / oh
+        diff = (ia > oa) ? (ia - oa) / oa : (oa - ia) / oa
+        sw = iw / ow; sh = ih / oh
+        scale = (sw < sh) ? sw : sh
+        exit (diff <= tol && scale >= minscale) ? 0 : 1
+    }'
+}
+
+# $palette's set, filtered to the subset that fits $out — the pool every
+# per-output pick and cycle actually draws from. Unfiltered ("*", or an output
+# with no known geometry) is the whole set, unchanged.
+palette_fitting_files() {
+    local palette=$1 out=$2 f
+    palette_wallpaper_files "$palette" | while IFS= read -r f; do
+        if fits_output "$f" "$out"; then printf '%s\n' "$f"; fi
+    done
+}
+
 # The monitor names a wallpaper pick applies to. THEME_OUTPUTS (space
 # separated) is the test injection, the same pattern as THEME_HOUR — hyprctl
 # addresses the live session by name, so a test must be able to force a fixed
@@ -813,42 +929,46 @@ resolve_wallpaper() {
 
 # --- the shuffle --------------------------------------------------------------
 #
-# One shuffled order per palette (`wallpaper_shuffle[P].order`), shared by
-# every monitor cycling that palette; a per-output `pos` says where that
-# monitor currently sits in it. Persisted in theme.json, so the order survives
-# across script invocations for as long as the set does not change — that is
-# what "deterministic per session" means here: not reseeded on every call, only
-# when the set's membership changes or the order is exhausted.
+# One shuffled order per (palette, output) — `wallpaper_shuffle[P].orders[O]` —
+# because fit now scopes the pool per output: two monitors of different shape
+# draw from different fitting subsets of the same palette folder, so they
+# cannot share one order. `pos[O]` says where that monitor sits in its own
+# order. Persisted in theme.json, so the order survives across script
+# invocations for as long as its fitting subset does not change — that is what
+# "deterministic per session" means here: not reseeded on every call, only
+# when the subset changes or the order is exhausted.
 shuffle_order() {
-    jq -c --arg p "$1" '.wallpaper_shuffle[$p].order // []' "$STATE" 2>/dev/null || echo '[]'
+    jq -c --arg p "$1" --arg o "$2" '.wallpaper_shuffle[$p].orders[$o] // []' "$STATE" 2>/dev/null || echo '[]'
 }
 
 shuffle_pos() {
     jq -r --arg p "$1" --arg o "$2" '.wallpaper_shuffle[$p].pos[$o] // -1' "$STATE" 2>/dev/null || echo -1
 }
 
-# $1 = palette, $2.. = the set's file names. Writes and returns a fresh order.
+# $1 = palette, $2 = output, $3.. = the fitting subset's file names. Writes and
+# returns a fresh order for that output alone.
 reshuffle() {
-    local palette=$1 order
-    shift
+    local palette=$1 out=$2 order
+    shift 2
     order=$(printf '%s\n' "$@" | shuf | jq -R -s 'split("\n") | map(select(length > 0))')
-    put "$(jq -n --arg p "$palette" --argjson o "$order" '{wallpaper_shuffle: {($p): {order: $o}}}')"
+    put "$(jq -n --arg p "$palette" --arg o "$out" --argjson ord "$order" '{wallpaper_shuffle: {($p): {orders: {($o): $ord}}}}')"
     printf '%s' "$order"
 }
 
-# Ensures $palette's persisted order still names exactly the current set
-# (a file added or removed invalidates it), reshuffling if not. $2.. are the
-# set's file names. Returns the (possibly just-written) order as JSON.
+# Ensures $out's persisted order still names exactly its current fitting
+# subset (a file added, removed, or newly fitting/unfitting invalidates it),
+# reshuffling if not. $3.. are that subset's file names. Returns the (possibly
+# just-written) order as JSON.
 current_shuffle_order() {
-    local palette=$1 order have want
-    shift
-    order=$(shuffle_order "$palette")
+    local palette=$1 out=$2 order have want
+    shift 2
+    order=$(shuffle_order "$palette" "$out")
     have=$(printf '%s' "$order" | jq 'sort')
     want=$(printf '%s\n' "$@" | jq -R -s 'split("\n") | map(select(length > 0)) | sort')
     if [ "$have" = "$want" ]; then
         printf '%s' "$order"
     else
-        reshuffle "$palette" "$@"
+        reshuffle "$palette" "$out" "$@"
     fi
 }
 
@@ -1037,6 +1157,9 @@ cmd_wallpaper() {
     in_palette_set "$abs" "$palette" || die "$file is not in $palette's wallpaper set"
     rel=$(relativize "$abs" "$CONFIG/hypr/wallpapers")
     outs=$(outputs_list)
+    for out in $outs; do
+        fits_output "$abs" "$out" || die "$file does not fit output $out"
+    done
     if [ -z "$outs" ]; then
         patch=$(jq -n --arg f "$rel" '{"*": $f}')
     else
@@ -1064,14 +1187,17 @@ cmd_wallpaper_list() {
     [ -n "$outs" ] || outs='*'
     read -r -a outs_arr <<<"$outs" # see apply_wallpaper: "*" is a literal, not a glob
     for out in "${outs_arr[@]}"; do
-        local cur idx=-1 rel=null
+        local cur idx=-1 rel=null fits
         cur=$(resolve_wallpaper "$palette" "$out")
         if [ -n "$cur" ] && [ -f "$cur" ]; then
             rel=$(jq -n --arg f "$(relativize "$cur" "$CONFIG/hypr/wallpapers")" '$f')
             idx=$(printf '%s' "$items" | jq --arg n "$(basename "$cur")" '[.[].name] | index($n) // -1')
         fi
-        monitors=$(jq -n --argjson base "$monitors" --arg o "$out" --argjson f "$rel" --argjson i "$idx" \
-            '$base * {($o): {current: $f, index: $i}}')
+        # Which of the pool's own images fit this output — the same subset
+        # next/prev/random draw from.
+        fits=$(palette_fitting_files "$palette" "$out" | jq -R -s 'split("\n") | map(select(length > 0) | (split("/") | last))')
+        monitors=$(jq -n --argjson base "$monitors" --arg o "$out" --argjson f "$rel" --argjson i "$idx" --argjson fits "$fits" \
+            '$base * {($o): {current: $f, index: $i, fits: $fits}}')
     done
     jq -n --arg p "$palette" --argjson monitors "$monitors" --argjson items "$items" --argjson count "$count" \
         '{palette: $p, monitors: $monitors, count: $count, items: $items}'
@@ -1100,18 +1226,22 @@ cmd_wallpaper_cycle() {
 cycle_one_output() {
     local op=$1 palette=$2 out=$3
     local -a files
-    mapfile -t files < <(palette_wallpaper_files "$palette")
+    mapfile -t files < <(palette_fitting_files "$palette" "$out")
     local len=${#files[@]}
     if [ "$len" -eq 0 ]; then
-        echo "wallpaper[$out]: $palette has no wallpaper set"
-        record_failed "wallpaper:$out" "no wallpapers in $palette's set"
+        # Nothing in the pool fits — honest, not silently stretched: report it
+        # and leave this output's current wallpaper alone (no put() below).
+        local odims
+        odims=$(output_size "$out" 2>/dev/null || echo "unknown size")
+        echo "wallpaper[$out]: nothing in $palette's set fits $out ($odims)"
+        record_failed "wallpaper:$out" "no wallpapers in $palette's set fit $out ($odims)"
         RESULT_WALLPAPER+=("$(jq -n --arg p "$palette" --arg o "$out" --arg f "" --argjson i -1 --argjson c 0 \
             '{palette: $p, output: $o, file: $f, index: $i, count: $c}')")
         return
     fi
     local -a names=("${files[@]##*/}")
     local order pos idx newfile rel
-    order=$(current_shuffle_order "$palette" "${names[@]}")
+    order=$(current_shuffle_order "$palette" "$out" "${names[@]}")
     pos=$(shuffle_pos "$palette" "$out")
     case "$op" in
     random)
@@ -1121,7 +1251,7 @@ cycle_one_output() {
         if [ "$pos" -lt 0 ] || [ "$((pos + 1))" -ge "$len" ]; then
             # Exhausted (or never started): a fresh shuffle, so a long-running
             # session cycles through the whole set before any repeat.
-            order=$(reshuffle "$palette" "${names[@]}")
+            order=$(reshuffle "$palette" "$out" "${names[@]}")
             idx=0
         else
             idx=$((pos + 1))
@@ -1129,7 +1259,7 @@ cycle_one_output() {
         ;;
     prev)
         if [ "$pos" -le 0 ]; then
-            order=$(reshuffle "$palette" "${names[@]}")
+            order=$(reshuffle "$palette" "$out" "${names[@]}")
             idx=$((len - 1))
         else
             idx=$((pos - 1))
