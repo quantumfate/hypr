@@ -64,8 +64,9 @@ A scene is a plug-in unit that maps to one workspace. It owns:
 
 - **Claims** — which windows belong to it (class, title, role).
 - **Layout** — the scene is its own registered layout. Workspaces use `scene`
-  or `columns` (at least two columns, each scrolling vertically); not dwindle,
-  master or monocle.
+  (fixed blocks) or `deck` (one to three vertically scrolling columns,
+  [deck.md](deck.md)); not dwindle, master or monocle. A scene opts into
+  `deck` explicitly; Dofus stays on `scene` and never scrolls.
 - **Bring-up / teardown** — what it launches so the usual windows are in place
   without manual work, and how it releases them. Bring-up launches missing
   apps only on mode entry; a scene binding "complete the scene" relaunches
@@ -224,7 +225,7 @@ Workspaces are managed in the background; Quickshell presents them.
 - The bar's side insets mirror each monitor's base tiled outer gap (LEO-340),
   published to the `geometry` store by `conf/host.lua`'s `build()` and read
   off resolved geometry, not a layout-specific option — workspace layouts are
-  `scene` or `columns` only. This is the base gap only: the transient solo
+  `scene` or `deck` only. This is the base gap only: the transient solo
   widen (the scene layout's own `solo_extra` framing a lone tile) is a
   per-workspace correction, not part of a monitor's resting geometry, so the
   bar never follows it.

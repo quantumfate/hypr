@@ -442,6 +442,12 @@ Registered with `hl.layout.register`: `recalculate(ctx)` receives the work area
 and the tiled targets, and places each one. The compositor asks; the scene
 answers.
 
+This is one of the desk's two workspace layouts. The other is `deck`
+([deck.md](deck.md)): one to three columns in a single row, each scrolling
+vertically through its subscribed windows one at a time. A scene opts into
+`deck` explicitly in its own declaration (`layout = "deck"`); every scene
+defaults to `scene`, and Dofus stays there on purpose — it never scrolls.
+
 This replaced a corrective loop that measured another layout's output and
 dispatched fixes at it (`hypr/scene/schedule.lua` + `model.lua` +
 `actuator.lua`, retired in LEO-261 — see "Hyprland primitives" in
