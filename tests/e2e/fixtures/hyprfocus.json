@@ -59,6 +59,10 @@
         { "name": "aside", "monitor": "secondary" }
       ]
     },
+    "study": {
+      "name": "Study",
+      "scenes": [{ "name": "grouped", "monitor": "primary" }]
+    },
     "gaming": {
       "name": "Gaming",
       "scenes": [

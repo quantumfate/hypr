@@ -144,6 +144,7 @@ declaration order, once per `window.open`/`window.move_to_workspace`.
 | primary   | `dofus`       | dofus       | 0.67 group / 0.33 browser  |
 | primary   | `pokemon`     | pokemon     | 0.30 emulator / 0.70 media |
 | primary   | `steam-games` | steam-games | 1.00 fullscreen            |
+| primary   | `proton`      | proton      | 0.50 mail / 0.50 pass      |
 | secondary | `media`       | media       | 1.00 fullscreen            |
 
 Signal, Vesktop, Steam, Lutris and the Ankama Launcher are shelves, not scenes
@@ -160,11 +161,11 @@ Signal, Vesktop, Steam, Lutris and the Ankama Launcher are shelves, not scenes
 
 ### Study
 
-| Monitor | Workspace         | Scene           | Split                       |
-| ------- | ----------------- | --------------- | --------------------------- |
-| primary | `code`            | code            | 0.67 group / 0.33 browser   |
-| primary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
-| primary | `proton`          | proton          | 0.50 mail / 0.50 pass       |
+| Monitor   | Workspace         | Scene           | Split                       |
+| --------- | ----------------- | --------------- | --------------------------- |
+| primary   | `code`            | code            | 0.67 group / 0.33 browser   |
+| secondary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
+| primary   | `proton`          | proton          | 0.50 mail / 0.50 pass       |
 
 ### Neutral (hidden)
 
