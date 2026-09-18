@@ -236,6 +236,22 @@ resolves to the primary output by the existing fallback
 (`hypr/hyprfocus/init.lua`'s `output_for`), so its resolver row below runs
 against the laptop's `eDP-1` width like every other scene's.
 
+**Correction note**: an earlier revision of the worked-outcome tables below
+was computed against stale, pre-scale-up gap numbers (`gaps_in` 12/6/4 and,
+for DP-2/Laptop, `available_width` 2532/1904) rather than the canonical
+inputs table immediately above — the gap work that landed since widened
+`default_gaps` and every `geometry_profiles` entry in `conf/base.lua`
+roughly 5x. The tables below are recomputed against the canonical table's
+real numbers (`gaps_in` 60/48/40, `available_width` 4960/2432/1824),
+matching `hypr/scene/columns.lua`'s implementation of §1-§3 as pinned by
+`tests/columns_spec.lua`. Every DP-1 row for a lone always-full column
+(`steam-games`, `media`, `logs`) is unchanged, because that number never
+depended on `gaps_in` and DP-1's `available_width` did not change; every
+other cell changed by some amount, and where a fold newly appears or
+disappears it is called out in the scene's own prose below — none do:
+every scene folds in the same places it folded before, only with different
+pixel counts, and nothing that used to fit on the ultrawide now folds.
+
 Every scene below is `layout = "scene"` (none of the eight declares
 `layout = "deck"` yet — `deck` has no wired scene, per deck.md). The
 resolver's arithmetic is identical either way; only which windows a column
@@ -257,9 +273,16 @@ document does not define one.
 
 | Profile | Resolved columns                              | Folded                                                                                                                                                                           |
 | ------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| DP-1    | 1: 3400px (fixed, left) · 2: 1548px           | none — cost of two (3400+480+12=3892) fits under W (4960); slack 1068 goes to the companion (the only flexible column)                                                           |
-| DP-2    | 1: 2532px (clamped from fixed 3400, all of W) | 2 (companion) → 1 (group) — two-column cost (3886) exceeds W (2532); folded to one, but 3400 alone still exceeds 2532, so the degenerate clamp of §3 gives Dofus all of W anyway |
-| Laptop  | 1: 1904px (clamped from fixed 3400, all of W) | 2 (companion) → 1 (group) — same shape as DP-2: two columns cost 3884 against W 1904, and 3400 alone still exceeds 1904                                                          |
+| DP-1    | 1: 3400px (fixed, left) · 2: 1500px           | none — cost of two (3400+480+60=3940) fits under W (4960); slack 1020 goes to the companion (the only flexible column)                                                           |
+| DP-2    | 1: 2432px (clamped from fixed 3400, all of W) | 2 (companion) → 1 (group) — two-column cost (3928) exceeds W (2432); folded to one, but 3400 alone still exceeds 2432, so the degenerate clamp of §3 gives Dofus all of W anyway |
+| Laptop  | 1: 1824px (clamped from fixed 3400, all of W) | 2 (companion) → 1 (group) — same shape as DP-2: two columns cost 3920 against W 1824, and 3400 alone still exceeds 1824                                                          |
+
+**Wider gaps changed the numbers, not the shape**: DP-1 still gives Dofus
+its full fixed width with the companion absorbing the (now smaller) slack;
+DP-2 and the laptop still land in the degenerate clamp, because 3400px
+alone was already wider than either panel's `W` under the old gaps and
+stays wider now that gaps grew. Nothing here newly folds or newly stops
+folding.
 
 `align` never actually changes a number in this table: on DP-1 the
 companion is flexible and absorbs the slack, so there is no unclaimed
@@ -277,21 +300,25 @@ needs to say what happens when it does.
 
 | Profile | Resolved columns                | Folded                                                         |
 | ------- | ------------------------------- | -------------------------------------------------------------- |
-| DP-1    | 1: 3736px · 2: 600px · 3: 600px | none                                                           |
-| DP-2    | 1: 1320px · 2: 600px · 3: 600px | none                                                           |
-| Laptop  | 1: 1300px · 2: 600px            | 3 (stream) → 2 (chat) — three columns cost 1908 against W 1904 |
+| DP-1    | 1: 3640px · 2: 600px · 3: 600px | none                                                           |
+| DP-2    | 1: 1136px · 2: 600px · 3: 600px | none                                                           |
+| Laptop  | 1: 1184px · 2: 600px            | 3 (stream) → 2 (chat) — three columns cost 1980 against W 1824 |
 
-No role here declares a `fixed_width`, so this table is unchanged by the
-decisions this document folds in — it exercises only the ladder, same as
-before.
+No role here declares a `fixed_width`, so the shape of this table is
+unchanged by the `align`/`fixed_width` decisions this document folds in —
+it exercises only the ladder, same as before. The numbers themselves do
+move with the wider gaps: the laptop still folds (three columns now cost
+1980 against a W of 1824, both different from the old 1908/1904), and
+DP-1/DP-2 still keep all three columns, just with a smaller slack going to
+the emulator column.
 
 ### `steam-games` (roles: 1 fullscreen `min_width=800`)
 
 | Profile | Resolved columns | Folded                      |
 | ------- | ---------------- | --------------------------- |
 | DP-1    | 1: 4960px        | n/a — one role, never folds |
-| DP-2    | 1: 2532px        | n/a                         |
-| Laptop  | 1: 1904px        | n/a                         |
+| DP-2    | 1: 2432px        | n/a                         |
+| Laptop  | 1: 1824px        | n/a                         |
 
 With solo framing retired, a lone flexible column simply absorbs all the
 slack and fills `available_width` — the column is the sole flexible
@@ -304,15 +331,15 @@ apply.
 ### `media` (roles: 1 fullscreen `min_width=800`)
 
 Same shape as `steam-games` — one always-full column, same numbers
-(4960/2532/1904), for the same reason.
+(4960/2432/1824), for the same reason.
 
 ### `code` (roles: 1 editor group `min_width=1200`, 2 browser `min_width=800`)
 
 | Profile | Resolved columns     | Folded                                                                                                                                           |
 | ------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| DP-1    | 1: 4148px · 2: 800px | none                                                                                                                                             |
-| DP-2    | 1: 1726px · 2: 800px | none                                                                                                                                             |
-| Laptop  | 1: 1904px            | 2 (browser) → 1 (editor) — two columns cost 2004 against W 1904; the sole flexible survivor then absorbs all remaining slack (1200 + 704 = 1904) |
+| DP-1    | 1: 4100px · 2: 800px | none                                                                                                                                             |
+| DP-2    | 1: 1584px · 2: 800px | none                                                                                                                                             |
+| Laptop  | 1: 1824px            | 2 (browser) → 1 (editor) — two columns cost 2040 against W 1824; the sole flexible survivor then absorbs all remaining slack (1200 + 624 = 1824) |
 
 This is the model's own worked example (`editor ≥1200, browser ≥800`) run
 against the real numbers instead of illustrative ones, and it reproduces the
@@ -320,27 +347,33 @@ stated outcome exactly: three tiers of nothing needed here (the real `code`
 scene has two blocks, not the issue's illustrative three), ultrawide gives
 the slack to the editor, and the laptop folds everything into one column
 that then fills the whole panel — no solo margin subtracted, unlike the
-version of this table under the retired model.
+version of this table under the retired model. The wider gaps do not change
+the shape here, only the pixels: the laptop still folds, because 1200+800
+plus even a 40px gap already exceeds 1824.
 
 ### `obsidian-linear` (roles: 1 Obsidian `min_width=900`, 2 Linear `min_width=700`)
 
 | Profile | Resolved columns     | Folded                                                                |
 | ------- | -------------------- | --------------------------------------------------------------------- |
-| DP-1    | 1: 4248px · 2: 700px | none                                                                  |
-| DP-2    | 1: 1826px · 2: 700px | none                                                                  |
-| Laptop  | 1: 1200px · 2: 700px | none — two columns cost 1604 against W 1904, fits with 300px to spare |
+| DP-1    | 1: 4200px · 2: 700px | none                                                                  |
+| DP-2    | 1: 1684px · 2: 700px | none                                                                  |
+| Laptop  | 1: 1084px · 2: 700px | none — two columns cost 1640 against W 1824, fits with 184px to spare |
 
 Deliberately does **not** fold on the laptop, unlike `code` and `dofus`:
 1600×1200-class panels are exactly where two readable panes of text still
 fit side by side, which the ladder should not fold away just because it can.
+That margin is now much tighter than the pre-scale-up numbers suggested —
+184px of slack instead of 300px — because the wider `gaps_in` (40 vs the
+stale 4) eats into it directly; it still clears the ladder's cutoff, but
+it is worth watching if `min_width` for either block grows later.
 
 ### `proton` (roles: 1 mail `min_width=700`, 2 Pass companion `min_width=420`)
 
 | Profile | Resolved columns     | Folded                          |
 | ------- | -------------------- | ------------------------------- |
-| DP-1    | 1: 4528px · 2: 420px | none                            |
-| DP-2    | 1: 2106px · 2: 420px | none                            |
-| Laptop  | 1: 1480px · 2: 420px | none — cost 1124 against W 1904 |
+| DP-1    | 1: 4480px · 2: 420px | none                            |
+| DP-2    | 1: 1964px · 2: 420px | none                            |
+| Laptop  | 1: 1364px · 2: 420px | none — cost 1160 against W 1824 |
 
 Never folds on any real profile — mail and a password manager are both
 comfortably narrow, so this scene never exercises the ladder at all. Worth
@@ -351,7 +384,7 @@ keeping as the "boring" control case: not every scene needs to.
 No roles, so no resolver decision: an empty role list is the same "one
 implicit column, the whole width" the resolver already gives an empty
 `blocks` list today. All three profiles: one column, the full
-`available_width` — 4960/2532/1904px, identical arithmetic to
+`available_width` — 4960/2432/1824px, identical arithmetic to
 `steam-games`/`media` above, for the same reason (no margin left to
 subtract from a lone column). tmux owns the actual internal splits; the
 resolver's output here is a box tmux draws inside, not a decision about
