@@ -25,19 +25,40 @@ data at once. This document gives that disagreement one owner.
 A scene declares columns as **roles** — an order of importance, a minimum
 viable width, and optionally a fixed width and an alignment, never a
 percentage — and **one resolver** fits those roles into whatever width the
-monitor actually has, by priority; `scene` and `deck` become two ways of
-presenting whatever the resolver decided.
+monitor actually has, by priority. `scene` and `deck` are **not** two
+layouts a workspace picks between. **Presentation is a property of a
+column**, declared per role alongside priority and width: `stack` (every
+member tiled in the column at once — today's `scene` behaviour) or `flip`
+(one member visible at full column height, flipped through — today's `deck`
+behaviour). The user's own framing: the code workspace's left column holds
+the dynamic project class and scrolls vertically, the scene also declares a
+browser column beside it, and "that can happen with every row in the
+layout" — any column may flip, independently of its neighbours. A single
+workspace can therefore mix a `flip` column and a `stack` column side by
+side; nothing about the model forces every column on a workspace to agree.
+
+**Does a scene-level layout name survive?** No. `layout = "scene" | "deck"`
+on the scene document is retired along with the two-layout split it
+implied. There is one column core; a workspace simply has columns, and each
+column's own `presentation` field says how it shows its members. A
+"workspace" in the old sense — pick `scene` or pick `deck` — no longer
+exists as a decision point; what used to be that choice is now made once
+per column, not once per workspace. (A workspace whose every column happens
+to present `stack` behaves exactly like an old `layout = "scene"` scene; one
+whose every column presents `flip` behaves like an old `layout = "deck"`
+scene with one-to-three columns — both are degenerate cases of the same
+model, not two code paths.)
 
 ## 1. Resolver: inputs and outputs
 
 ### Inputs
 
-| Input             | Shape                                                                                                                                 | Comes from                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| `roles`           | ordered list, `{ priority: integer, min_width: number, fixed_width: number?, align: "left"\|"center"\|"right", fold_into: integer? }` | the scene declaration          |
-| `available_width` | number, px                                                                                                                            | the monitor, live              |
-| `gaps_in`         | number, px                                                                                                                            | resolved host/monitor geometry |
-| `gaps_out`        | number, px (already resolved per side, symmetric for this arithmetic)                                                                 | resolved host/monitor geometry |
+| Input             | Shape                                                                                                                                                                | Comes from                     |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `roles`           | ordered list, `{ priority: integer, min_width: number, fixed_width: number?, align: "left"\|"center"\|"right", fold_into: integer?, presentation: "stack"\|"flip" }` | the scene declaration          |
+| `available_width` | number, px                                                                                                                                                           | the monitor, live              |
+| `gaps_in`         | number, px                                                                                                                                                           | resolved host/monitor geometry |
+| `gaps_out`        | number, px (already resolved per side, symmetric for this arithmetic)                                                                                                | resolved host/monitor geometry |
 
 A **role** is the unit the resolver reasons about. It is what a `scene`
 block or a `deck` column already is, minus the one field that has to go:
@@ -57,7 +78,15 @@ number (the next one up in importance) that still stands after this pass —
 see §3. `fold_into` is declared now even though no real scene in §4 needs a
 non-adjacent fold target yet — every fold below lands on "the next one up"
 by default, but the field exists so a scene can name somewhere else the day
-one needs to, without a schema change to add it.
+one needs to, without a schema change to add it. `presentation` is new and
+**not optional**: every role states `"stack"` or `"flip"`, no default,
+because a column's presentation is exactly as much the author's intent as
+its priority — an unstated presentation would be a silent behaviour choice
+the resolver has no business making. `presentation` is otherwise inert to
+everything else in this document: it participates in no arithmetic in §3,
+changes no cost, width, or slack calculation, and is carried through to the
+resolver's output purely as data for the presentation layer to read (§1's
+"Outputs" below, and see "Folding across presentations" under §3).
 
 Why `align` defaults to `"left"`: it is a no-op for the overwhelming
 majority of columns. A role that only ever receives its `min_width` (no
@@ -83,27 +112,33 @@ A list of **resolved columns**, ordered by priority, each:
 
 ```lua
 {
-  priority = 1,          -- the surviving column's own priority
-  width = 4468,           -- px, this column's share of available_width
-  x_offset = 0,           -- px, leading edge relative to the row's own start (§3)
-  members = { 1 },        -- role priorities folded into this column, self included
+  priority = 1,             -- the surviving column's own (leader) priority
+  width = 4468,              -- px, this column's share of available_width
+  x_offset = 0,              -- px, leading edge relative to the row's own start (§3)
+  presentation = "stack",    -- the leader's own declared presentation (see below)
+  members = { 1 },           -- role priorities folded into this column, self included
 }
 ```
 
 `x_offset` is new relative to a pure share model, and it is almost always
 `0`: it only moves when `align` places a fixed-width column (or an
 all-fixed surviving row) somewhere other than hard against the leading edge
-of the space it was given — see §3. `scene` reads `members` to decide which
-of a column's underlying blocks' tiles get placed (a folded-in block's
-windows stack vertically inside the column's share, exactly like today's
-`M.stack` for an ungrouped block's extra windows — folding does not invent
-a second stacking rule). `deck` reads `members` to decide which underlying
-columns' decks are reachable by flipping inside that one physical column —
-flipping already crosses group boundaries the same way scrolling crosses a
-stack's members, so a folded role's deck is just another thing the scroll
-index walks through. Neither layout otherwise looks at `roles`, `priority`,
-`min_width`, `fixed_width`, or `align` again once the resolver has run;
-sizing lives in exactly one place.
+of the space it was given — see §3. `presentation` on the resolved column
+is always the **leader's** own declared value (the un-folded role that
+survived, priority-wise) — never a mix, and never the folded members' own
+declared presentations, which stop mattering the moment they fold (see
+"Folding across presentations" below). The presentation layer reads
+`presentation` and `members` together to decide how a column's occupants
+are shown: `"stack"` places every one of `members`'s underlying blocks'
+tiles at once, folded-in ones stacking vertically inside the column's
+share exactly like today's `M.stack` for an ungrouped block's extra windows
+— folding does not invent a second stacking rule. `"flip"` shows exactly
+one of `members`'s underlying columns' decks at a time, reachable by
+scrolling — flipping already crosses group boundaries the same way
+scrolling crosses a stack's members, so a folded role's deck is just
+another thing the scroll index walks through. Neither presentation
+otherwise looks at `roles`, `priority`, `min_width`, `fixed_width`, or
+`align` again once the resolver has run; sizing lives in exactly one place.
 
 This is the only new shape either layout gains. Everything else —
 `collapse_groups`, `sequence`, `entry_key`/`reorder`, `M.stack`, the group
@@ -192,6 +227,50 @@ declared number no matter how high its priority — that is the entire point
 of declaring one — so priority for slack purposes is computed only over the
 flexible survivors.
 
+**Folding across presentations.** A fold never asks the target to change its
+own presentation, and it never asks the folded role to keep its own: **the
+target's presentation governs every one of its members, folded-in ones
+included.** Concretely:
+
+- A `stack` column folding into another `stack` column is what §1 already
+  describes: the folded role's tiles join the target's stack, one more
+  block-worth of windows dividing the same share vertically.
+- A `stack` column folding into a `flip` column: its tiles stop being
+  simultaneously visible. They become one more thing the target's scroll
+  index walks through — a folded-in stack of N windows is either flattened
+  into N individually-reachable flip entries, or kept as one flip entry
+  that itself shows all N stacked (equivalent to a `stack`-presented member
+  nested one level inside a `flip` column) — this document takes the
+  second reading, because it requires no new grouping rule: a folded
+  `stack` role's members collapse to one flip-reachable entry the same way
+  a Hyprland group already collapses to one deck entry (`deck.lua`'s
+  `collapse_groups` reuse, unchanged). Scrolling to that entry shows every
+  one of its stacked windows at once, in the same vertical split `M.stack`
+  already computes for an ungrouped block's extra windows — the entry's box
+  is the flip column's full width and height, and the stack renders inside
+  it exactly as it would inside a standalone `stack` column of that width.
+- A `flip` column folding into a `stack` column: the folded role's members
+  lose their one-at-a-time framing and become simultaneously-tiled members
+  of the target's stack, exactly like any other stack member. Nothing
+  about "which one was visible" survives the fold — a flip column that
+  folds away shows all of its members at once from that point on, the same
+  as if they had always been separate stack entries. Any session-only
+  scroll index the folded role had is simply not read; it is not an error,
+  it is dead state until the fold reverses (the monitor widens again, the
+  role gets its own column back), at which point the flip presentation
+  resumes and the old index is still there to resume from — `clamp_scroll`
+  already tolerates a stale index either way.
+- A `flip` column folding into another `flip` column is exactly §1's
+  existing description: the folded column's deck becomes one more thing
+  the target's scroll index walks through, indistinguishable from the
+  target's own original members once folded.
+
+In every case the rule is one sentence: **a folded column's members join
+the target column, and the target's presentation governs them.** The
+folded role's own `presentation` is not consulted again once it has
+folded — it is inert data on a role that no longer has its own column,
+kept only so the fold can reverse cleanly when width returns.
+
 **If every surviving column is fixed-width**, there is no flexible
 recipient at all, and the slack goes unclaimed by any column's own box: the
 whole row of resolved columns — each exactly its own effective width, laid
@@ -252,14 +331,23 @@ disappears it is called out in the scene's own prose below — none do:
 every scene folds in the same places it folded before, only with different
 pixel counts, and nothing that used to fit on the ultrawide now folds.
 
-Every scene below is `layout = "scene"` (none of the eight declares
-`layout = "deck"` yet — `deck` has no wired scene, per deck.md). The
-resolver's arithmetic is identical either way; only which windows a column
-shows differs. `min_width`/`fixed_width` values below are this document's
-proposal, not yet declared anywhere — they are the numbers the model asks a
-scene author to add where `share` used to be, chosen here to match each
-block's existing `share` weighting (or, for `dofus`, the width the user
-said they like today) and to exercise the ladder somewhere real, per §9.
+Every column below presents `stack` (none of the eight declares `flip` on
+any column yet — `flip` has no live column, per deck.md, now "flip.md" in
+spirit though the file keeps its name). **Presentation does not change the
+arithmetic**: the resolver's cost, fold, and slack-distribution rules in
+§1–§3 never read `presentation` — it is carried through as inert data on
+the resolved output, consulted only by the presentation layer after sizing
+is already decided. So every row below stands exactly as computed whether
+its column ends up `stack` or `flip`; this pass rechecked that claim by
+inspection of `hypr/scene/columns.lua` (`presentation` does not exist as a
+field the module reads anywhere in `resolve`, `cost`, `fold_one`, or the
+distribution loop) rather than recomputing any number, and confirms it: no
+number in any table below changes when a column's presentation changes.
+`min_width`/`fixed_width` values below are this document's proposal, not
+yet declared anywhere — they are the numbers the model asks a scene author
+to add where `share` used to be, chosen here to match each block's existing
+`share` weighting (or, for `dofus`, the width the user said they like
+today) and to exercise the ladder somewhere real, per §9.
 
 ### `dofus` (roles: 1 Dofus group `fixed_width=3400`, `align=left`; 2 `zen-gaming-media` companion `min_width=480`)
 
@@ -351,6 +439,20 @@ version of this table under the retired model. The wider gaps do not change
 the shape here, only the pixels: the laptop still folds, because 1200+800
 plus even a 40px gap already exceeds 1824.
 
+**Presentation for this scene, per the user's decision (§11 works this out
+in full): the editor column presents `flip`, the browser column presents
+`stack`.** None of the three numbers in the table above move for that
+reason — presentation is not an input to this table's arithmetic (see the
+note opening this section). What changes is only what happens _inside_ the
+editor's box: instead of every project's windows tiling there at once, one
+project's windows show at a time, flipped through. On the laptop row, where
+editor and browser fold into one column, that one surviving column's
+presentation is the editor's own (`flip`, since editor is the
+higher-priority survivor and folding always takes the target's — here,
+the sole survivor's — presentation, §3): the browser's tiles join the
+flip as one more flip-reachable entry, shown as a stack-of-one inside that
+entry per "Folding across presentations" in §3.
+
 ### `obsidian-linear` (roles: 1 Obsidian `min_width=900`, 2 Linear `min_width=700`)
 
 | Profile | Resolved columns     | Folded                                                                |
@@ -401,6 +503,8 @@ what's inside it.
 | `fixed_width`                        | **New.**                                     | Lets a role opt out of receiving slack and declare an exact width instead — Dofus is the first user (§4). Interacts with the ladder and distribution exactly as §3 describes: it is the role's effective width for cost purposes, it never grows past its declared number, and it degrades to an ordinary floor if even it alone cannot fit.                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `align`                              | **New.**                                     | General column property, default `"left"` (§1 explains the default). Only visibly changes a resolved layout when a fixed-width column (or an all-fixed surviving row) leaves width no column claims — §3, §4's `dofus` table.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `fold_into`                          | **New, declared now.**                       | Optional explicit fold target, on spec ahead of a real user, per the user's own decision — no scene in §4 needs one yet; every fold below lands on "the next one up" by default.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `presentation`                       | **New, replaces `layout`.**                  | `"stack" \| "flip"`, required, declared per role/column rather than once per scene. Retires the scene-level `layout = "scene" \| "deck"` field entirely (§0/the model statement) — a workspace no longer picks one of two layouts; each of its columns picks how it shows its own members. Carries through folding unchanged on the surviving (target) column and is otherwise inert to every arithmetic rule in §1–§3 (§4's opening note verifies this against `columns.lua`).                                                                                                                                                                                                                                                                                        |
+| `layout` (scene-level)               | **Retired.**                                 | Was `"scene" \| "deck"` on the scene document (deck.md's opt-in). A scene no longer chooses a layout; it declares roles, each with its own `presentation`. `deck.applies(scene)` and every caller that branches on `scene.layout` lose their reason to exist (§12).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 ## 6. Navigation and keybinds
 
@@ -514,11 +618,109 @@ lists:
 
 1. **The resolver as a pure module with specs** — the ladder, distribution,
    and alignment arithmetic in §1–§3, replacing the duplicated share
-   arithmetic in `layout.lua` and `deck.lua`.
-2. **`scene` and `deck` become presentations over resolved columns** —
-   solo framing's old job disappears with it; both layouts read `members`
-   and `x_offset` and otherwise keep their existing rendering.
+   arithmetic in `layout.lua` and `deck.lua`. **Done** (`hypr/scene/columns.lua`,
+   `tests/columns_spec.lua`), ahead of the `presentation` field this revision
+   adds — the module has no `presentation` concept yet; §12 says what closes
+   that gap.
+2. **`stack` and `flip` become presentations a column declares, read off
+   resolved columns** — solo framing's old job disappears with it; both
+   presentations read `members` and `x_offset` and otherwise keep their
+   existing rendering. This is the point at which the scene-level `layout`
+   field is actually deleted from the schema, not just documented as gone.
 3. **Navigation and keybinds read resolved columns** — §6, unchanged in
    shape, narrower in what it reads.
-4. **`deck` gets wired to the compositor** — only after the first three
-   land, per the issue's own ordering.
+4. **`flip` gets wired to the compositor per column** — only after the
+   first three land, per the issue's own ordering. §12 gives the concrete
+   file-level shape of this step.
+
+## 11. The code workspace: one column, one project
+
+The user's own worked example, made concrete. `code` today (§4) declares
+two roles: an editor group and a browser. The decision this document folds
+in changes what those two roles mean, not their widths:
+
+- **The project column presents `flip`.** One project's windows — its
+  terminal(s), its editor, whatever a project launches — are visible at
+  full column height at a time; scrolling flips to a different project's
+  windows, the same one-full-window-never-partial rule deck.md (now the
+  flip contract, deck.md renamed content per §12's file plan) already
+  specifies.
+- **The browser column presents `stack`**, beside it, unchanged from
+  today's `code` — a companion browser is not a thing you flip through, it
+  is a thing that sits next to whatever project is currently flipped in.
+
+This is exactly the shape the model's "any column may flip" claim exists
+to make ordinary: two adjacent columns in the same row, each with its own
+presentation, sized by the same resolver, folding by the same ladder — §4's
+`code` table already stands (its opening note re-confirms the arithmetic),
+only the project column's _contents_ now flip instead of stacking a single
+project's windows (today's `code` scene has no multi-project concept at
+all — the flip column is what makes "more than one project" representable
+without widening the column).
+
+**"One column = one project," eventually — without hard-coding a single
+project.** The user's stated intent is that a project column claims
+_whichever_ project's windows are relevant, not one hard-coded project's
+windows forever. This document does not implement that claim (no Lua
+changes here), but the shape it needs is already visible from what exists:
+
+- A column's membership is already a **subscription**, not a fixed list —
+  deck.md's three mechanisms (class pattern, a self-declared `deck:<name>`
+  tag reusing the LEO-364 identity-stamp, or hand-grouped classes) are the
+  right primitive, unmodified. "One project" is not a new membership
+  mechanism; it is a **value** flowing through the existing tag mechanism.
+- What is missing is a **project identity**, analogous to a scene's
+  `slot`: today's `slot:<slot>` tag names a fixed string chosen at scene
+  declaration time (`pokemon/chat`, `pokemon/stream`). A project column
+  instead needs a tag whose value is chosen **per launch**, from whatever
+  project the terminal/editor was opened against (a directory name, a repo
+  slug — this document does not decide which), and every window belonging
+  to that same launch needs to carry the _same_ value so the column's
+  subscription (`deck:<column-name>` today, or its successor field once
+  `layout`/`deck` naming is retired per §12) can group them without the
+  column declaration ever naming a specific project.
+- Concretely, this needs from the identity/tag work (LEO-364's
+  `hypr/scene/identify.lua` and whatever terminal-role work LEO-308/311
+  eventually land): a stamping rule keyed on **which project a window was
+  launched for**, not only on **which slot in a scene** it fills — the two
+  are different axes today (`slot` disambiguates _within_ one block's
+  class; a project tag needs to disambiguate _across_ however many
+  concurrent projects a flip column ever holds) and nothing in
+  `identify.lua` currently reads or assigns the second axis. Flagged here
+  because it blocks "one column = one project" specifically, not because
+  it blocks anything in this document's own model: the resolver and the
+  fold ladder do not care what a column's members' tags mean, only that
+  `column_for`-equivalent matching can group them.
+- Until that identity work lands, a project column is declared the way
+  deck.md's example already shows: an explicit `classes` list naming the
+  project's terminal/editor classes by hand, one column per concretely
+  named project — functionally correct, just not yet "any project,
+  automatically."
+
+## 12. What the already-merged code becomes
+
+Concrete, because the next chunk implements from this. Five files exist
+today from the `deck` chunk that landed before this revision; none of them
+yet know about `presentation` as a column property, because they predate
+this decision. What each becomes:
+
+| File                           | Fate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hypr/scene/layout.lua`        | **Becomes the `stack` presentation module, folded into the column core's caller.** Its pure geometry (`collapse_groups`, `sequence`, `M.stack`'s vertical split, `M.reorder`/`entry_key`) is exactly right and stays; what it loses is the sizing it currently does itself (`fractions`, `SOLO_EXTRA`/`solo_frame`) — that arithmetic is `columns.lua`'s job now, called once per workspace, not once per scene. Renamed `hypr/scene/stack.lua` to name what it actually is once `scene` is no longer the only presentation; its public surface (`M.boxes(scene_or_column, tiles, area, opts)`) takes a resolved column's `width`/`x_offset` instead of computing its own share.                                          |
+| `hypr/scene/deck.lua`          | **Becomes the `flip` presentation module: `hypr/scene/flip.lua`.** Its scroll-clamping, group-collapse-into-one-flip-entry, and hold-list-reporting logic (`M.boxes`'s two return values) are exactly the `"flip"` half of the column core and stay almost verbatim; what it loses is `fractions`/column-width normalization (§1's `width`/`x_offset` replace it) and the 1–3-column bound as a _layout_ concept — a flip presentation now sizes whatever single column the resolver handed it, not a whole row it owns alone.                                                                                                                                                                                            |
+| `hypr/scene/deck_provider.lua` | **Merges into one provider that reads presentation per column.** There is no longer a separate `hl.layout.register("deck", ...)` beside `hl.layout.register("scene", ...)` — one registration (name TBD, likely just `hl.layout.register("columns", ...)` or kept as `"scene"` for compatibility, an open point for the implementing chunk) resolves a workspace's columns once via `columns.resolve`, then for each resolved column calls `stack.boxes` or `flip.boxes` depending on that column's `presentation`, merging both modules' box lists and dispatching `flip.lua`'s hold list exactly as `deck_provider.lua` does today. `HOLD`/`special:deck-hold` and the move-home dispatch pattern carry over unchanged. |
+| `hypr/scene/deck_scroll.lua`   | **Stays, renamed `hypr/scene/scroll.lua`.** Its shape (session-only index keyed by scene name then column order, never `$QF_STORE`) is presentation-agnostic already — it does not care that today only `deck`-layout scenes ever read it; once any column on any workspace can be `flip`, the same per-column keying already works unmodified. Only the name changes, to stop implying it is deck-specific.                                                                                                                                                                                                                                                                                                              |
+| `hypr/scene/provider.lua`      | **Merges into the same single provider `deck_provider.lua` becomes.** Its own `recalculate`, `spec_gaps`/`gaps` fallback-ladder, `scene_for`, `window_tile`/`tiles_of` stay as the shared window-gathering half every column needs regardless of presentation; its `layout.boxes` call is replaced by `columns.resolve` + the per-column `stack.boxes`/`flip.boxes` dispatch above. This file (or its merged successor) is the one that survives under the registered name; `deck_provider.lua`'s file disappears once merged in.                                                                                                                                                                                         |
+
+Net shape: **five files become three** — one resolver (`columns.lua`,
+already landed), one provider (the merge of `provider.lua` +
+`deck_provider.lua`), and two presentation modules (`stack.lua` from
+`layout.lua`, `flip.lua` from `deck.lua`), plus the renamed `scroll.lua`.
+`hypr/lib/nav.lua`'s `deck_tile_order` and `hypr/binds.lua`'s deck branch
+(§6) stop checking `deck.applies(scene)` — a scene has no `layout` field to
+check any more — and instead ask a resolved column its own
+`presentation` to decide whether `mod+j/k` scrolls or steps a stack.
+`hypr/scene/spec.lua`'s schema loses `layout` and gains `presentation` per
+role (§8's migration table, superseded by `presentation` replacing what
+would have been a `columns[].layout` compromise). None of this is
+performed here — this section is the concrete map, not the diff.

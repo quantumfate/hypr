@@ -442,14 +442,19 @@ Registered with `hl.layout.register`: `recalculate(ctx)` receives the work area
 and the tiled targets, and places each one. The compositor asks; the scene
 answers.
 
-This is one of the desk's two workspace layouts. The other is `deck`
-([deck.md](deck.md)): one to three columns in a single row, each scrolling
-vertically through its subscribed windows one at a time. A scene opts into
-`deck` explicitly in its own declaration (`layout = "deck"`); every scene
-defaults to `scene`, and Dofus stays there on purpose — it never scrolls.
-Both layouts are presentations over what a resolver decides a monitor's
-width can carry — see [columns.md](columns.md) for the contract, still a
-document and not yet wired.
+A workspace does not choose between two layouts. Per [columns.md](columns.md),
+the column core is the only layout: a scene declares its columns as roles
+(priority, minimum width, optional fixed width and alignment, optional fold
+target), one resolver fits those roles into whatever width the monitor
+actually gives, and each resolved column declares its own **presentation**
+— `stack` (every member tiled at once, today's behaviour, described above)
+or `flip` (one member visible at full column height, flipped through —
+[deck.md](deck.md)). Presentation is a property of a column, not of the
+scene or the workspace: Dofus's columns present `stack` and never scroll;
+`code`'s project column is meant to present `flip` beside a `stack` browser
+column, once terminal roles exist to fill it (columns.md §11). There is no
+scene-level `layout` field any more — see columns.md for the contract,
+still a document and not yet wired past the pure resolver module.
 
 This replaced a corrective loop that measured another layout's output and
 dispatched fixes at it (`hypr/scene/schedule.lua` + `model.lua` +

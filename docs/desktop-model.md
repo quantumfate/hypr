@@ -63,12 +63,17 @@ shared fixtures under `tests/fixtures/hyprfocus/pointer/`.
 A scene is a plug-in unit that maps to one workspace. It owns:
 
 - **Claims** — which windows belong to it (class, title, role).
-- **Layout** — the scene is its own registered layout. Workspaces use `scene`
-  (fixed blocks) or `deck` (one to three vertically scrolling columns,
-  [deck.md](deck.md)); not dwindle, master or monocle. A scene opts into
-  `deck` explicitly; Dofus stays on `scene` and never scrolls. Both layouts
-  present columns a single resolver sized from the scene's declared
-  priorities and the monitor's real width ([columns.md](columns.md)).
+- **Layout** — the scene is its own registered layout, built on one column
+  core ([columns.md](columns.md)): not dwindle, master or monocle. A scene
+  declares its columns as roles (priority, minimum width, optional fixed
+  width and alignment); one resolver sizes them from the monitor's real
+  width. **Presentation is a property of a column, not of the scene**: each
+  resolved column declares `stack` (every member tiled at once) or `flip`
+  (one member visible at full column height, flipped through,
+  [deck.md](deck.md)) independently of its neighbours — a workspace may mix
+  a `flip` column with a `stack` column beside it in the same row. Dofus's
+  columns all present `stack` and never scroll; `code`'s project column is
+  meant to present `flip` beside a `stack` browser column (columns.md §11).
 - **Bring-up / teardown** — what it launches so the usual windows are in place
   without manual work, and how it releases them. Bring-up launches missing
   apps only on mode entry; a scene binding "complete the scene" relaunches
@@ -226,11 +231,11 @@ Workspaces are managed in the background; Quickshell presents them.
   (`tests/nav_spec.lua`), bind handlers in `hypr/binds.lua` are thin. `mod+TAB` / `mod+shift+TAB` cycle the same per-monitor scene list in mode order, wrapping.
 - The bar's side insets mirror each monitor's base tiled outer gap (LEO-340),
   published to the `geometry` store by `conf/host.lua`'s `build()` and read
-  off resolved geometry, not a layout-specific option — workspace layouts are
-  `scene` or `deck` only. This is the base gap only: the transient solo
-  widen (the scene layout's own `solo_extra` framing a lone tile) is a
-  per-workspace correction, not part of a monitor's resting geometry, so the
-  bar never follows it.
+  off resolved geometry, not a layout-specific option — there is one column
+  core, not a choice of workspace layouts (columns.md). This is the base gap
+  only: solo framing is retired (columns.md §5) — a lone column simply fills
+  its resolved width — so there is no transient per-workspace widen left for
+  the bar to avoid following.
 - The same `build()` also publishes the monitor role map (LEO-368):
   `geometry`'s `roles` key, `{ primary: "<output>", secondary: "<output>" }`,
   built from the host's `primary_monitor`/`secondary_monitor` and which
