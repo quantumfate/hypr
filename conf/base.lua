@@ -76,6 +76,13 @@ return {
     },
     { name = "music", key = "m", class = "([Ss]potify)", cmd = "spotify", desc = "Spotify" },
     { name = "ckb-next", key = "k", class = "ckb-next", cmd = "ckb-next", desc = "ckb-next" },
+    {
+      name = "copyq",
+      key = "c",
+      class = "com.github.hluk.copyq",
+      cmd = "copyq",
+      desc = "CopyQ",
+    },
   },
   ---@type table<string, AppScope>
   apps = {

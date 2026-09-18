@@ -107,7 +107,6 @@ windowrule.tag_props({
   { initial_class = "(zen|zen-twilight|zen-beta)", title = "(Library)" },
   { initial_class = "(zen|zen-twilight|zen-beta)", title = "Add bookmark folder" },
   { initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
-  { initial_class = "com.github.hluk.copyq" },
   { initial_class = apps.package_manager_ui.class },
 }, "+medium-floating-window")
 

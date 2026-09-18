@@ -5,15 +5,16 @@ and holds one app the desk depends on but that never takes a tile. It is the
 first implementation of the **drawers** in
 [desktop-model.md](desktop-model.md#scene).
 
-| Shelf    | Key | Class               | Opens with            | Admitted            | Owner scene   |
-| -------- | --- | ------------------- | --------------------- | ------------------- | ------------- |
-| signal   | `s` | `signal`            | `signal-desktop`      | always              | global        |
-| vesktop  | `v` | `vesktop`           | `vesktop`             | always              | global        |
-| ankama   | `a` | `Ankama Launcher`   | `,ankama-launcher.sh` | tree `shelf-ankama` | `dofus`       |
-| steam    | `t` | `steam`             | `steam`               | tree `shelf-steam`  | `steam-games` |
-| lutris   | `l` | `net.lutris.Lutris` | `lutris`              | tree `shelf-lutris` | `dofus`       |
-| music    | `m` | `([Ss]potify)`      | `spotify`             | always              | global        |
-| ckb-next | `k` | `ckb-next`          | `ckb-next`            | always              | global        |
+| Shelf    | Key | Class                   | Opens with            | Admitted            | Owner scene   |
+| -------- | --- | ----------------------- | --------------------- | ------------------- | ------------- |
+| signal   | `s` | `signal`                | `signal-desktop`      | always              | global        |
+| vesktop  | `v` | `vesktop`               | `vesktop`             | always              | global        |
+| ankama   | `a` | `Ankama Launcher`       | `,ankama-launcher.sh` | tree `shelf-ankama` | `dofus`       |
+| steam    | `t` | `steam`                 | `steam`               | tree `shelf-steam`  | `steam-games` |
+| lutris   | `l` | `net.lutris.Lutris`     | `lutris`              | tree `shelf-lutris` | `dofus`       |
+| music    | `m` | `([Ss]potify)`          | `spotify`             | always              | global        |
+| ckb-next | `k` | `ckb-next`              | `ckb-next`            | always              | global        |
+| copyq    | `c` | `com.github.hluk.copyq` | `copyq`               | always              | global        |
 
 ## Contract
 
@@ -53,13 +54,13 @@ scene })`), dispatched only when that workspace is not already the active
   submap entry to dispatch. If the owner scene is not part of the active
   mode's desk at all, no focus is dispatched — the shelf opens on the focused
   monitor, same as a global shelf — and the decision is logged
-  (`shelf_owner_not_admitted`). Signal, Vesktop, Spotify and ckb-next stay
+  (`shelf_owner_not_admitted`). Signal, Vesktop, Spotify, ckb-next and copyq stay
   global: no `scene`, always opens on the focused monitor.
 - **Ignored monitors:** a shelf never opens on a host's ignored monitor. When
   the focused monitor is ignored, the primary is focused first (`decide` and
   `show_decision` return it as `monitor`). A shelf already shown there is
   re-shown on the primary ([scenes.md](scenes.md#ignored-monitors)).
-- Signal, Vesktop, Steam, Lutris, Spotify, ckb-next and the Ankama Launcher are no
+- Signal, Vesktop, Steam, Lutris, Spotify, ckb-next, copyq and the Ankama Launcher are no
   longer scenes or workspaces.
 - **Never held:** `hypr/hyprfocus/hold.lua` never parks or restores a window
   standing on a `special:shelf-*` workspace, nor one whose class matches a
@@ -73,7 +74,7 @@ scene })`), dispatched only when that workspace is not already the active
   `base.scenes.<name>.bindings`), not in `base.bindings`. `a`/`l`/`t` are
   reachable only while that scene's workspace is focused, same as any other
   scene-owned key — `hypr/hyprfocus/init.lua` `apply_bindings(mode, scene)`
-  admits them. Signal, Vesktop, Spotify and ckb-next carry no `tree` and no
+  admits them. Signal, Vesktop, Spotify, ckb-next and copyq carry no `tree` and no
   owner scene: always reachable, wherever the user is.
 
 ## Not yet
