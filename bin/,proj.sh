@@ -456,6 +456,37 @@ hypr_dispatch() { # $1 = lua expression returning a dispatcher
     hyprctl dispatch "$1" >/dev/null
 }
 
+# Stamps the launch-time role tag (LEO-311 chunk B) on the window `open` just
+# exec'd, e.g. `slot:nvim` on a project's editor window. A bracket exec rule
+# ("[tag:+slot:x] cmd") was spiked live and never applies — Hyprland's exec
+# rule syntax does not carry the general windowrule vocabulary that far
+# (verified in tests/e2e/hq); a dispatch-time `window.tag` by address, once
+# the window exists, is the only path that sticks. `identify.lua` cannot make
+# this call itself yet: two open projects share no state it can use to tell
+# their windows apart (LEO-364's slot pool is scoped by class alone), so
+# stamping happens here, from the one place that already knows which project
+# and role this launch is for.
+#
+# `$class` is this project's own class (`Proj-<name>`, already distinct per
+# project), so within it "the untagged one" is an unambiguous match in the
+# common case of one launch in flight at a time. Runs backgrounded — the exec
+# dispatch above returns before the window maps, so this polls for it — and
+# `open` must not block a keybind on that poll.
+stamp_slot() { # $1 = class, $2 = role
+    local class=$1 role=$2 addr tries
+    for ((tries = 0; tries < 40; tries++)); do
+        addr=$(hyprctl clients -j 2>/dev/null | jq -r --arg c "$class" '
+            [.[] | select(.class == $c) | select((.tags // []) | map(startswith("slot:")) | any | not)]
+            | last | .address // empty')
+        if [[ -n $addr ]]; then
+            hypr_dispatch "hl.dsp.window.tag({ window = \"address:$addr\", tag = \"+slot:$role\" })"
+            return 0
+        fi
+        sleep 0.05
+    done
+    return 1
+}
+
 # `confirm`'s non-tty yes/no prompt. A terminal, not a layer surface: a layer
 # surface has no window to place (rofi chose its output from the POINTER, and
 # handing focus back on unmap raced with our own focus call); a window is
@@ -906,6 +937,7 @@ open() { # $1 = path, $2 = window
             launch_cmd="[workspace name:$PROJ_WORKSPACE] $launch_cmd"
         fi
         hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
+        (stamp_slot "$class" "$window" &)
         return 0
     fi
     # Outside a Hyprland session the exec rule would just be noise in argv.

@@ -21,6 +21,37 @@ integrate with the shared state / UI:
   (`pick --inline`, used internally for that re-exec). Full reference in the
   script's own header comment.
 
+- `bin/,job.sh` — starts a long-running job (dev server, build, watcher) as a
+  transient `systemd --user` service instead of a plain background process, so
+  it survives a compositor restart (LEO-311). `systemd-run --user`, not
+  `--scope` and not `uwsm app --`: a scope inherits the caller's own stdio
+  rather than the journal, and `uwsm app --` parents the command to the
+  graphical session (`wayland-session@hyprland.desktop.target`), the exact
+  thing a compositor restart tears down — the one case this exists to survive.
+  A dev server draws nothing, so it has no business in the graphical session
+  at all. The unit is named `proj-job-<project>-<name>`, so `,proj.sh` can
+  later enumerate the jobs a project owns; `logview unit:<name>` (below)
+  already knows how to tail it, since it is an ordinary systemd unit.
+
+  **What belongs in a unit vs. a terminal window:** a window is for something
+  a person is looking at or typing into — an editor, a shell, an interactive
+  REPL. A unit is for something that just needs to keep running and only
+  incidentally produces output — a dev server, a long build, a file watcher.
+  The test is "would losing this be a regression if the compositor restarted
+  right now": if yes, it is a unit; if the window closing was always going to
+  end it anyway, a window is fine.
+
+  ```
+  ,job.sh start myproj dev -- npm run dev   # transient unit proj-job-myproj-dev
+  ,job.sh logs myproj dev                   # journalctl --user -u ..., -f
+  ,job.sh restart myproj dev -- npm run dev
+  ,job.sh stop myproj dev
+  ,job.sh list myproj                       # every job unit for one project
+  ```
+
+  No real service is converted to this mechanism yet — this ships the
+  mechanism and the one worked example above.
+
 - `bin/,theme.sh` — the palette/wallpaper fan-out (full verb list in the
   script's own header). Wallpapers live per palette (`wallpapers/<palette>/*`
   at the repo root, which is `$CONFIG/hypr/wallpapers/<palette>` once
