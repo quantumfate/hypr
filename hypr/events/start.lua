@@ -1,6 +1,7 @@
 local Store = require("hypr.lib.store")
 local qs = require("hypr.lib.qs")
 local watch = require("hypr.hyprfocus.watch")
+local hyprfocus = require("hypr.hyprfocus")
 
 -- Same desk every morning: whichever project carries `study` in projects.json
 -- gets opened (its own window template decides the nvim window). Purely a
@@ -37,6 +38,15 @@ local function open_study_project()
 end
 
 hl.on("hyprland.start", function()
+  -- Login always enters `work`, unless the pointer names a still-running
+  -- timed mode (docs/desktop-model.md "Pointer"). Runs under the nested e2e
+  -- compositor too, deliberately: e2e's fixture pointer already starts at
+  -- `work` (tests/e2e/fixtures/focus.pointer.json), so this is a no-op there
+  -- by default and the scenario that overrides the fixture is what actually
+  -- exercises this decision — skipping it under QF_E2E would leave the boot
+  -- rule untested by the harness built to verify it live.
+  hyprfocus.boot()
+
   -- The nested e2e compositor (tests/e2e/) starts nothing outside itself: no
   -- keymap, no shell, no project. The mode watcher is internal, so it stays.
   if os.getenv("QF_E2E") == "1" then

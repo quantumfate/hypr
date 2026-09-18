@@ -14,6 +14,7 @@
 local store = require("hypr.lib.store")
 local resolve = require("hypr.hyprfocus.resolve")
 local plan = require("hypr.hyprfocus.plan")
+local boot = require("hypr.hyprfocus.boot")
 local binds = require("hypr.hyprfocus.binds")
 local workspaces = require("hypr.hyprfocus.workspaces")
 local hold = require("hypr.hyprfocus.hold")
@@ -81,6 +82,14 @@ end
 --- host's UTC offset (wrong by 2h on a CEST machine, say). `local_utc_gap`
 --- is that offset, computed once by round-tripping "now" through both
 --- calendars, then added back to correct the parsed stamp.
+---
+--- `os.date("!*t", now)` stamps its table with `isdst = false` (UTC has no
+--- DST), and `os.time` on a table with `isdst` set trusts it instead of
+--- consulting the host's DST rules for that date — so during DST the gap
+--- came out an hour short (CEST measured as CET) and a still-running timed
+--- mode read as expired an hour early. Clearing `isdst` before the
+--- round-trip lets `os.time` resolve DST for the date itself, the same way
+--- it already does for the `stamp` table below (which never sets it).
 ---@param until_at string?
 ---@return boolean
 local function expired(until_at)
@@ -92,7 +101,9 @@ local function expired(until_at)
     return false
   end
   local now = os.time()
-  local local_utc_gap = now - os.time(os.date("!*t", now))
+  local utc_now = os.date("!*t", now)
+  utc_now.isdst = nil
+  local local_utc_gap = now - os.time(utc_now)
   local stamp = os.time({
     year = tonumber(y),
     month = tonumber(mo),
@@ -118,6 +129,9 @@ local function effective_mode(pointer)
   return mode
 end
 M.effective_mode = effective_mode
+-- Exposed for `M.boot` (executor) and its spec (pure decision), both of
+-- which need the same expiry test rather than a second implementation of it.
+M.expired = expired
 
 ---@return string the mode the pointer names, or the resting state
 function M.active()
@@ -718,6 +732,26 @@ function M.enter(mode, source, until_at)
   end
 
   return M.converge(mode)
+end
+
+---Decide and apply what login should do (`hypr/hyprfocus/boot.lua`): enter
+---`work`, unless the pointer names a still-running timed mode, which resumes
+---instead and keeps its `previous`. Called once from `hyprland.start`
+---(`hypr/events/start.lua`) — never from the watcher, which only converges
+---on whatever the pointer already says.
+---@return table? report, string? error
+function M.boot()
+  local declaration, err = M.declaration()
+  if not declaration then
+    return nil, err
+  end
+  local ok, handle = pcall(store.define, POINTER)
+  local pointer = ok and handle:get() or nil
+  local action, mode = boot.decide(pointer, declaration.modes or {}, expired)
+  if action == "resume" then
+    return M.converge(mode)
+  end
+  return M.enter(mode, "boot")
 end
 
 ---Converge on a mode the pointer already names, without rewriting it.

@@ -15,6 +15,17 @@ build toward Part B and update Part A as behaviour changes.
 
 Line numbers refer to the commit that adds this document.
 
+### Boot
+
+`hyprland.start` (`hypr/events/start.lua`) calls `hyprfocus.boot()`
+(`hypr/hyprfocus/init.lua`, deciding via the pure `hypr/hyprfocus/boot.lua`)
+before anything else: login always enters `work`, unless the stored pointer
+names a still-running timed mode, which resumes and keeps its `previous`
+(docs/desktop-model.md "Focus mode"). This runs under the nested e2e
+compositor too (`tests/e2e/scenarios/70_boot_pointer.sh`), not just the live
+session — the mode watcher (`hypr/hyprfocus/watch.lua`) only converges on
+whatever the pointer already says and never makes this decision itself.
+
 ### Stages as implemented
 
 | Stage    | What happens today                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Where                                                                                                                                                                                                                                                                                                                                                                            | Gaps                                                                                                                                                                                                                                         |

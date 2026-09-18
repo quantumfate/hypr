@@ -28,11 +28,16 @@ controls exactly four things:
 
 Later: permissions (what may launch) and notification routing per mode.
 
-The modes a user picks between are `work`, `study` and `gaming`. The desk
-boots and rests in `work`; a timed mode's expiry falls back to whichever mode
-was active before it (`previous`, see "Pointer" below), or to `work` if
-nothing was recorded. Work blocking media/game launches from login is
-accepted behaviour, not a gap.
+The modes a user picks between are `work`, `study` and `gaming`. **Login
+always enters `work`**, unless the pointer names a timed mode that is still
+running (`until` in the future), in which case that mode resumes as itself
+and keeps its own `previous` — a stale/expired timed pointer, a missing
+store, and a pointer naming an unknown mode all boot to `work` (never to
+`previous`; that fallback is only for expiry reached while the desk is
+already running, see "Pointer" below). `hypr/hyprfocus/boot.lua` is this
+decision, applied once by `hyprland.start` (`hypr/events/start.lua`) via
+`M.boot`. Work blocking media/game launches from login is accepted
+behaviour, not a gap.
 
 `neutral` is a hidden fallback for recovery (scenes: `code`, `proton`,
 `logs`; validated like every mode), reachable from a submap, not a peer

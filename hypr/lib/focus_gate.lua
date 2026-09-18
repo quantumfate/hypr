@@ -49,12 +49,19 @@ local function past(until_at)
   -- are UTC, so the raw parse is off by the host's UTC offset. `gap` is that
   -- offset (round-tripping "now" through both calendars), added back to the
   -- parsed stamp before comparing.
+  --
+  -- `os.date("!*t", now)` stamps `isdst = false` (UTC has no DST); clearing
+  -- it before the round-trip lets `os.time` resolve DST for the date itself
+  -- instead of trusting a false flag, which shorted `gap` by an hour during
+  -- DST (see `hypr/hyprfocus/init.lua`'s `expired`, the same bug).
   local y, mo, d, h, mi = until_at:match("(%d+)-(%d+)-(%d+)T(%d+):(%d+)")
   if not y then
     return false
   end
   local now = os.time()
-  local gap = now - os.time(os.date("!*t", now))
+  local utc_now = os.date("!*t", now)
+  utc_now.isdst = nil
+  local gap = now - os.time(utc_now)
   return os.time({
     year = tonumber(y),
     month = tonumber(mo),
