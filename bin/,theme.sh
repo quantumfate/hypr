@@ -896,8 +896,20 @@ resolve_wallpaper() {
             # The pre-per-output shape: one binding for every monitor.
             wall=$(printf '%s' "$raw" | jq -r '.')
         else
-            wall=$(printf '%s' "$raw" | jq -r --arg o "$output" \
-                '.[$o] // .["*"] // ([.[]] | first) // ""')
+            wall=$(printf '%s' "$raw" | jq -r --arg o "$output" '.[$o] // .["*"] // ""')
+            # The "any value in the map" fallback applies only to the "*"
+            # pseudo-output (no live/injected monitor list — the single-
+            # virtual-output shape) picking something out of a map that has
+            # only named entries. A real named output with no entry of its
+            # own must NOT borrow another real monitor's specific pick — that
+            # was LEO-365's bug: HDMI-A-1 and DP-2 had no binding yet, fell
+            # into `[.[]] | first`, and both got DP-1's file, so every
+            # monitor showed the same wallpaper. A named output with nothing
+            # bound falls through to the palette-level defaults below
+            # instead, same as an empty map.
+            if [ -z "$wall" ] && [ "$output" = "*" ]; then
+                wall=$(printf '%s' "$raw" | jq -r '[.[]] | first // ""')
+            fi
         fi
     fi
     [ -n "${wall-}" ] || wall=$(get wallpaper "")
@@ -924,7 +936,13 @@ resolve_wallpaper() {
     fi
     if [ -z "$wall" ]; then
         if [ -d "$dir/$palette" ]; then
-            wall=$(palette_wallpaper_files "$palette" | shuf -n 1)
+            # Scoped to $output's own fitting subset first, so an unbound
+            # monitor's random pick still respects its aspect/size (the same
+            # pool `next`/`prev`/`random` draw from) instead of a set-wide
+            # pick that could land a portrait case image on an ultrawide.
+            # Falls back to the whole set only when nothing in it fits.
+            wall=$(palette_fitting_files "$palette" "$output" | shuf -n 1)
+            [ -n "$wall" ] || wall=$(palette_wallpaper_files "$palette" | shuf -n 1)
         fi
         [ -n "$wall" ] || wall=$(find "$dir" -maxdepth 1 -type f \( "${WALLPAPER_GLOB[@]}" \) 2>/dev/null | shuf -n 1)
     fi

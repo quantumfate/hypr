@@ -699,6 +699,34 @@ fi
 unset THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES
 teardown
 
+echo "wallpaper apply: an unbound monitor does not inherit another monitor's specific pick (LEO-365)"
+setup
+export THEME_MAGICK="$ROOT/no-such-magick-binary" # image processing is not the point here
+awww_stub
+export THEME_OUTPUTS="DP-1 DP-2 HDMI-A-1"
+export THEME_OUTPUT_SIZES="DP-1:5120x1440 DP-2:1920x1080 HDMI-A-1:1920x1080"
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/a.jpg"
+printf 'b' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/b.jpg"
+export THEME_IMAGE_SIZES="a.jpg:5120x1440 b.jpg:1920x1080"
+
+# Only DP-1 (ultrawide, fits a.jpg only) has ever been cycled; DP-2 and
+# HDMI-A-1 (both 16:9, fit b.jpg only) are still unbound — the exact shape
+# that used to make resolve_wallpaper's "any value in the map" fallback hand
+# DP-1's own pick to every monitor with no binding of its own.
+"$THEME" wallpaper next mocha --output DP-1 >/dev/null
+"$THEME" set mocha >/dev/null
+dp1=$(sed -n 's/^\(.*\) --outputs DP-1 .*$/\1/p' "$AWWW_LOG")
+dp2=$(sed -n 's/^\(.*\) --outputs DP-2 .*$/\1/p' "$AWWW_LOG")
+hdmi=$(sed -n 's/^\(.*\) --outputs HDMI-A-1 .*$/\1/p' "$AWWW_LOG")
+check "the recorder saw three separate --outputs img calls" "3" \
+    "$(grep -c -- '--outputs' "$AWWW_LOG")"
+contains "DP-1 (ultrawide) got its own bound pick" "a.jpg" "$dp1"
+contains "DP-2 (16:9, unbound) got its own fitting pick, not DP-1's" "b.jpg" "$dp2"
+contains "HDMI-A-1 (16:9, unbound) got its own fitting pick, not DP-1's" "b.jpg" "$hdmi"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
 
