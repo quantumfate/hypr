@@ -37,16 +37,48 @@ this document says about a "deck column" is a column whose `presentation`
 is `flip`, sized by columns.md's resolver exactly like any `stack` column,
 never by a `share` this document used to define independently.
 
+## A column holds things, not windows
+
+**A thing is what a strip holds.** It is either a single window, or a whole
+Hyprland group collapsed to one entry — never a bare member of a group. A
+thing is determined one of two ways:
+
+- **Declared**: an explicit class pattern or self-declared tag names which
+  things join a column (the three subscription mechanisms below).
+- **Derived**: when Hyprland forms a group among a column's subscribed
+  windows, the group itself is the thing from that point on — it counts as
+  **one** entry in the strip, never as N. The group keeps its own groupbar
+  and its own internal navigation exactly as it does today
+  ([scenes.md](scenes.md)'s "Group" and "Group adapters" sections,
+  unchanged by anything in this document): `mod+j/k` inside a focused group
+  still walks the group's members through its adapter, the same call it
+  makes on a `stack` column. A `flip` column never reaches inside a group
+  to flip its members individually — the group is indivisible from the
+  strip's point of view, exactly as a folded `stack` role becomes one
+  flip-reachable entry (columns.md §3, "Folding across presentations").
+
+So a `flip` column's strip is a list of things — some single windows, some
+whole groups — and the column shows exactly one thing at full column
+height. Scrolling changes which thing is visible; it never reaches inside
+the visible thing. What happens _inside_ a thing (a group's own
+`mod+j/k` order, its groupbar, which member it remembers) is entirely
+unchanged by this document and stays exactly as [scenes.md](scenes.md)
+already describes — flip only ever operates one level up, on the strip of
+things, not on a thing's own internals.
+
 ## What `flip` adds over `stack`
 
 `stack` (`hypr/scene/layout.lua`, soon `stack.lua` per columns.md §12) is
 one row of columns with fixed membership and no viewport: every window
 subscribed to a column gets a box, all of the time, stacked vertically if
-there is more than one. `flip` is the other presentation: a column showing
-one member at a time, flipped through vertically, niri-style. A column
+there is more than one. `flip` is the other presentation: **a strip of
+things; the viewport shows exactly one thing, at full size.** A column
 never partially shows a window and never shrinks one to fit; it shows
-exactly one member at full column height, and scrolling changes _which_
-member that is.
+exactly one thing (a single window, or a whole collapsed group — "A column
+holds things, not windows" above) at full column height, and scrolling
+changes _which_ thing that is. The niri comparison is precise: a `flip`
+column scrolls vertically the way a niri workspace scrolls horizontally —
+one full-size occupant at a time, never a partial one clipped at the edge.
 
 A column's `presentation` is declared per role in the scene's column
 declaration (columns.md §1), never a global toggle and never inherited from
@@ -64,9 +96,14 @@ within a flip column; this contract does not anticipate it.
 
 ## Membership is a subscription, not a class list
 
-Three ways a window ends up in a `flip` column's deck, all through the same
-matching function (`M.column_for`) — this is column membership in general,
-not something specific to `flip`; a `stack` column subscribes the same way:
+Three ways a window ends up in a `flip` column's deck — that is, becomes
+part of one of the column's **things**, declared or derived per "A column
+holds things, not windows" above — all through the same matching function
+(`M.column_for`): this is column membership in general, not something
+specific to `flip`; a `stack` column subscribes the same way. Subscription
+names windows; whether those windows end up as one thing or several is then
+decided by whether Hyprland groups them (derived), not by the subscription
+itself.
 
 1. **A class subscribes.** A pattern on a column is the same
    literal-or-Lua-pattern grammar a `stack` column's classes already use
@@ -101,22 +138,22 @@ it.
 
 ## Flipping (scrolling)
 
-Within a `flip` column, membership order is arrival order — the same "join
+Within a `flip` column, thing order is arrival order — the same "join
 list" `hypr/scene/group_adapters.lua`'s default adapter already keeps for a
 group's `mod+j/k` order, not re-derived a second way. A **group** inside a
-flip column (an ordinary Hyprland-grouped set of windows) collapses to one
-flip entry, exactly like a `stack` column's `collapse_groups`: flipping past
-a group shows or hides all of its members together, and its groupbar still
+flip column (an ordinary Hyprland-grouped set of windows) is one thing
+(above), exactly like a `stack` column's `collapse_groups`: flipping past a
+group shows or hides all of its members together, and its groupbar still
 distinguishes them the way it does today. A `stack` role folded into a
 `flip` column (columns.md §3, "Folding across presentations") collapses to
-one flip entry the same way — the fold does not invent a second grouping
-rule either.
+one thing the same way — the fold does not invent a second grouping rule
+either.
 
-A per-workspace, per-column **scroll index** (1-based, which member is
+A per-workspace, per-column **scroll index** (1-based, which thing is
 visible) is the only state `flip` adds, and it is session-only — the same
 lifetime as `hypr/scene/order.lua`'s tile-swap override, never persisted,
 dropped on reload. `M.clamp_scroll` re-derives a valid index every pass
-against the column's current member count, so a window closing mid-column
+against the column's current thing count, so a window closing mid-column
 can never strand the scroll position past the end (mirrors the reachability
 guarantees the rest of the scene engine already gives — see
 [desktop-model.md](desktop-model.md#transitions), "scrolling through the
@@ -124,6 +161,83 @@ slot updates recency"). A `flip` column that folds into another column
 (columns.md §3) keeps its own scroll index as dead state until the fold
 reverses; the target column's own index is what governs while the fold
 stands.
+
+### The slide is animated, like niri
+
+Flipping is not a cut: the newly-visible thing slides into the column and
+the previously-visible one slides out, the same "one strip, one occupant
+sliding through" feel niri gives horizontal scrolling, turned vertical. The
+motion does not need a bespoke animation of its own to get this: flipping
+is executed as an ordinary `window.move` dispatch (see "Why hidden windows
+are HELD" below) — moving the newly-visible thing onto the workspace and
+the outgoing one onto the hold workspace — and Hyprland's existing
+`windowsMove` animation leaf (`hypr/animations.lua`, `speed = 4`, default
+bezier) already animates every window move on this desk, this one included.
+The slide is therefore free: nothing in the `flip` module or its provider
+schedules or times an animation, because the compositor already does that
+for the dispatch it issues.
+
+**Instant modes snap** by reading the same signal every other motion on
+this desk already reads, not a second one invented for scrolling: AGENTS.md
+lists motion as one of the properties a focus mode governs, and this desk
+already has a working example of turning it off for one operation —
+`hypr/services/alttab/alttab.lua` and `hypr/services/dofus/team.lua` both
+wrap a move in `hl.config({ animations = { enabled = false } })` /
+`{ enabled = true } }` to make that one move instant without touching any
+other animation leaf. A mode whose motion setting says "no animation" makes
+a flip's `window.move` land instantly for exactly the same reason those two
+callers' moves do — there is one global animations switch, not a
+per-feature one, so `flip` never needs its own "should this slide" check;
+it dispatches the same way regardless, and the mode's own motion setting
+(wherever it toggles that switch) decides whether the compositor honours
+the `windowsMove` bezier or not.
+
+**Where the motion lives, given non-visible things are parked off the
+workspace**: entirely in the two ordinary `window.move` dispatches the
+provider issues on a flip (the newly-visible thing home, the
+previously-visible thing to hold — "Why hidden windows are HELD" below).
+The compositor places windows; it does not place a "scroll," so there is no
+separate off-workspace slide to animate — the thing moving to
+`special:deck-hold` visibly slides there via the same `windowsMove` leaf
+before it disappears from the workspace's tiled set, and the thing moving
+home slides into the column's box the same way. Nothing about parking a
+thing off-workspace bypasses the animation; it is a `window.move` like any
+other; only its destination (a special workspace) is unusual.
+
+### Fall-through: the visible thing disappears
+
+When the thing currently visible in a `flip` column closes (or otherwise
+leaves the column's subscription), the next thing in the strip — the
+survivor immediately after it in arrival order, or the one immediately
+before if none follows — takes the now-empty slot. This is a fall-through
+scan of the arrival-order list, not a scroll: `M.clamp_scroll` already
+holds this guarantee (a closed thing can never strand the index past the
+end); a closed thing that is not at the end simply removes itself from the
+list, and the same index now names whatever thing slid up into it.
+
+**Focus does not follow.** Nothing about a thing falling into the visible
+slot steals the keyboard. Hyprland's own close-focus behaviour decides
+where focus actually goes when a window closes (typically the window that
+was focused before it, or another member of the same former group) — that
+is unrelated to and unaffected by which thing the column now happens to
+show. A user scrolled to project B, closed a window inside project B's
+thing, and project C's thing falls into view: focus stays wherever
+Hyprland's own close handling put it, most likely still inside project B's
+remaining windows if any are left, never silently redirected into project
+C because its thing is now what is visible. This is deliberate, not an
+oversight: a column's visible slot is a display fact, not a claim on the
+user's attention, the same distinction desktop-model.md already draws
+between "on screen" and "focused" for held/hidden members elsewhere in the
+scene engine.
+
+**If the strip is then empty** — the closed thing was the column's last —
+the column shows nothing: an empty box, its width and position unchanged
+(columns.md's resolver does not react to a column's live occupancy, only to
+its declared role), waiting for the next window that subscribes to it. This
+is the same "empty column keeps its declared width" position §9 already
+left open in columns.md, read literally: nothing here forces the column to
+collapse, fold, or borrow a neighbour's space just because it is
+momentarily empty.
 
 **Recency**: desktop-model.md's Transitions section says scrolling through a
 declared slot updates recency the way a hand-off's return edge does. This
@@ -166,34 +280,60 @@ columns.md §12 for its merged shape), not this module's.
 
 ## Navigation
 
-Reuses the existing decision entirely; nothing new is invented for `flip`:
+**Correction to an earlier revision of this document**: `mod+j/k` scrolling
+a `flip` column was the prior design. The user's clarification supersedes
+it — what is _inside_ a thing does not change, full stop, and a group's
+`mod+j/k` is inside a thing. `mod+j/k` therefore keeps its existing meaning
+on every column, `flip` included; scrolling the strip gets its own pair.
 
 - `mod+h/l` moves across **columns** — the same tile-order decision
   `hypr/lib/nav.lua`'s `M.decide` already makes for a `stack` column, since
   every resolved column is a tile regardless of its presentation. Crossing
-  into a `flip` column focuses its currently visible member (whatever the
-  scroll index already names), the same way entering a group tile focuses
-  its recorded member (LEO-380).
-- `mod+j/k` moves **within** a column, adapted per its `presentation`:
-  inside a `stack` column it changes focus among already-visible windows
-  (`hypr/lib/nav.lua`'s `M.window_neighbor`, unchanged); inside a `flip`
-  column it changes the column's scroll index by one (clamped, no wrap —
-  same edge behaviour as `window_neighbor`) and the newly-visible window is
-  what receives focus. Inside a collapsed group entry, `mod+j/k` keeps
-  stepping the group's own adapter order first (unchanged); only crossing
-  the group's own boundary advances the column's scroll index. Once
-  `presentation` is a resolved-column field (columns.md §1), this becomes
-  one branch read off the focused column's own `presentation`, not a
-  scene-level check.
-- `mod+shift+h/l` and `mod+shift+j/k` are unassigned for a `flip` column in
-  this contract — swapping column order or reordering a column's stack are
-  not decided here. Left to the wiring chunk once there is a concrete use
-  for reordering a flip column (`hypr/scene/order.lua`'s override may or
-  may not be the right session-state shape for it).
+  into a `flip` column focuses its currently visible thing (whatever the
+  scroll index already names) — if that thing is a group, the group's own
+  recorded/adapter-picked member, the same way entering a group tile
+  focuses its recorded member on a `stack` column today (LEO-380). No
+  change from before this revision.
+- `mod+j/k` moves **within a thing**, unchanged by `presentation` and
+  unchanged by this document: inside a `stack` column it changes focus
+  among already-visible windows (`hypr/lib/nav.lua`'s `M.window_neighbor`);
+  inside a `flip` column's visible thing, if that thing is a group,
+  `mod+j/k` steps the group's own adapter order — exactly the existing
+  `focus_in_group` binding `hypr/binds.lua` already has for a `stack`
+  column's group, called against the same class, unmodified. If the
+  visible thing is a single window, `mod+j/k` is a no-op, the same as it
+  is today for an ungrouped `stack` tile with one window. **`mod+j/k` never
+  advances a `flip` column's scroll index** — that is the whole point of
+  this correction: what is inside a thing stays exactly the way it
+  currently is, and scrolling the strip is a different action with a
+  different chord.
+- **Scrolling the strip: `mod+ctrl+j/k`** (`config.main_mod .. " + " ..
+config.primary_mod .. " + j/k"`, i.e. `SUPER+CTRL+J/K`) is the proposed
+  new pair, flagged for veto since the user delegated the choice. Checked
+  against `hypr/binds.lua`: `SUPER+CTRL` is otherwise only used inside
+  submap-local entries (`project` submap's `p`, `d`), never as a
+  `submap_universal` root chord, and `SUPER+ALT+J/K` is already claimed by
+  the resize submap's directional entries — `SUPER+CTRL+J/K` collides with
+  neither. Moves the scroll index by one (clamped, no wrap — the same edge
+  behaviour `M.window_neighbor` already gives every other "next/prev, no
+  wrap" decision on this desk) and dispatches the two `window.move`s
+  "Flipping (scrolling)" describes; a no-op on a `stack` column, mirroring
+  how `mod+shift+h/l`'s swap is already a no-op off a scene layout.
+- `mod+shift+h/l` stays a no-op for a `flip` column, as before — swapping
+  column order is not decided here.
+- **`mod+shift+j/k` moves into the group submap.** Today's
+  `move_in_group` (`hypr/binds.lua`, "move the focused window forward/back
+  within its group") already only ever does something to a grouped window
+  and no-ops otherwise; the user's decision folds it into the existing
+  `group` reordering surface (`hypr/scene/group_adapters.lua`'s territory)
+  as a submap entry rather than a bare top-level chord, freeing
+  `SUPER+SHIFT+J/K` at the root. This is a keybind-wiring change, out of
+  scope for this document (docs-only, no Lua touched here) — recorded so
+  the wiring chunk implements exactly this, not a fresh decision.
 
-None of the above is implemented yet: `hypr/lib/nav.lua` is unchanged by
-this chunk. This section records the intended mapping for the chunk that
-does wire binds.
+None of the above is implemented yet: `hypr/lib/nav.lua` and
+`hypr/binds.lua` are unchanged by this chunk. This section records the
+intended mapping for the chunk that does wire binds.
 
 ## Bound
 
@@ -268,6 +408,14 @@ performed:
   will need the same, per column rather than per scene, once the merge
   lands.
 
+**Superseded by this revision**: the `mod+j/k` deck branch described just
+above — scrolling on `mod+j/k` — is the pre-correction wiring and is what
+the "Navigation" section above now overrides. Nothing in this bullet list
+has actually changed (docs-only chunk, no Lua touched), so the live desk
+still behaves exactly as this section describes; the wiring chunk that
+implements the "Navigation" section's `mod+ctrl+j/k` pair is what retires
+this bullet's `mod+j/k` behaviour, not this document by itself.
+
 ## Next chunk
 
 - The merge columns.md §12 describes: `hypr/scene/deck.lua` →
@@ -279,12 +427,77 @@ performed:
 - Structured logging events (`arrange`/`flip_scroll`, `arrange`/`flip_hold`)
   once LEO-352 lands a writer; until then the executor still only dispatches
   the moves the pure functions decide.
-- `mod+shift+h/l`/`mod+shift+j/k` for a `flip` column (column reorder / stack
-  reorder) — still not decided.
+- Wire `mod+ctrl+j/k` to scroll the strip and retire the `mod+j/k` deck
+  branch, per the "Navigation" section's correction above.
+- Move `mod+shift+j/k` (move-in-group) into the group submap, freeing the
+  root chord, per the same section — `mod+shift+h/l` for a `flip` column
+  (column reorder) is still not decided.
 - The two open questions this document already named: whether an empty
-  column keeps its declared width, and what "recency" means for a scrolled
-  column (desktop-model.md's Transitions section).
+  column keeps its declared width (this revision's "If the strip is then
+  empty" answers this: yes, unconditionally), and what "recency" means for
+  a scrolled column (desktop-model.md's Transitions section) — still open.
 - The project-identity gap columns.md §11 flags: a per-launch project tag,
   distinct from a scene's fixed `slot`, needed before "one column = one
   project" can claim windows without a scene author naming a class list by
   hand.
+
+## Extensibility: adding a fourth presentation later
+
+The seam the user asked for — "a scalable module where we can add more
+layouts on top later" — already exists in outline from columns.md §1's
+output contract; this section makes it concrete for `flip` specifically, so
+a third presentation is cheap to add.
+
+**What a presentation module implements**, against the merged provider
+(columns.md §12) rather than against the compositor directly:
+
+```lua
+-- hypr/scene/<name>.lua
+M.applies(column)              -- true when this module should render `column`
+M.boxes(column, tiles, area, opts)
+  -- column:  a resolved column from columns.lua (`width`, `x_offset`, `members`)
+  -- tiles:   the live windows subscribed to this column's members
+  -- area:    the workspace's work area (gaps already applied)
+  -- returns: box list for `ctx.targets`, plus an optional hold list
+  --          (addresses that must leave the workspace's tiled set —
+  --          `flip`'s second return value; `stack` returns none)
+```
+
+The merged provider (columns.md §12's `provider.lua`) dispatches to a
+resolved column's own module by its `presentation` field — adding a fourth
+presentation means adding one more branch there and one more value the
+schema's `presentation` enum accepts; nothing about `columns.lua`,
+`nav.lua`, or the schema's `roles` vocabulary (priority, `min_width`,
+`fixed_width`, `align`, `fold_into`) changes to add it.
+
+**What a layout author must NOT re-implement**, because the resolver and
+the shared primitives already own it and a new presentation module reads
+their output instead of recomputing it:
+
+- **Arithmetic and gaps** — `columns.lua`'s `resolve` already produced
+  `width`/`x_offset`; a presentation module never computes a share, a cost,
+  or a gap itself (columns.md §1's closing paragraph: "sizing lives in
+  exactly one place").
+- **Folding** — a folded role's contents arrive already merged into
+  `members`; a presentation module never asks "was this folded," only "what
+  do my members contain now" (columns.md §3, "Folding across
+  presentations": the target's presentation governs every member,
+  automatically).
+- **Group collapse** — `collapse_groups` (today in `layout.lua`, staying in
+  `stack.lua` per columns.md §12) is the one place a Hyprland group becomes
+  a single thing; `flip.lua` calls it rather than re-deriving it, and a
+  fourth presentation does the same.
+- **Ordering** — arrival order (`hypr/scene/group_adapters.lua`'s default
+  join list) is the one sequencing rule every presentation reads; a new
+  presentation does not invent its own thing-order.
+
+What a presentation module _does_ own, and is the only genuinely new
+surface a fourth layout adds: its own presentation-specific session state
+(the way `flip` alone needs a scroll index — a hypothetical grid
+presentation might need a 2D cursor instead) and its own `M.boxes` framing
+of `members` inside the column's given `width`/`x_offset` (the way `flip`
+shows one at a time and `stack` shows all of them vertically split). That
+is deliberately the entire cost of a fourth layout: one module implementing
+`applies`/`boxes`, one schema enum value, one provider branch — everything
+upstream of the column (sizing, folding, gaps, group identity, ordering)
+is already shared and untouched.

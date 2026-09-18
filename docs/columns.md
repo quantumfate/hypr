@@ -37,6 +37,19 @@ layout" — any column may flip, independently of its neighbours. A single
 workspace can therefore mix a `flip` column and a `stack` column side by
 side; nothing about the model forces every column on a workspace to agree.
 
+**A column is a strip of things.** Whatever a column shows — all at once
+under `stack`, one at a time under `flip` — it shows **things**, not bare
+windows. A thing is a single window, or a whole Hyprland group collapsed to
+one entry; a group's members are never counted or shown as separate things,
+because the group already keeps its own groupbar and its own internal
+navigation, unchanged (see [deck.md](deck.md), "A column holds things, not
+windows," for the full statement — this document only needs the term
+defined once, since `members` in this section's output shape is a list of
+things, not a list of windows). A thing is determined either by **declared**
+membership (a column's class pattern or subscription tag names it in) or by
+being **derived** (Hyprland forming a group among a column's subscribed
+windows is what turns several windows into one thing).
+
 **Does a scene-level layout name survive?** No. `layout = "scene" | "deck"`
 on the scene document is retired along with the two-layout split it
 implied. There is one column core; a workspace simply has columns, and each
@@ -116,7 +129,10 @@ A list of **resolved columns**, ordered by priority, each:
   width = 4468,              -- px, this column's share of available_width
   x_offset = 0,              -- px, leading edge relative to the row's own start (§3)
   presentation = "stack",    -- the leader's own declared presentation (see below)
-  members = { 1 },           -- role priorities folded into this column, self included
+  members = { 1 },           -- role priorities folded into this column, self included —
+                              -- each role contributes the things its own subscription
+                              -- names, not raw windows (see "A column is a strip of
+                              -- things" above)
 }
 ```
 
@@ -633,18 +649,31 @@ lists:
    first three land, per the issue's own ordering. §12 gives the concrete
    file-level shape of this step.
 
-## 11. The code workspace: one column, one project
+## 11. The code workspace: a strip of projects, one column
 
-The user's own worked example, made concrete. `code` today (§4) declares
-two roles: an editor group and a browser. The decision this document folds
-in changes what those two roles mean, not their widths:
+The user's own worked example, made concrete, and corrected to the
+strip-of-things model (§0's definition): a column is not a slot for one
+project, it is **a strip that can hold several projects' things**, showing
+one at a time when it presents `flip`. `code` today (§4) declares two
+roles: an editor group and a browser. The decision this document folds in
+changes what those two roles mean, not their widths:
 
-- **The project column presents `flip`.** One project's windows — its
-  terminal(s), its editor, whatever a project launches — are visible at
-  full column height at a time; scrolling flips to a different project's
-  windows, the same one-full-window-never-partial rule deck.md (now the
-  flip contract, deck.md renamed content per §12's file plan) already
-  specifies.
+- **What a project is, as a thing.** A project is one launch's worth of
+  windows — its terminal(s), its editor, whatever else it opens — grouped
+  into a single Hyprland group the moment more than one of them exists
+  (the tmux-replacement work, LEO-311, separately: one group holds a
+  project's kitty windows and destroys itself when the last closes). That
+  group is exactly a "thing" per this document's §0 definition: derived,
+  not declared, the instant Hyprland forms it, and indivisible from the
+  project column's point of view from then on. A project with only one
+  window open is still a thing — a thing of one, the degenerate case every
+  `stack` column's ungrouped tile already handles the same way.
+- **The project column presents `flip` and holds a strip, not a slot.**
+  Several projects' things can be open at once, each one a separate entry
+  in the column's arrival-order strip; `flip` shows exactly one project's
+  things at full column height, and scrolling moves to the next project in
+  the strip (deck.md's "Flipping (scrolling)", animated the way niri
+  scrolls, per that document's correction).
 - **The browser column presents `stack`**, beside it, unchanged from
   today's `code` — a companion browser is not a thing you flip through, it
   is a thing that sits next to whatever project is currently flipped in.
@@ -653,49 +682,70 @@ This is exactly the shape the model's "any column may flip" claim exists
 to make ordinary: two adjacent columns in the same row, each with its own
 presentation, sized by the same resolver, folding by the same ladder — §4's
 `code` table already stands (its opening note re-confirms the arithmetic),
-only the project column's _contents_ now flip instead of stacking a single
-project's windows (today's `code` scene has no multi-project concept at
-all — the flip column is what makes "more than one project" representable
-without widening the column).
+only the project column's _contents_ now flip between projects instead of
+stacking a single project's windows (today's `code` scene has no
+multi-project concept at all — the flip column, holding a strip of
+project-things, is what makes "more than one project open at once"
+representable without widening the column).
 
-**"One column = one project," eventually — without hard-coding a single
-project.** The user's stated intent is that a project column claims
-_whichever_ project's windows are relevant, not one hard-coded project's
-windows forever. This document does not implement that claim (no Lua
-changes here), but the shape it needs is already visible from what exists:
+**"One column = one project" was the wrong reading; the right one is "one
+column holds every open project, one visible at a time."** The user's own
+words: a column holds things, "defined by an algorithm or explicitly
+declared." Read literally, "one column = one project" never meant a column
+is retired and rebuilt per project — it meant the reverse of what the
+phrase suggests: **one column is where a project lives**, for however many
+projects the strip currently holds, each one a thing the column's scroll
+index walks through. Concretely, without hard-coding a single project:
 
 - A column's membership is already a **subscription**, not a fixed list —
   deck.md's three mechanisms (class pattern, a self-declared `deck:<name>`
   tag reusing the LEO-364 identity-stamp, or hand-grouped classes) are the
-  right primitive, unmodified. "One project" is not a new membership
-  mechanism; it is a **value** flowing through the existing tag mechanism.
+  right primitive, unmodified. "Which projects populate the strip" is not a
+  new membership mechanism; it is however many separate **things** the
+  existing subscription mechanism happens to admit at once — the strip's
+  length is just however many projects are currently open, not a number
+  the column declares.
 - What is missing is a **project identity**, analogous to a scene's
   `slot`: today's `slot:<slot>` tag names a fixed string chosen at scene
   declaration time (`pokemon/chat`, `pokemon/stream`). A project column
   instead needs a tag whose value is chosen **per launch**, from whatever
   project the terminal/editor was opened against (a directory name, a repo
   slug — this document does not decide which), and every window belonging
-  to that same launch needs to carry the _same_ value so the column's
-  subscription (`deck:<column-name>` today, or its successor field once
-  `layout`/`deck` naming is retired per §12) can group them without the
-  column declaration ever naming a specific project.
+  to that same launch needs to carry the _same_ value so Hyprland's own
+  grouping (which is what turns a launch's windows into one thing) and the
+  column's subscription (`deck:<column-name>` today, or its successor field
+  once `layout`/`deck` naming is retired per §12) can each do their part —
+  grouping making the launch one thing, the subscription admitting that
+  thing into the strip — without the column declaration ever naming a
+  specific project.
 - Concretely, this needs from the identity/tag work (LEO-364's
   `hypr/scene/identify.lua` and whatever terminal-role work LEO-308/311
   eventually land): a stamping rule keyed on **which project a window was
   launched for**, not only on **which slot in a scene** it fills — the two
   are different axes today (`slot` disambiguates _within_ one block's
   class; a project tag needs to disambiguate _across_ however many
-  concurrent projects a flip column ever holds) and nothing in
-  `identify.lua` currently reads or assigns the second axis. Flagged here
-  because it blocks "one column = one project" specifically, not because
-  it blocks anything in this document's own model: the resolver and the
-  fold ladder do not care what a column's members' tags mean, only that
-  `column_for`-equivalent matching can group them.
+  concurrent projects a flip column's strip ever holds at once) and nothing
+  in `identify.lua` currently reads or assigns the second axis. Flagged
+  here because it blocks "a column holds every open project" specifically,
+  not because it blocks anything in this document's own model: the
+  resolver and the fold ladder do not care what a column's things' tags
+  mean, only that `column_for`-equivalent matching can group them into the
+  strip.
 - Until that identity work lands, a project column is declared the way
   deck.md's example already shows: an explicit `classes` list naming the
-  project's terminal/editor classes by hand, one column per concretely
-  named project — functionally correct, just not yet "any project,
+  project's terminal/editor classes by hand, admitting whichever concretely
+  named projects happen to be running into the strip — functionally
+  correct for a small, known set of projects, just not yet "any project,
   automatically."
+- **Fall-through applies here directly** (deck.md's "Fall-through" section):
+  when a project's last window closes (its group destroys itself per
+  LEO-311), that thing leaves the strip; whichever project thing is next in
+  arrival order falls into the visible slot, and focus does not follow it —
+  the user is left wherever Hyprland's own close-focus rule puts them, not
+  silently dropped into a different project's windows because that
+  project's thing now happens to be what the column shows. If the project
+  that closed was the strip's last thing, the column shows an empty box,
+  its width unchanged, until the next project opens.
 
 ## 12. What the already-merged code becomes
 
@@ -704,13 +754,13 @@ today from the `deck` chunk that landed before this revision; none of them
 yet know about `presentation` as a column property, because they predate
 this decision. What each becomes:
 
-| File                           | Fate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `hypr/scene/layout.lua`        | **Becomes the `stack` presentation module, folded into the column core's caller.** Its pure geometry (`collapse_groups`, `sequence`, `M.stack`'s vertical split, `M.reorder`/`entry_key`) is exactly right and stays; what it loses is the sizing it currently does itself (`fractions`, `SOLO_EXTRA`/`solo_frame`) — that arithmetic is `columns.lua`'s job now, called once per workspace, not once per scene. Renamed `hypr/scene/stack.lua` to name what it actually is once `scene` is no longer the only presentation; its public surface (`M.boxes(scene_or_column, tiles, area, opts)`) takes a resolved column's `width`/`x_offset` instead of computing its own share.                                          |
-| `hypr/scene/deck.lua`          | **Becomes the `flip` presentation module: `hypr/scene/flip.lua`.** Its scroll-clamping, group-collapse-into-one-flip-entry, and hold-list-reporting logic (`M.boxes`'s two return values) are exactly the `"flip"` half of the column core and stay almost verbatim; what it loses is `fractions`/column-width normalization (§1's `width`/`x_offset` replace it) and the 1–3-column bound as a _layout_ concept — a flip presentation now sizes whatever single column the resolver handed it, not a whole row it owns alone.                                                                                                                                                                                            |
-| `hypr/scene/deck_provider.lua` | **Merges into one provider that reads presentation per column.** There is no longer a separate `hl.layout.register("deck", ...)` beside `hl.layout.register("scene", ...)` — one registration (name TBD, likely just `hl.layout.register("columns", ...)` or kept as `"scene"` for compatibility, an open point for the implementing chunk) resolves a workspace's columns once via `columns.resolve`, then for each resolved column calls `stack.boxes` or `flip.boxes` depending on that column's `presentation`, merging both modules' box lists and dispatching `flip.lua`'s hold list exactly as `deck_provider.lua` does today. `HOLD`/`special:deck-hold` and the move-home dispatch pattern carry over unchanged. |
-| `hypr/scene/deck_scroll.lua`   | **Stays, renamed `hypr/scene/scroll.lua`.** Its shape (session-only index keyed by scene name then column order, never `$QF_STORE`) is presentation-agnostic already — it does not care that today only `deck`-layout scenes ever read it; once any column on any workspace can be `flip`, the same per-column keying already works unmodified. Only the name changes, to stop implying it is deck-specific.                                                                                                                                                                                                                                                                                                              |
-| `hypr/scene/provider.lua`      | **Merges into the same single provider `deck_provider.lua` becomes.** Its own `recalculate`, `spec_gaps`/`gaps` fallback-ladder, `scene_for`, `window_tile`/`tiles_of` stay as the shared window-gathering half every column needs regardless of presentation; its `layout.boxes` call is replaced by `columns.resolve` + the per-column `stack.boxes`/`flip.boxes` dispatch above. This file (or its merged successor) is the one that survives under the registered name; `deck_provider.lua`'s file disappears once merged in.                                                                                                                                                                                         |
+| File                           | Fate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `hypr/scene/layout.lua`        | **Becomes the `stack` presentation module, folded into the column core's caller.** Its pure geometry (`collapse_groups`, `sequence`, `M.stack`'s vertical split, `M.reorder`/`entry_key`) is exactly right and stays; what it loses is the sizing it currently does itself (`fractions`, `SOLO_EXTRA`/`solo_frame`) — that arithmetic is `columns.lua`'s job now, called once per workspace, not once per scene. Renamed `hypr/scene/stack.lua` to name what it actually is once `scene` is no longer the only presentation; its public surface (`M.boxes(scene_or_column, tiles, area, opts)`) takes a resolved column's `width`/`x_offset` instead of computing its own share.                                                                                                                                                                                                                                                                                                                                                                      |
+| `hypr/scene/deck.lua`          | **Becomes the `flip` presentation module: `hypr/scene/flip.lua`.** Its scroll-clamping, group-collapse-into-one-flip-entry, and hold-list-reporting logic (`M.boxes`'s two return values) are exactly the `"flip"` half of the column core and stay almost verbatim; what it loses is `fractions`/column-width normalization (§1's `width`/`x_offset` replace it) and the 1–3-column bound as a _layout_ concept — a flip presentation now sizes whatever single column the resolver handed it, not a whole row it owns alone. Gains nothing new for fall-through: `M.clamp_scroll` already re-derives a valid index against the current thing count every pass, which is the entire mechanism deck.md's "Fall-through" section needs — a closed thing's disappearance is just one fewer thing in the list the next `recalculate` sees, and the module never dispatches a focus change, only box/hold decisions, so "focus does not follow" costs this module nothing to satisfy: it was already true because `flip.lua` has no focus opinion at all. |
+| `hypr/scene/deck_provider.lua` | **Merges into one provider that reads presentation per column.** There is no longer a separate `hl.layout.register("deck", ...)` beside `hl.layout.register("scene", ...)` — one registration (name TBD, likely just `hl.layout.register("columns", ...)` or kept as `"scene"` for compatibility, an open point for the implementing chunk) resolves a workspace's columns once via `columns.resolve`, then for each resolved column calls `stack.boxes` or `flip.boxes` depending on that column's `presentation`, merging both modules' box lists and dispatching `flip.lua`'s hold list exactly as `deck_provider.lua` does today. `HOLD`/`special:deck-hold` and the move-home dispatch pattern carry over unchanged.                                                                                                                                                                                                                                                                                                                             |
+| `hypr/scene/deck_scroll.lua`   | **Stays, renamed `hypr/scene/scroll.lua`.** Its shape (session-only index keyed by scene name then column order, never `$QF_STORE`) is presentation-agnostic already — it does not care that today only `deck`-layout scenes ever read it; once any column on any workspace can be `flip`, the same per-column keying already works unmodified. Only the name changes, to stop implying it is deck-specific.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `hypr/scene/provider.lua`      | **Merges into the same single provider `deck_provider.lua` becomes.** Its own `recalculate`, `spec_gaps`/`gaps` fallback-ladder, `scene_for`, `window_tile`/`tiles_of` stay as the shared window-gathering half every column needs regardless of presentation; its `layout.boxes` call is replaced by `columns.resolve` + the per-column `stack.boxes`/`flip.boxes` dispatch above. This file (or its merged successor) is the one that survives under the registered name; `deck_provider.lua`'s file disappears once merged in.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Net shape: **five files become three** — one resolver (`columns.lua`,
 already landed), one provider (the merge of `provider.lua` +
@@ -718,9 +768,19 @@ already landed), one provider (the merge of `provider.lua` +
 `layout.lua`, `flip.lua` from `deck.lua`), plus the renamed `scroll.lua`.
 `hypr/lib/nav.lua`'s `deck_tile_order` and `hypr/binds.lua`'s deck branch
 (§6) stop checking `deck.applies(scene)` — a scene has no `layout` field to
-check any more — and instead ask a resolved column its own
-`presentation` to decide whether `mod+j/k` scrolls or steps a stack.
-`hypr/scene/spec.lua`'s schema loses `layout` and gains `presentation` per
-role (§8's migration table, superseded by `presentation` replacing what
-would have been a `columns[].layout` compromise). None of this is
-performed here — this section is the concrete map, not the diff.
+check any more — and instead ask a resolved column its own `presentation`
+to decide which binding does what. Per deck.md's "Navigation" correction:
+`mod+j/k` never checks `presentation` for _whether to scroll_ — it always
+steps within the focused thing (a group's adapter order, unchanged, on any
+presentation) — the only thing it reads `presentation` for, going forward,
+is which decision function to call (`stack`'s `window_neighbor` vs a
+group's `order`, already the same call today). Scrolling a `flip` column's
+strip is `mod+ctrl+j/k`'s own branch, gated on `presentation == "flip"`,
+calling `flip.lua`'s scroll-index step and the same two `window.move`
+dispatches `deck_provider.lua` issues today (unchanged by the merge,
+animated per `windowsMove` per deck.md); `mod+shift+j/k` (group reorder)
+moves into the group submap and stops being a root chord, per the same
+correction. `hypr/scene/spec.lua`'s schema loses `layout` and gains
+`presentation` per role (§8's migration table, superseded by `presentation`
+replacing what would have been a `columns[].layout` compromise). None of
+this is performed here — this section is the concrete map, not the diff.
