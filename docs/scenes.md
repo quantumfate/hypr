@@ -74,6 +74,26 @@ target:
 Hyprland still keeps one workspace on the ignored output; nothing else goes
 there.
 
+### Undeclared workspaces (LEO-382)
+
+Hyprland gives each monitor a numbered workspace of its own at startup, so a
+window that opens or moves before anything claims it can land on a plain
+workspace `workspace_specs` never names — no scene, shelf or binding
+addresses it, so it is otherwise stranded forever. The same treatment
+ignored monitors get above extends to this case: a window on a plain
+workspace not in `workspace_specs` moves, address-targeted, to that
+monitor's declared workspace (the entry marked `default = true`, or the
+first declared for that monitor when none is), falling back to the
+primary's declared workspace when the monitor has none of its own or is
+itself ignored (left to the ignored-monitor treatment instead, so the two
+never dispatch competing moves for one event). A special is never a target.
+Pure decision in `nav.off_undeclared` (`tests/nav_spec.lua`), executor
+`keep_off_undeclared` in `hypr/events/scene.lua`, run at `window.open` and
+`window.move_to_workspace` only — never a sweep. Unlike `collect`, which
+must leave a member the user deliberately parked elsewhere alone, an
+undeclared workspace is not reachable through the bound UI at all, so there
+is no user intent this could fight.
+
 ### Reachability invariant
 
 After every mode apply (`hypr/hyprfocus/init.lua`), every window must be on an

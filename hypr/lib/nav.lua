@@ -366,6 +366,98 @@ function M.off_ignored(ignored, primary, monitors, w)
   return actions
 end
 
+-- === Undeclared workspaces (LEO-382) ===
+
+---Whether `name` is a plain workspace `workspace_specs` declares
+---(`default_name`), the only names a scene, shelf or binding can ever
+---address. Hyprland gives every monitor a numbered workspace of its own at
+---startup; a window that opens or lands there before anything claims it sits
+---on a name nothing reaches.
+---@param workspace_specs HL.WorkspaceRuleSpec[]?
+---@param name string?
+---@return boolean
+function M.is_declared_workspace(workspace_specs, name)
+  for _, spec in ipairs(workspace_specs or {}) do
+    if spec.default_name == name then
+      return true
+    end
+  end
+  return false
+end
+
+---The declared plain workspace `workspace_specs` puts on `monitor`, or nil
+---when the host names none there. Several specs can share a monitor
+---(`docs/scenes.md`'s secondary carries `obsidian-linear`, `media` and
+---`logs`); the one marked `default = true` wins, falling back to the first
+---declared for that monitor in file order when none is marked — a stable,
+---inspectable pick over guessing from whatever happens to be active (the
+---window this decides for may itself be squatting on the monitor's live
+---active workspace).
+---@param workspace_specs HL.WorkspaceRuleSpec[]?
+---@param monitor string?
+---@return string?
+function M.declared_workspace_for_monitor(workspace_specs, monitor)
+  if not monitor then
+    return nil
+  end
+  local fallback
+  for _, spec in ipairs(workspace_specs or {}) do
+    if spec.monitor == monitor and spec.default_name and not tostring(spec.workspace):find(":", 1, true) then
+      if spec.default then
+        return spec.default_name
+      end
+      fallback = fallback or spec.default_name
+    end
+  end
+  return fallback
+end
+
+---What keeps a window off an undeclared workspace (LEO-382): the same
+---treatment `off_ignored` gives an ignored monitor, extended to any plain
+---workspace `workspace_specs` does not name. A special is never a target
+---here (it is either a drawer/shelf or the engine-owned hold area, both
+---reachable by construction) and neither is an ignored monitor's own plain
+---workspace — `off_ignored` already owns that redirect, and letting this
+---function also act on it would dispatch two competing moves for one event.
+---A monitor with no declared workspace of its own (or one this host ignores)
+---falls back to the primary's declared workspace, the same "somewhere
+---reachable" fallback `off_ignored` and the reachability invariant's
+---`no_origin` both use.
+---
+---Deliberately narrow to open/move events, never a sweep: a window standing
+---on an undeclared workspace has never been placed there by any scene, mode
+---or binding (nothing addresses it), so unlike `collect` — which must leave
+---a member the user parked elsewhere alone — there is no user intent this
+---could fight. A user cannot even reach an undeclared workspace through the
+---bound UI; only a script or `hyprctl` driving one there directly could
+---trigger this, and moving it home is exactly what should happen next.
+---@param workspace_specs HL.WorkspaceRuleSpec[]?
+---@param ignored string[]?
+---@param primary string?
+---@param w table? the window an event carried
+---@return { move: string, workspace: string }[] actions
+function M.off_undeclared(workspace_specs, ignored, primary, w)
+  local actions = {}
+  local ws = w and w.workspace
+  local name = ws and ws.name
+  if not name or tostring(name):find("^special:") then
+    return actions
+  end
+  if M.is_declared_workspace(workspace_specs, name) then
+    return actions
+  end
+  local monitor = ws.monitor and ws.monitor.name
+  if M.is_ignored(ignored, monitor) then
+    return actions
+  end
+  local target = M.declared_workspace_for_monitor(workspace_specs, monitor)
+    or M.declared_workspace_for_monitor(workspace_specs, primary)
+  if target and target ~= name then
+    actions[#actions + 1] = { move = w.address, workspace = target }
+  end
+  return actions
+end
+
 -- === Workspace row: Nth scene on the focused monitor ===
 
 ---The active mode's scenes placed on one monitor output, in desk order.

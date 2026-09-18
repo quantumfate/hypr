@@ -363,4 +363,52 @@ t.describe("ignored monitors", function()
   end)
 end)
 
+t.describe("undeclared workspaces (LEO-382)", function()
+  local IGNORED = { "HDMI-A-1" }
+  local SPECS = {
+    { workspace = "1", default_name = "code", default = true, monitor = "DP-1" },
+    { workspace = "3", default_name = "proton", monitor = "DP-1" },
+    { workspace = "8", default_name = "obsidian-linear", monitor = "DP-2" },
+    { workspace = "11", default_name = "media", monitor = "DP-2" },
+  }
+
+  t.it("moves a window on a workspace_specs does not name to the monitor's declared one", function()
+    local w = { address = "0xa", workspace = { name = "2", monitor = { name = "DP-2" } } }
+    t.eq({ { move = "0xa", workspace = "obsidian-linear" } }, nav.off_undeclared(SPECS, IGNORED, "DP-1", w))
+  end)
+
+  t.it("picks the monitor's default-marked spec over the first one declared", function()
+    local w = { address = "0xa", workspace = { name = "2", monitor = { name = "DP-1" } } }
+    t.eq({ { move = "0xa", workspace = "code" } }, nav.off_undeclared(SPECS, IGNORED, "DP-1", w))
+  end)
+
+  t.it("leaves a declared workspace alone", function()
+    local w = { address = "0xa", workspace = { name = "proton", monitor = { name = "DP-1" } } }
+    t.eq({}, nav.off_undeclared(SPECS, IGNORED, "DP-1", w))
+  end)
+
+  t.it("never moves a special", function()
+    local w = { address = "0xa", workspace = { name = "special:hyprfocus-held", monitor = { name = "DP-2" } } }
+    t.eq({}, nav.off_undeclared(SPECS, IGNORED, "DP-1", w))
+  end)
+
+  t.it("leaves an ignored monitor's undeclared workspace to off_ignored", function()
+    local w = { address = "0xa", workspace = { name = "1", monitor = { name = "HDMI-A-1" } } }
+    t.eq({}, nav.off_undeclared(SPECS, IGNORED, "DP-1", w))
+  end)
+
+  t.it("falls back to the primary's declared workspace when the monitor has none", function()
+    local specs = {
+      { workspace = "1", default_name = "code", default = true, monitor = "DP-1" },
+    }
+    local w = { address = "0xa", workspace = { name = "2", monitor = { name = "DP-2" } } }
+    t.eq({ { move = "0xa", workspace = "code" } }, nav.off_undeclared(specs, IGNORED, "DP-1", w))
+  end)
+
+  t.it("does nothing with no window or workspace", function()
+    t.eq({}, nav.off_undeclared(SPECS, IGNORED, "DP-1", nil))
+    t.eq({}, nav.off_undeclared(SPECS, IGNORED, "DP-1", { address = "0xa" }))
+  end)
+end)
+
 return t

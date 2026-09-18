@@ -104,7 +104,12 @@ return {
     volume_control = { cmd = "kitty --class Kitty-Wiremix wiremix", class = "Kitty-Wiremix" },
     file_manager = { cmd = "kitty --class Kitty-Yazi yazi", class = "Kitty-Yazi" },
     password_manager = { cmd = "proton-pass", class = "Proton Pass" },
-    mail = { cmd = "proton-mail", class = "Proton Mail" },
+    -- Live class is "proton-mail" (verified via hyprctl clients), not the
+    -- capitalized display name; the stale "Proton Mail" here never matched
+    -- the real window, so the +proton static route (hypr/windowrules.lua)
+    -- silently never fired and the window opened wherever it was focused
+    -- (LEO-382 part 3).
+    mail = { cmd = "proton-mail", class = "proton-mail" },
     calculator = { cmd = "qalculate-qt", class = "io.github.Qalculate.qalculate-qt" },
     app_launcher = { cmd = 'rofi -show drun -run-command "uwsm app -- {cmd}"', class = "" },
     bluetooth_manager = { cmd = "kitty --class Kitty-Bluetui bluetui", class = "Kitty-Bluetui" },

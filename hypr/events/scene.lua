@@ -72,6 +72,33 @@ local function keep_off_ignored(w)
   end
 end
 
+---Keep `w` off an undeclared workspace (LEO-382): a window that opens or
+---moves onto a plain workspace `workspace_specs` does not name is moved,
+---address-targeted, to that monitor's declared workspace — a workspace no
+---scene, shelf or binding addresses is otherwise stranded forever. Pure
+---decision in `nav.off_undeclared`; a special or an ignored monitor's own
+---plain workspace is left to `keep_off_ignored` above.
+---@param w HL.Window?
+local function keep_off_undeclared(w)
+  local host = (rawget(_G, "config") or {}).host or {}
+  local workspace_specs = (host.workspaces or {}).workspace_specs
+  for _, action in ipairs(nav.off_undeclared(workspace_specs, host.ignored_monitors, host.primary_monitor, w)) do
+    hl.dispatch(hl.dsp.window.move({
+      window = "address:" .. action.move,
+      workspace = "name:" .. action.workspace,
+      follow = false,
+    }))
+    trace.emit({
+      stage = "admit",
+      event = "undeclared_workspace",
+      decision = "move",
+      reason = "workspace not in workspace_specs",
+      window = action.move,
+      workspace = action.workspace,
+    })
+  end
+end
+
 ---Decision-record fields common to every window-keyed log line: `trace` is
 ---the window address (docs/lifecycle.md Part B), so every stage for one
 ---window's lifetime is queryable by the same key.
@@ -349,6 +376,7 @@ hl.on("window.open", function(w)
   converge_companions(scene_name)
   apply_group_decision(w)
   apply_stray_decision(w)
+  keep_off_undeclared(w)
   keep_off_ignored(w)
 end)
 
@@ -409,6 +437,7 @@ hl.on("window.move_to_workspace", function(w)
       end
     end
   end
+  keep_off_undeclared(w)
   keep_off_ignored(w)
 end)
 
