@@ -411,4 +411,57 @@ t.describe("undeclared workspaces (LEO-382)", function()
   end)
 end)
 
+t.describe("nav.deck_tile_order", function()
+  local SPEC = {
+    columns = {
+      { order = 1, classes = { "Kitty-Main" } },
+      { order = 2, classes = { "zen" } },
+    },
+  }
+
+  t.it("one Nav.Tile per non-empty column, shown member leading addresses", function()
+    local tiles = nav.deck_tile_order(SPEC, {
+      tile("a", "Kitty-Main"),
+      tile("b", "Kitty-Main"),
+      tile("c", "zen"),
+    }, { [1] = 2 })
+    t.eq(2, #tiles)
+    t.eq("deck:1", tiles[1].key)
+    t.eq({ "b", "a" }, tiles[1].addresses)
+    t.eq({ "a", "b" }, tiles[1].plain)
+    t.eq(1, tiles[1].column)
+    t.eq({ "c" }, tiles[2].addresses)
+  end)
+
+  t.it("drops an empty column entirely", function()
+    local tiles = nav.deck_tile_order(SPEC, { tile("a", "Kitty-Main") }, {})
+    t.eq(1, #tiles)
+    t.eq("deck:1", tiles[1].key)
+  end)
+
+  t.it("clamps an out-of-range scroll index like deck.clamp_scroll", function()
+    local tiles = nav.deck_tile_order(SPEC, {
+      tile("a", "Kitty-Main"),
+      tile("b", "Kitty-Main"),
+    }, { [1] = 99 })
+    t.eq({ "b", "a" }, tiles[1].addresses)
+  end)
+
+  t.it("composes with nav.decide across columns like scene tiles do", function()
+    local tiles = nav.deck_tile_order(SPEC, {
+      tile("a", "Kitty-Main"),
+      tile("c", "zen"),
+    }, {})
+    local action = nav.decide({
+      monitors = { { name = "DP-1", x = 0 } },
+      focused = "DP-1",
+      tiles = tiles,
+      active = "a",
+      dir = "right",
+    })
+    t.eq("window", action.kind)
+    t.eq("c", action.address)
+  end)
+end)
+
 return t

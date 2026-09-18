@@ -41,6 +41,34 @@ local M = {}
 ---@param name string
 ---@param raw table
 ---@return Scene.Spec
+---@class Deck.Column
+---@field order integer left-to-right position, 1..3
+---@field share number? fraction of the row this column holds
+---@field classes string[]? literal class or Lua pattern subscribing a window
+---@field deck string? subscription name for the `deck:<name>` self-declaration tag
+
+---A `deck` scene's `columns`, normalized the same shallow way `blocks` is
+---(order-sorted, class list defaulted). Additive: a scene that never
+---declares `columns` (every scene today) gets an empty list, same as an
+---undeclared `blocks` already does — see docs/deck.md.
+---@param raw table[]?
+---@return Deck.Column[]
+local function normalize_columns(raw)
+  local columns = {}
+  for i, column in ipairs(raw or {}) do
+    columns[i] = {
+      order = column.order or i,
+      share = column.share,
+      classes = column.classes or {},
+      deck = type(column.deck) == "string" and column.deck or nil,
+    }
+  end
+  table.sort(columns, function(a, b)
+    return a.order < b.order
+  end)
+  return columns
+end
+
 local function normalize(name, raw)
   local blocks = {}
   for i, block in ipairs(raw.blocks or {}) do
@@ -77,6 +105,10 @@ local function normalize(name, raw)
     bindings = raw.bindings or {},
     moods = raw.moods or {},
     machines = raw.machines or {},
+    -- Layout opt-in (docs/deck.md): every scene defaults to "scene"; only
+    -- "deck" changes anything, and no live scene declares it yet.
+    layout = raw.layout == "deck" and "deck" or "scene",
+    columns = normalize_columns(raw.columns),
   }
 end
 

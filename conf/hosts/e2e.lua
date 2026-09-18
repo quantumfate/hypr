@@ -19,6 +19,10 @@ return {
       { workspace = "2", default_name = "loose" },
       { workspace = "3", default_name = "arena" },
       { workspace = "11", default_name = "aside", monitor = "secondary" },
+      -- docs/deck.md's live spike (LEO-349): a sandboxed fixture scene only,
+      -- never a real one — see tests/e2e/fixtures/hyprfocus.json's
+      -- "deck-test" and tests/e2e/scenarios/90_deck.sh.
+      { workspace = "4", default_name = "deck-test", layout = "deck" },
     },
     workspace_keys = { "plus", "bracketleft", "braceleft", "parenleft" },
   },

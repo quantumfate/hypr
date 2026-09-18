@@ -35,4 +35,9 @@ layout.register_fallback({
 -- for it. A workspace on scrolling is untouched.
 require("hypr.scene.provider").attach()
 
+-- The deck layout (docs/deck.md): registered always, same as scene, selected
+-- only by a workspace declaring `layout = "deck"`. No scene does yet, so
+-- this changes nothing on the live desk until the opt-in chunk lands.
+require("hypr.scene.deck_provider").attach()
+
 require("hypr.layouts.scrolling")

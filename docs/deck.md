@@ -1,9 +1,13 @@
 # Deck
 
-**Status: contract, not yet wired.** `hypr/scene/deck.lua` implements the
-pure decision below; nothing registers it with the compositor yet, no scene
-declares `layout = "deck"`, and no bind reads scroll state. This document is
-the deliverable for that first step — read [scenes.md](scenes.md) and
+**Status: wired, not yet adopted.** `hypr/scene/deck.lua` implements the pure
+decision; `hypr/scene/deck_provider.lua` now registers it with the compositor
+(`hl.layout.register("deck", ...)`, mirroring `hypr/scene/provider.lua`) and
+dispatches the hold/return moves it reports; `hypr/scene/deck_scroll.lua`
+holds the session-only scroll index; `hypr/lib/nav.lua`/`hypr/binds.lua` map
+`mod+h/l` across columns and `mod+j/k` to scroll within one. Still true: no
+real scene declares `layout = "deck"` — every workspace behaves exactly as it
+did before this chunk. Read [scenes.md](scenes.md) and
 [desktop-model.md](desktop-model.md) first; this widens both in place rather
 than starting a third document. [columns.md](columns.md) widens this one in
 turn: the duplicated share arithmetic and missing solo framing this document
@@ -221,22 +225,67 @@ declaration naming more than three columns is silently truncated by
 placed" in scenes.md for the same non-refusing posture); a real editor-side
 validator belongs with the rest of `resolve.validate`'s checks, not here.
 
+## Wiring (this chunk)
+
+- `hypr/scene/deck_provider.lua` registers `hl.layout.register("deck", ...)`.
+  Its `recalculate` gathers every window anywhere that subscribes to the
+  scene's columns (`hl.get_windows()` filtered through `deck.column_for` —
+  not `workspace_tiles`, since a held member has already left the
+  workspace), calls `deck.boxes`, places the returned boxes on live
+  `ctx.targets`, and dispatches the rest: a box whose address is not among
+  `ctx.targets` gets a `window.move` home (it was held or freshly scrolled
+  to); every held address still tiled here gets moved to `HOLD`.
+- The hold area is one shared special workspace, `special:deck-hold`
+  (`deck_provider.HOLD`) — never declared, so no mode can admit or withdraw
+  it, the same shape `hypr/hyprfocus/hold.lua`'s `HELD` uses. Per-scene
+  holding was the open question this document left; one shared area was
+  simpler and nothing today needs the split.
+- `hypr/scene/deck_scroll.lua` is the session-only scroll index, keyed by
+  scene name then column order, mirroring `hypr/scene/order.lua` exactly
+  (never touches `$QF_STORE`, dropped on reload).
+- `hypr/lib/nav.lua`'s `M.deck_tile_order(spec, tiles, scroll)` turns a
+  deck's columns into `Nav.Tile`s the existing `M.decide` already knows how
+  to walk — a column is a tile, same as a `scene` block or group, so
+  `mod+h/l` needed no new decision, only a new way to build the tile list.
+  Each tile also carries `plain` (arrival order, untouched) and `column`
+  (its order), which `hypr/binds.lua`'s `mod+j/k` deck branch uses with the
+  existing `M.window_neighbor` to compute the next visible member, store the
+  new index, move it home, and focus it — the executor's job per "Why hidden
+  windows are HELD" above, not a second navigation path.
+- `mod+shift+h/l` and `mod+shift+j/k` stay unassigned for a deck scene, as
+  this document already said — `hypr/binds.lua`'s swap/move-in-group
+  handlers now check `deck.applies(scene)` and no-op rather than
+  misinterpreting a deck's `columns` as `scene`'s `blocks`.
+- `hypr/scene/spec.lua`'s `normalize` gained two additive fields —
+  `layout` (`"scene"` default, `"deck"` opt-in) and `columns` (the same
+  shallow order/share/classes/deck normalization `blocks` already gets) —
+  the minimum schema support needed for a scene to describe a deck at all.
+  No existing scene declares either, so every declared workspace's resolved
+  spec is byte-for-byte what it was before this chunk.
+- Live-verified in the nested e2e instance (`tests/e2e/scenarios/90_deck.sh`,
+  a sandboxed fixture scene only — `tests/e2e/fixtures/hyprfocus.json`'s
+  `deck-test`, `conf/hosts/e2e.lua`'s workspace 4): three windows placed on a
+  one-column deck leave exactly one tiled on the workspace and two on
+  `special:deck-hold`; flipping (`mod+j/k`'s bind body, driven via `hc eval`
+  the same way `60_navigation.sh` does — `hq key` does not fire this
+  config's Lua-closure binds in this sandbox) changes which one is tiled,
+  the other two stay held, and focus lands on exactly the window the flip
+  asked for, never a stray jump. A workspace whose scene is never admitted
+  by any mode never gets its `layout = "lua:deck"` workspace rule enabled
+  (`hypr/hyprfocus/workspaces.lua`'s `M.admit` disables every rule the
+  active mode does not name at boot) — the fixture's `neutral`/`work` modes
+  both admit `deck-test` for this reason, and a real scene adopting `deck`
+  will need the same.
+
 ## Next chunk
 
-Not done by this one, on purpose (`AGENTS.md`'s "leave the engine untouched"
-instruction for this pass):
-
-- A thin provider (`hypr/scene/deck_provider.lua`, mirroring
-  `hypr/scene/provider.lua`) registering `hl.layout.register("deck", ...)`,
-  reading live windows and calling `M.boxes`, then dispatching the hold
-  moves `M.boxes` reports.
-- The hold workspace/area itself (name, whether it is per-scene or one
-  shared `special:deck-hold`, and how a held window returns on scroll-back).
-- Scroll-index session state (where it lives, keyed how — mirrors
-  `hypr/scene/order.lua`'s per-scene table) and the bind wiring in
-  `hypr/lib/nav.lua`/`hypr/binds.lua` for the `mod+j/k` mapping above.
 - `layout = "deck"` on an actual scene (`code`, once LEO-308/311 land) and
   the `columns` declaration replacing its current fixed blocks.
 - Structured logging events (`arrange`/`deck_scroll`, `arrange`/`deck_hold`)
-  once LEO-352 lands a writer; until then the executor should still return
-  the same decision records this module already produces.
+  once LEO-352 lands a writer; until then the executor still only dispatches
+  the moves `deck.lua`'s pure functions decide.
+- `mod+shift+h/l`/`mod+shift+j/k` for a deck (column reorder / stack
+  reorder) — still not decided.
+- The two open questions this document already named: whether an empty
+  column keeps its declared width, and what "recency" means for a scrolled
+  column (desktop-model.md's Transitions section).

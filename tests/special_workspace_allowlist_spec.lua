@@ -10,6 +10,9 @@ local ALLOWED = {
   "alttab",
   "shelf%-[%w-]+",
   "magic",
+  -- hypr/scene/deck_provider.lua's hold area for a deck's non-visible
+  -- members (docs/deck.md "Why hidden windows are HELD").
+  "deck%-hold",
 }
 
 local function allowed(name)

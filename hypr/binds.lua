@@ -251,6 +251,33 @@ do
   local scene_order = require("hypr.scene.order")
   local group_adapters = require("hypr.scene.group_adapters")
   local grouping = require("hypr.scene.grouping")
+  local deck = require("hypr.scene.deck")
+  local deck_scroll = require("hypr.scene.deck_scroll")
+
+  ---Every window subscribing to a deck scene's columns, anywhere (docs/deck.md
+  ---"Membership is a subscription" — a held member has already left the
+  ---workspace, so `scene_provider.workspace_tiles` alone would lose it).
+  ---@param scene Scene.Spec
+  ---@return Scene.Tile[]
+  local function deck_member_tiles(scene)
+    local tiles = {}
+    for _, w in ipairs(hl.get_windows() or {}) do
+      local tile = scene_provider.window_tile(w)
+      if deck.column_for(scene, tile) then
+        tiles[#tiles + 1] = tile
+      end
+    end
+    return tiles
+  end
+
+  ---A deck scene's columns as `Nav.Tile`s, ready for `mod+h/l`'s `nav.decide`
+  ---— same shape `nav.tile_order` gives a `scene`, so the h/l decision below
+  ---never needs to know which layout it is crossing.
+  ---@param scene Scene.Spec
+  ---@return (Nav.Tile|{ plain: string[], column: integer })[]
+  local function deck_tiles(scene)
+    return nav.deck_tile_order(scene, deck_member_tiles(scene), deck_scroll.get_all(scene.name))
+  end
 
   ---`nav.tile_order`'s `opts.enter`: the group's adapter picks the entry
   ---member (LEO-380 follow-up), by the class any member already names.
@@ -322,7 +349,8 @@ do
       return
     end
 
-    local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
+    local tiles = deck.applies(scene) and deck_tiles(scene)
+      or nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
     local monitors = hl.get_monitors() or {}
     local ordered = nav.monitor_order(nav.usable_monitors(monitors, config.host.ignored_monitors))
     local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
@@ -334,11 +362,12 @@ do
     if adjacent then
       local active = adjacent.activeWorkspace
       local other_scene = active and active.name and scene_spec.load()[active.name]
-      target = {
-        tiles = other_scene
-            and nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name), tile_opts)
-          or {},
-      }
+      local other_tiles = other_scene
+        and (
+          deck.applies(other_scene) and deck_tiles(other_scene)
+          or nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name), tile_opts)
+        )
+      target = { tiles = other_tiles or {} }
     end
 
     local action = nav.decide({
@@ -408,6 +437,39 @@ do
       focus_in_group(w, dir)
       return
     end
+    if deck.applies(scene) then
+      -- `mod+j/k` on a deck: scroll the focused column, not just refocus
+      -- within it — `tile.plain` keeps arrival order, so `window_neighbor`
+      -- is the same "next/prev, no wrap" decision a stacked block's window
+      -- list already uses (docs/deck.md "Navigation").
+      local tiles = deck_tiles(scene)
+      local index = nav.tile_index(tiles, w.address)
+      local tile = index and tiles[index]
+      if not tile then
+        return
+      end
+      local target = nav.window_neighbor(tile.plain, w.address, dir)
+      if not target then
+        return
+      end
+      local new_index
+      for i, address in ipairs(tile.plain) do
+        if address == target then
+          new_index = i
+        end
+      end
+      deck_scroll.set(scene.name, tile.column, new_index)
+      -- The target may still be held off the workspace; bring it home and
+      -- focus it. The provider's next `recalculate` sees the new scroll
+      -- index and parks the window this replaces (deck_provider.lua).
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. target,
+        workspace = "name:" .. scene.name,
+        follow = false,
+      }))
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
+      return
+    end
     local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
     local index = nav.tile_index(tiles, w.address)
     local tile = index and tiles[index]
@@ -428,6 +490,12 @@ do
     end
     if not scene then
       layout_lib.dispatch(dir == "left" and "swap_left" or "swap_right")
+      return
+    end
+    if deck.applies(scene) then
+      -- Unassigned for `deck` (docs/deck.md "Navigation"): reordering
+      -- columns is not decided yet, so this stays a no-op rather than
+      -- misreading a deck's `columns` as `scene`'s `blocks`.
       return
     end
     local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)

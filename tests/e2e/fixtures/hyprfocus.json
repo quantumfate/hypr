@@ -43,6 +43,12 @@
         "barred": [],
         "strays": "slot",
         "bindings": []
+      },
+      "deck-test": {
+        "layout": "deck",
+        "columns": [{ "order": 1, "share": 1, "classes": ["e2e%-deck%-.*"] }],
+        "barred": [],
+        "bindings": []
       }
     }
   },
@@ -53,7 +59,8 @@
       "scenes": [
         { "name": "grouped", "monitor": "primary" },
         { "name": "loose", "monitor": "primary" },
-        { "name": "aside", "monitor": "secondary" }
+        { "name": "aside", "monitor": "secondary" },
+        { "name": "deck-test", "monitor": "primary" }
       ]
     },
     "work": {
@@ -61,7 +68,8 @@
       "scenes": [
         { "name": "grouped", "monitor": "primary" },
         { "name": "loose", "monitor": "primary" },
-        { "name": "aside", "monitor": "secondary" }
+        { "name": "aside", "monitor": "secondary" },
+        { "name": "deck-test", "monitor": "primary" }
       ]
     },
     "study": {

@@ -183,6 +183,54 @@ function M.window_neighbor(addresses, current, dir)
   return nil
 end
 
+-- === Deck columns (docs/deck.md) ===
+
+---A deck's columns as `Nav.Tile`s, one per non-empty column, so `mod+h/l`
+---can walk them with the exact same `M.decide` a scene's blocks use — a
+---deck column is a tile like any other. `addresses` leads with the column's
+---currently shown member (`scroll`, clamped by `hypr/scene/deck.lua`'s
+---`clamp_scroll`) so crossing into a column lands on what it already shows,
+---the same "enter lands on current" rule a group tile gives (LEO-380).
+---`plain` keeps the column's arrival order untouched, for `mod+j/k` below to
+---step through with `M.window_neighbor` — reordering `addresses` to lead
+---with the shown member would break that stepping.
+---@param spec Scene.Spec deck spec (`columns` normalized by hypr/scene/spec.lua)
+---@param tiles Scene.Tile[] every window subscribed to spec's columns, any workspace
+---@param scroll table<integer, integer> column order -> 1-based shown index
+---@return (Nav.Tile|{ plain: string[], column: integer })[]
+function M.deck_tile_order(spec, tiles, scroll)
+  local deck = require("hypr.scene.deck")
+  local columns = {}
+  for _, c in ipairs(spec.columns or {}) do
+    columns[#columns + 1] = c
+  end
+  table.sort(columns, function(a, b)
+    return a.order < b.order
+  end)
+  local stacks = deck.stacks(spec, tiles)
+  local out = {}
+  for _, column in ipairs(columns) do
+    local representatives = layout.collapse_groups(stacks[column.order] or {})
+    local plain = {}
+    for _, rep in ipairs(representatives) do
+      plain[#plain + 1] = rep.address
+    end
+    if #plain > 0 then
+      local index = deck.clamp_scroll(scroll[column.order], #plain)
+      local shown = plain[index]
+      local addresses = { shown }
+      for _, address in ipairs(plain) do
+        if address ~= shown then
+          addresses[#addresses + 1] = address
+        end
+      end
+      out[#out + 1] =
+        { key = "deck:" .. column.order, addresses = addresses, group = false, plain = plain, column = column.order }
+    end
+  end
+  return out
+end
+
 -- === mod+h/l decision (LEO-380) ===
 
 ---@class Nav.Action
