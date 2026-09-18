@@ -410,13 +410,18 @@ mkdir -p "$ROOT/vault/.obsidian"
 printf '{"cssTheme":"Catppuccin","accentColor":"","theme":"obsidian"}\n' >"$ROOT/vault/.obsidian/appearance.json"
 export OBSIDIAN_VAULT="$ROOT/vault"
 "$THEME" set mocha >"$ROOT/out" 2>&1
-check "obsidian got the dark base" "obsidian" "$(jq -r '.theme' "$ROOT/vault/.obsidian/appearance.json")"
+check "obsidian stays on adapt-to-system" "system" "$(jq -r '.theme' "$ROOT/vault/.obsidian/appearance.json")"
 check "obsidian got the palette accent" "#cba6f7" "$(jq -r '.accentColor' "$ROOT/vault/.obsidian/appearance.json")"
 contains "obsidian is reported as next-launch, not immediate" "applies on next launch" "$(cat "$ROOT/out")"
 contains "linear is reported as scheme-following" "linear: follows the system colour scheme (dark)" "$(cat "$ROOT/out")"
 "$THEME" set latte >"$ROOT/out" 2>&1
-check "latte asks for the light base" "moonstone" "$(jq -r '.theme' "$ROOT/vault/.obsidian/appearance.json")"
+check "latte does not pin a fixed base either" "system" "$(jq -r '.theme' "$ROOT/vault/.obsidian/appearance.json")"
 contains "linear follows a light scheme too" "linear: follows the system colour scheme (light)" "$(cat "$ROOT/out")"
+
+echo "obsidian: a user's own dark/light pick is corrected back to adapt-to-system"
+printf '{"cssTheme":"Catppuccin","accentColor":"","theme":"dark"}\n' >"$ROOT/vault/.obsidian/appearance.json"
+"$THEME" set mocha >/dev/null 2>&1
+check "an external theme write is overridden back to system" "system" "$(jq -r '.theme' "$ROOT/vault/.obsidian/appearance.json")"
 rm -rf "$ROOT/vault"
 "$THEME" set mocha >"$ROOT/out" 2>&1
 contains "a missing vault is failed, not silent" "obsidian:" "$(cat "$ROOT/out")"

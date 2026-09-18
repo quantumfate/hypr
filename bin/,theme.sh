@@ -528,32 +528,36 @@ apply_zen() {
 
 # Obsidian reads its vault's appearance.json at launch, so this lands on the
 # next restart — the same tier zen lives on. The mapping is the palette's
-# accent and light-ness: the CSS theme stays Catppuccin (already chosen in the
-# vault), which is what makes a manual retheme afterwards an error worth
-# avoiding.
+# accent plus Obsidian's own adapt-to-system key: the CSS theme stays
+# Catppuccin (already chosen in the vault), which is what makes a manual
+# retheme afterwards an error worth avoiding.
+#
+# `theme` is always forced to "system", not a fixed moonstone/obsidian base:
+# writing a light/dark base here fought Obsidian's own Adapt to system
+# setting on every palette switch. "system" keeps this adapter's ownership of
+# the key while making Obsidian follow the desktop colour scheme (which
+# apply_gtk already sets via gsettings) — any outside change to the key is
+# corrected at the next apply instead of compounded.
 #
 # The vault is nameable rather than discovered: a single declared vault keeps
 # the adapter one edit behind the truth instead of guessing which of several
 # looks themed. `bin/,obsidian-cli-wrapper.sh` names the same Main vault, so
 # the two paths already agree on the source.
 apply_obsidian() {
-    local palette=$1 role=$2 vault="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian/Main}" base appearance
+    local palette=$1 role=$2 vault="${OBSIDIAN_VAULT:-$HOME/Documents/Obsidian/Main}" appearance
     appearance="$vault/.obsidian/appearance.json"
     [ -f "$appearance" ] || {
         echo "obsidian: $appearance not found"
         record_failed obsidian "vault appearance.json not found"
         return 0
     }
-    # `theme` is Obsidian's base-look key: moonstone wants a light palette,
-    # obsidian a dark one — the same question is_light answers everywhere else.
-    base=$(is_light "$palette" && echo moonstone || echo obsidian)
-    if ! jq --arg base "$base" --arg accent "$(accent_hex "$palette" "$role")" \
-        '.theme = $base | .accentColor = $accent' "$appearance" >"$appearance.tmp" ||
+    if ! jq --arg accent "$(accent_hex "$palette" "$role")" \
+        '.theme = "system" | .accentColor = $accent' "$appearance" >"$appearance.tmp" ||
         ! mv -f "$appearance.tmp" "$appearance"; then
         record_failed obsidian "appearance.json is not writable"
         return 0
     fi
-    echo "obsidian: $base + accent (applies on next launch)"
+    echo "obsidian: adapt-to-system + accent (applies on next launch)"
     record_pending obsidian next-launch "appearance.json is read at launch"
 }
 
