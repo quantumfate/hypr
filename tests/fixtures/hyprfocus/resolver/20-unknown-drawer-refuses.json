@@ -1,0 +1,38 @@
+{
+  "name": "a scene assigning an undeclared drawer refuses the mode",
+  "declaration": {
+    "base": {
+      "bindings": [],
+      "services": [],
+      "projects": [],
+      "notify": {},
+      "drawers": {
+        "signal": {
+          "key": "s",
+          "class": "signal",
+          "desc": "Signal",
+          "launch": "signal-desktop"
+        }
+      },
+      "scenes": {
+        "dofus": {
+          "blocks": [],
+          "drawers": ["ankama"]
+        }
+      }
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "scenes": [
+          {
+            "name": "dofus",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "x",
+  "expected_error": "unknown_drawer"
+}

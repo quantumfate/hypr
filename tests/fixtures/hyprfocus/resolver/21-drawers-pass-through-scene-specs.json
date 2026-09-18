@@ -1,0 +1,67 @@
+{
+  "name": "declared drawers (global and scene-assigned) pass through resolve untouched",
+  "declaration": {
+    "base": {
+      "bindings": [],
+      "services": [],
+      "projects": [],
+      "notify": {},
+      "drawers": {
+        "signal": {
+          "key": "s",
+          "class": "signal",
+          "desc": "Signal",
+          "launch": "signal-desktop",
+          "background": true
+        },
+        "ankama": {
+          "key": "a",
+          "class": "Ankama Launcher",
+          "desc": "Ankama Launcher",
+          "launch": ",ankama-launcher.sh"
+        }
+      },
+      "scenes": {
+        "dofus": {
+          "blocks": [],
+          "drawers": ["ankama"]
+        }
+      }
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "scenes": [
+          {
+            "name": "dofus",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "x",
+  "expected": {
+    "mode": "x",
+    "hidden": false,
+    "scenes": [
+      {
+        "name": "dofus",
+        "monitor": "primary"
+      }
+    ],
+    "scene_specs": {
+      "dofus": {
+        "blocks": [],
+        "drawers": ["ankama"]
+      }
+    },
+    "workspaces": ["dofus"],
+    "bindings": [],
+    "services": [],
+    "projects": [],
+    "notify": {},
+    "revoke": {},
+    "presentation": {}
+  }
+}

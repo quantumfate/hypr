@@ -190,6 +190,27 @@ function M.validate(declaration, mode)
   end
 
   local catalog = ((declaration.base or {}).scenes or {})
+  local drawers = ((declaration.base or {}).drawers or {})
+
+  -- Drawer keys are checked once per call, independent of the mode: one key
+  -- per drawer everywhere (LEO-363), so two catalog entries sharing a key is
+  -- a declaration error before any scene set is even considered — the same
+  -- footing as a class two active scenes both claim.
+  local drawer_key_owner = {}
+  for id, drawer in pairs(drawers) do
+    local key = drawer.key
+    local owner = drawer_key_owner[key]
+    if owner and owner ~= id then
+      return refusal(
+        mode,
+        "drawer_key_conflict",
+        ("drawer key '%s' claimed by %s and %s"):format(tostring(key), owner, id),
+        { key = key, drawers = { owner, id } }
+      )
+    end
+    drawer_key_owner[key] = id
+  end
+
   local listed = {}
   local claimed_by = {}
   for _, placement in ipairs(spec.scenes) do
@@ -209,6 +230,17 @@ function M.validate(declaration, mode)
       return refusal(mode, "duplicate_scene", ("scene '%s' is listed twice"):format(name), { scenes = { name } })
     end
     listed[name] = true
+
+    for _, drawer_id in ipairs(catalog[name].drawers or {}) do
+      if drawers[drawer_id] == nil then
+        return refusal(
+          mode,
+          "unknown_drawer",
+          ("scene '%s' assigns unknown drawer '%s'"):format(name, tostring(drawer_id)),
+          { scenes = { name } }
+        )
+      end
+    end
 
     for _, block in ipairs(catalog[name].blocks or {}) do
       for _, class in ipairs(block.classes or {}) do

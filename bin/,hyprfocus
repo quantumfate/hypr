@@ -184,6 +184,26 @@ def validate(declaration: dict, mode: str) -> dict | None:
             "neutral is the recovery fallback and must be hidden",
         )
     catalog = declaration.get("base", {}).get("scenes", {})
+    drawers = declaration.get("base", {}).get("drawers", {})
+
+    # Drawer keys are checked once per call, independent of the mode: one
+    # key per drawer everywhere (LEO-363), so two catalog entries sharing a
+    # key is a declaration error before any scene set is even considered —
+    # the same footing as a class two active scenes both claim.
+    drawer_key_owner: dict[str, str] = {}
+    for drawer_id, drawer in drawers.items():
+        key = drawer.get("key")
+        owner = drawer_key_owner.get(key)
+        if owner and owner != drawer_id:
+            return refusal(
+                mode,
+                "drawer_key_conflict",
+                f"drawer key '{key}' claimed by {owner} and {drawer_id}",
+                key=key,
+                drawers=[owner, drawer_id],
+            )
+        drawer_key_owner[key] = drawer_id
+
     listed: set[str] = set()
     claimed_by: dict[str, str] = {}
     for placement in spec["scenes"]:
@@ -208,6 +228,14 @@ def validate(declaration: dict, mode: str) -> dict | None:
                 scenes=[name],
             )
         listed.add(name)
+        for drawer_id in catalog[name].get("drawers", []):
+            if drawer_id not in drawers:
+                return refusal(
+                    mode,
+                    "unknown_drawer",
+                    f"scene '{name}' assigns unknown drawer '{drawer_id}'",
+                    scenes=[name],
+                )
         for block in catalog[name].get("blocks", []):
             for cls in block.get("classes", []):
                 # A slot-bearing block (LEO-364) claims the launch-identity tag,

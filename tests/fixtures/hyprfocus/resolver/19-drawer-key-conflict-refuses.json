@@ -1,0 +1,43 @@
+{
+  "name": "two drawers sharing one key refuse the mode",
+  "declaration": {
+    "base": {
+      "bindings": [],
+      "services": [],
+      "projects": [],
+      "notify": {},
+      "drawers": {
+        "signal": {
+          "key": "s",
+          "class": "signal",
+          "desc": "Signal",
+          "launch": "signal-desktop"
+        },
+        "spotify": {
+          "key": "s",
+          "class": "spotify",
+          "desc": "Spotify",
+          "launch": "spotify"
+        }
+      },
+      "scenes": {
+        "code": {
+          "blocks": []
+        }
+      }
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "scenes": [
+          {
+            "name": "code",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "x",
+  "expected_error": "drawer_key_conflict"
+}
