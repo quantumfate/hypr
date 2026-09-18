@@ -157,10 +157,10 @@ end
 ---@param shelf Shelf
 ---@param windows table[]
 ---@param ctx Shelf.Ctx? omitted or scene-less shelves behave as before
----@param pending? boolean a launch for this shelf has not yet landed its window
+---@param launching? boolean a launch for this shelf has not yet landed its window
 ---@return { launch: string?, toggle: string?, monitor: string?, focus: string?, reason: string? }
-function M.decide(shelf, windows, ctx, pending)
-  if pending then
+function M.decide(shelf, windows, ctx, launching)
+  if launching then
     return {}
   end
   local out = M.running(shelf, windows) and { toggle = M.workspace(shelf) } or { launch = shelf.cmd }
