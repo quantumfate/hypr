@@ -151,6 +151,35 @@ t.describe("base.scenes is the single scene table", function()
   end)
 end)
 
+-- LEO-346: obsidian, logs and dofus are scene-owned, mode-scoped trees, so
+-- each scene must declare the tree(s) that travel with it — a scene-worthy
+-- abstraction owns its bindings (AGENTS.md).
+t.describe("scene-owned binding trees are attached (LEO-346)", function()
+  local raw = read_file(declaration_path)
+  if not raw then
+    t.it("skip: sibling quickshell checkout not found at " .. declaration_path, function() end)
+    return
+  end
+
+  local declaration = json.decode(raw)
+  local scenes = (declaration.base or {}).scenes or {}
+
+  local expected = {
+    ["obsidian-linear"] = { "obsidian" },
+    logs = { "logs" },
+    dofus = { "dofus", "shelf-ankama", "shelf-lutris" },
+  }
+  for scene, trees in pairs(expected) do
+    t.it(scene .. " declares " .. table.concat(trees, "/"), function()
+      local declared = (scenes[scene] or {}).bindings or {}
+      table.sort(declared)
+      local want = { table.unpack(trees) }
+      table.sort(want)
+      t.eq(table.concat(want, ","), table.concat(declared, ","))
+    end)
+  end
+end)
+
 -- One module instance: `require("hypr.hyprfocus.init")` loads a second copy of
 -- the engine (its own apply guard and held-window record), which let a watcher
 -- tick nest an apply inside another and strand held windows.

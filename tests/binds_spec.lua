@@ -125,6 +125,24 @@ t.describe("binds (built via hypr.binds)", function()
   end)
 end)
 
+t.describe("the shell submap (LEO-346)", function()
+  --- The dofus/ankama widget key belongs to the dofus scene's own tree
+  --- (`SUPER Space d`), never leaked into the generic shell submap
+  --- (`SUPER Space q`) — a scene-worthy abstraction owns its bindings
+  --- (AGENTS.md).
+  t.it("holds no dofus-related key", function()
+    local leaked = {}
+    for _, b in ipairs(hl.binds) do
+      if b.submap == "shell" and b.opts and b.opts.description then
+        if b.opts.description:lower():match("dofus") or b.opts.description:lower():match("ankama") then
+          leaked[#leaked + 1] = b.opts.description
+        end
+      end
+    end
+    t.eq({}, leaked, "the shell submap carries a dofus/ankama key")
+  end)
+end)
+
 t.describe("the modes tree", function()
   --- Entering a mode is the one action that drives both halves of the desk, so
   --- the keys that reach it are worth pinning: a mode with no key is a mode

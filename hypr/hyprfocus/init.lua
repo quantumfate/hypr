@@ -358,6 +358,23 @@ function M.apply_bindings(mode, scene)
     })
   end
 
+  -- The other half of the same decision: a scene-owned tree that IS admitted
+  -- because its scene is active gets its own event, so a log reader can see
+  -- attachment and withholding as one pair rather than inferring attachment
+  -- from the absence of a withheld record.
+  if scene then
+    for name in pairs(scene_binding_set(declaration, scene)) do
+      trace.emit({
+        stage = "interact",
+        event = "binding_attached",
+        decision = "admit",
+        reason = ("tree %s admitted by scene %s"):format(name, scene),
+        mode = mode,
+        scene = scene,
+      })
+    end
+  end
+
   -- Re-dump the cheatsheet against what is now loaded. A filtered list can
   -- disagree with what the keys actually do; a list derived from the enabled
   -- set cannot.
