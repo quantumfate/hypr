@@ -29,10 +29,12 @@ local function gaps()
     if not ok or value == nil then
       return fallback
     end
-    -- Hyprland's CSS-style gaps can be a list; the first entry is the one a
-    -- single-number layout wants.
+    -- Hyprland marshals a CSS-style gap to a table of named sides with no
+    -- array part at all, so indexing it by position always read nil and every
+    -- gap silently fell back to zero. A single-number layout wants `top`,
+    -- which is the value itself for a uniform gap.
     if type(value) == "table" then
-      value = value[1]
+      value = value.top or value[1]
     end
     return tonumber(value) or fallback
   end

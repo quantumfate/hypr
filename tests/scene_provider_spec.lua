@@ -158,6 +158,19 @@ t.describe("gaps", function()
     t.eq(50, placed(a).x, "the new value took effect with no reload of our own")
   end)
 
+  t.it("reads the sided table the compositor actually pushes", function()
+    -- Hyprland marshals a gap as named sides with no array part; reading it
+    -- by position silently produced zero gaps on every scene workspace.
+    local _, provider = fresh({ CODE }, {
+      ["general:gaps_in"] = { top = 12, right = 12, bottom = 12, left = 12 },
+      ["general:gaps_out"] = { top = 8, right = 40, bottom = 40, left = 40 },
+    })
+    local a = target("0x1", "Kitty-Main", "code")
+    local b = target("0x9", "zen-twilight", "code")
+    provider.recalculate({ area = AREA, targets = { a, b } })
+    t.eq(8, placed(a).x, "the outer gap reached the layout")
+  end)
+
   t.it("survives a compositor that will not answer for a key", function()
     local _, provider = fresh({ CODE }, {})
     local a = target("0x1", "Kitty-Main", "code")
