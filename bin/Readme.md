@@ -98,7 +98,7 @@ integrate with the shared state / UI:
   identify/leave/admit/interact decision the compositor makes is written by
   `hypr/lib/trace.lua` to the systemd journal (`SYSLOG_IDENTIFIER=hyprfocus`,
   never a file), keyed by `TRACE` (the window address). `,hyprfocus apply
-  <mode>` re-runs `,theme.sh apply` after its own unit bookkeeping
+<mode>` re-runs `,theme.sh apply` after its own unit bookkeeping
   (`reapply_theme`), since a mode's accent role can change even when the
   palette does not; best-effort and silent, skipped under `HYPRFOCUS_NO_THEME`
   (the tests' escape hatch).
