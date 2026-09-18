@@ -24,7 +24,6 @@
 ---@field group? boolean
 ---@field order? number
 ---@field share? number
----@field collect? boolean
 ---@field guard? "deny"
 
 ---Layout a workspace spec may spell (upstream stub spells it a bare string).

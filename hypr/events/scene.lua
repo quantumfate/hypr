@@ -4,9 +4,9 @@
 -- classes it owns and the invariants that hold between them: `group` (every
 -- match lives in one Hyprland group, so the block is a single tile however
 -- many windows it has), `order` (where its tile sits left-to-right), `share`
--- (how much of the tiled span it holds), `collect` (whether members that
--- wandered to another workspace are brought home — not executed today, see
--- docs/scenes.md#collect).
+-- (how much of the tiled span it holds). A window a block claims is re-homed
+-- to this workspace unconditionally, on open and on mode apply
+-- (`hypr/scene/home.lua`, LEO-353) — not a per-block opt-in.
 --
 -- Geometry is decided by the registered layout provider alone
 -- (`hl.layout.register`, `hypr/scene/provider.lua` + `layout.lua`): the
@@ -29,6 +29,7 @@ local identify = require("hypr.scene.identify")
 local grouping = require("hypr.scene.grouping")
 local group_adapters = require("hypr.scene.group_adapters")
 local strays = require("hypr.scene.strays")
+local home = require("hypr.scene.home")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
 local nav = require("hypr.lib.nav")
@@ -301,6 +302,49 @@ local function apply_stray_decision(w)
   }))
 end
 
+---Scene names admitted by the mode last applied, or an empty set before the
+---first apply — a re-home never claims a window into a scene the mode is not
+---currently running.
+---@return table<string, true>
+local function active_scenes()
+  local desk = hyprfocus.applied_desk()
+  local out = {}
+  for _, placement in ipairs(desk and desk.scenes or {}) do
+    out[placement.name] = true
+  end
+  return out
+end
+
+---Execute one `home.decide` decision (LEO-353): a claimed window is moved,
+---address-targeted and unfollowed, to its scene's workspace. Runs before
+---grouping/stray-float so a window about to leave never gets arranged into
+---the workspace it is leaving; the destination's `window.move_to_workspace`
+---handles arranging it once the move lands.
+---@param w HL.Window?
+---@return boolean moved
+local function apply_home_decision(w)
+  if not w then
+    return false
+  end
+  local decision = home.decide(specs, active_scenes(), w)
+  if decision.action ~= "move" then
+    return false
+  end
+  local origin = w.workspace and w.workspace.name
+  hl.dispatch(hl.dsp.window.move({
+    window = "address:" .. w.address,
+    workspace = "name:" .. decision.workspace,
+    follow = false,
+  }))
+  trace.emit(window_fields(w, decision.workspace, {
+    stage = "route",
+    event = "collected",
+    decision = "move",
+    reason = ("claimed by %s, was on %s"):format(decision.workspace, origin or "?"),
+  }))
+  return true
+end
+
 local M = {}
 
 ---Scene name owning this workspace, or nil.
@@ -364,6 +408,13 @@ hl.on("window.open", function(w)
   -- below all read `w.tags`, so a slot block can only be matched if the tag
   -- lands first in this same pass.
   stamp_identity(w)
+  -- A window claimed by another active scene is on the wrong workspace by
+  -- construction (it opened while nothing here claimed it): send it home
+  -- before anything else acts on it standing where it is. The move lands as
+  -- its own `window.move_to_workspace` event, which arranges the destination.
+  if apply_home_decision(w) then
+    return
+  end
   local scene_name = scene_for(w)
   -- identify/route as they exist today: a class either matches a scene's
   -- block (routed to it) or matches none (no scene claim, LEO-354 territory).

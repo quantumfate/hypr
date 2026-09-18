@@ -124,7 +124,10 @@ WAYLAND_DISPLAY=$E2E_WAYLAND setsid foot --app-id e2e-grp-a sh -c "sleep 600 # $
 wait_until 100 two_grp_a || e2e_fail "second e2e-grp-a window never appeared"
 wait_until 50 in_one_group || e2e_fail "the three e2e-grp windows never formed one group of 3"
 
-spawn_test_window e2e-tile
+# Unclaimed by any block (LEO-353 re-homes a claimed window to its own
+# scene's workspace on open, so a claimed class here would leave `grouped`
+# immediately instead of standing as a stray tile beside the group).
+spawn_test_window e2e-stray
 GROUP_ADDRS=$(group_addresses)
 e2e_log "group members: $GROUP_ADDRS"
 
@@ -139,14 +142,14 @@ done
 # --- across tiles: group -> stray tile -> group (opposite key returns) ---
 hc dispatch "hl.dsp.focus({ window = 'class:e2e-grp-a' })" >/dev/null
 cross right >/dev/null
-[[ $(focused_class) == e2e-tile ]] || e2e_fail "crossing right from the group did not land on the stray tile: $(focused_class)"
+[[ $(focused_class) == e2e-stray ]] || e2e_fail "crossing right from the group did not land on the stray tile: $(focused_class)"
 
 cross left >/dev/null
 [[ $(echo "$GROUP_ADDRS" | jq --arg a "$(focused_address)" 'index($a) != null') == true ]] ||
     e2e_fail "crossing left back from the tile did not return into the group: $(focused_class)"
 
 # --- onto the empty secondary monitor, and back (LEO-372/LEO-380) ---
-hc dispatch "hl.dsp.focus({ window = 'class:e2e-tile' })" >/dev/null
+hc dispatch "hl.dsp.focus({ window = 'class:e2e-stray' })" >/dev/null
 cross right >/dev/null
 wait_until 50 monitor_focused_is HEADLESS-2 || e2e_fail "crossing right off the last tile never reached HEADLESS-2: $(active_monitor)"
 # HEADLESS-2's shown workspace has no scene tiles (whichever one it is —
@@ -157,7 +160,7 @@ wait_until 50 monitor_focused_is HEADLESS-2 || e2e_fail "crossing right off the 
 
 cross left >/dev/null
 wait_until 50 monitor_focused_is WAYLAND-1 || e2e_fail "crossing left back from the empty monitor never returned to WAYLAND-1"
-[[ $(focused_class) == e2e-tile ]] || e2e_fail "returning did not land back on the stray tile: $(focused_class)"
+[[ $(focused_class) == e2e-stray ]] || e2e_fail "returning did not land back on the stray tile: $(focused_class)"
 
 # --- j/k wrap through the group's 3 members (Dofus-adapter tested in
 # tests/group_adapters_spec.lua; the default adapter is exercised live here) ---

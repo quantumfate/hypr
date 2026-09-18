@@ -20,6 +20,7 @@ local hold = require("hypr.hyprfocus.hold")
 local whichkey = require("hypr.lib.whichkey")
 local trace = require("hypr.lib.trace")
 local scene_spec = require("hypr.scene.spec")
+local home = require("hypr.scene.home")
 local nav = require("hypr.lib.nav")
 
 local M = {}
@@ -453,6 +454,41 @@ local function check_reachable(mode, admitted, moves)
   return #violations
 end
 
+---Re-home every live window a scene admitted by this mode claims but that
+---does not stand on that scene's workspace (LEO-353): a claimed window opened
+---or was left standing on the wrong scene while nothing admitted claimed it
+---yet. Address-targeted, unfollowed, one dispatch per window — the same move
+---`hypr/events/scene.lua` uses for a window claimed on open.
+---@param mode string
+---@param admitted table<string, true> scene/workspace names this mode admits
+---@return table<string, string> address -> destination, for the reachability projection
+local function collect_home(mode, admitted)
+  local specs = scene_spec.load()
+  local moved = {}
+  for _, w in ipairs(hl.get_windows() or {}) do
+    local decision = home.decide(specs, admitted, w)
+    if decision.action == "move" and w.address then
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. w.address,
+        workspace = "name:" .. decision.workspace,
+        follow = false,
+      }))
+      moved[w.address] = decision.workspace
+      trace.emit({
+        stage = "route",
+        event = "collected",
+        decision = "move",
+        reason = "claimed by " .. decision.workspace,
+        mode = mode,
+        window = w.address,
+        class = w.class,
+        workspace = decision.workspace,
+      })
+    end
+  end
+  return moved
+end
+
 ---Whether an apply is running right now; the watcher skips its tick then.
 ---@return boolean
 function M.applying()
@@ -577,6 +613,13 @@ apply_mode = function(mode)
 
   applied = mode
   applied_desk = desk
+
+  -- Bring every claimed window home, whatever workspace it drifted to while
+  -- nothing admitted claimed it (LEO-353). Folded into `moves` so the
+  -- reachability projection below judges where these windows are going.
+  for address, workspace in pairs(collect_home(mode, admitted)) do
+    moves[address] = workspace
+  end
 
   local unreachable = check_reachable(mode, admitted, moves)
 

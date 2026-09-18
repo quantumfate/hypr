@@ -10,11 +10,13 @@
 --- collect via schedule+model+actuator) is retired (LEO-261): geometry now
 --- comes only from the registered layout provider, which the compositor
 --- calls directly and which is covered by scene_layout_spec/scene_provider_spec.
+--- Re-homing a claimed window is now its own route decision
+--- (hypr/scene/home.lua, LEO-353), not a declaration flag on the block.
 local t = require("tests.harness")
 
 local GAMING = {
   blocks = {
-    { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true },
+    { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67 },
     { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
   },
   barred = { "steam_app_default" },

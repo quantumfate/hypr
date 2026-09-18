@@ -240,11 +240,39 @@ Which member `mod+j/k` steps to next/prev inside a group is a separate decision 
 
 `barred` at scene level lists classes that legitimately open on the workspace without belonging to any block — a game, a launcher overlay. `compile.lua` still stamps a `barred:<name>` identity tag (scoped to the scene's own workspace, same as above) so a reader can recognize a deliberately unblocked class, but — per the timing fact above — no rule chains a group effect off it; a barred class reaching the block's group is instead the executor's `eject` case, the same path a plain foreigner takes.
 
-## Collect
+## Re-homing (LEO-353)
 
-`collect = true` on a member: declares that a window which drifted to another workspace should come home. **Not executed today** — the corrective engine that read this flag (`schedule.lua` + `model.lua` + `actuator.lua`) is retired (LEO-261). Collection becomes a **route decision** instead (LEO-353): the routing step sends a member's window to its scene's workspace at open/move time, rather than a pass that watches for drift and moves it back.
+A window claimed by one of a scene's blocks — its class matches, and, for a
+`slot` block, it already carries that slot's tag — is re-homed to that
+scene's workspace **unconditionally**, whenever it opens and whenever a mode
+applies. This replaced `collect`, a per-block opt-in flag the retired
+corrective engine (`schedule.lua` + `model.lua` + `actuator.lua`, LEO-261)
+used to read and nothing since ever executed: the flag is gone from the
+schema. A claimed window left on the wrong workspace was always a bug, never
+a preference a block author needed to opt into — `proton-mail`, a project
+terminal and a stray each drifted onto `obsidian-linear` under `work` for
+exactly this reason before LEO-353.
 
-Ownership was earned by **mapping into the scene**, never by matching its classes — otherwise a terminal you deliberately moved elsewhere gets dragged back. A dormant scene (no member home) collected nothing, and a member parked on a special workspace was hidden on purpose. LEO-353's route decision keeps that distinction.
+Only a scene **active in the current mode** ever claims a window this way — a
+scene the mode does not admit never pulls a window off wherever it stands.
+Ownership is earned by **mapping into an active scene**, never by matching a
+class alone: a class no active scene's block claims is left exactly where it
+is (still subject to grouping/stray-float on its own workspace, unchanged).
+A window on a special workspace (a shelf drawer, the engine's own hold area)
+is never touched — that workspace's owner, not this decision, decides its
+fate.
+
+The decision is pure (`hypr/scene/home.lua`), executed address-targeted with
+`follow = false` — never a focus-dance, never a loop or timer — from two call
+sites: `hypr/events/scene.lua`'s `window.open` handler (before grouping/
+stray-float run, so a window about to leave is never arranged into the
+workspace it is leaving) and `hypr/hyprfocus/init.lua`'s mode `apply`, after
+placement, so a claimed window already standing on the wrong workspace when a
+mode is entered is swept home too. A window moved to another workspace **by
+hand** (`window.move_to_workspace` from a deliberate drag or bind) does not
+re-fire this decision — the same "arrival is never intent by itself" rule
+transitions already follow (see desktop-model.md) — so a window you moved
+away stays where you put it until the next open or mode apply.
 
 ## Companions
 
@@ -298,7 +326,6 @@ the contract below is the schema it edits against.
 | `group`   | boolean                               | one Hyprland group containing only these classes                                                         |
 | `order`   | integer                               | left-to-right tile sequence                                                                              |
 | `share`   | number?                               | fraction of the tiled span this block holds                                                              |
-| `collect` | boolean                               | bring drifted members back to this workspace                                                             |
 | `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping                                                                   |
 | `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                                                                               |
 | `slot`    | string?                               | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
@@ -451,7 +478,7 @@ declared order.
 ```lua
 dofus = {
   blocks = {
-    { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67, collect = true,
+    { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67,
       spawn = { class = "zen-gaming-media", command = "zen-twilight -P GamingMedia --name zen-gaming-media" } },
     { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
   },

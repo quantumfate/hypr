@@ -16,7 +16,6 @@ local M = {}
 ---@field group boolean all matching windows live in one Hyprland group
 ---@field order integer position in the left-to-right tile sequence
 ---@field share number? fraction of the workspace's tiled span this block holds
----@field collect boolean pull members that drifted to another workspace back home
 ---@field guard "barred"|"deny" how a non-group block resists being grouped
 ---@field spawn Scene.Companion? the companion window this block's presence keeps alive
 ---@field slot string? identity suffix (LEO-364): with this set, the block only
@@ -50,9 +49,6 @@ local function normalize(name, raw)
       group = block.group == true,
       order = block.order or i,
       share = block.share,
-      -- Collection drags a window across workspaces, so it is opt-in: the
-      -- default is that a window you moved away stays where you put it.
-      collect = block.collect == true,
       -- `barred` keeps auto_group from swallowing the window on open; `deny`
       -- additionally refuses a deliberate group toggle, for a tile whose
       -- whole job is to be a fixed region beside a group.
