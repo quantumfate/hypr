@@ -63,6 +63,6 @@ fit rule).
 | `kancolle-warship-girl-2560x1440.jpg`    | https://wallhaven.cc/w/962821 |
 | `study-room-night-2560x1440.jpg`         | https://wallhaven.cc/w/391593 |
 | `autumn-kimono-girl-3840x2160.png`       | https://wallhaven.cc/w/oxv6gl |
-| `cozy-night-room-1280x800.jpg`          | https://wallhaven.cc/w/4lq9ll |
+| `cozy-night-room-1280x800.jpg`           | https://wallhaven.cc/w/4lq9ll |
 | `firefly-night-lake-1280x800.jpg`        | https://wallhaven.cc/w/4xd93v |
 | `gengar-painterly-1280x800.jpg`          | https://wallhaven.cc/w/429l86 |
