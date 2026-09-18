@@ -50,7 +50,6 @@ windowrule.tag_set_effects("proton", {
 })
 windowrule.tag_props({
   { initial_class = "(Archon App)" },
-  { initial_class = "(ckb-next)" },
   { initial_class = apps.package_manager_ui.class },
 }, "misc")
 
@@ -110,7 +109,6 @@ windowrule.tag_props({
   { initial_class = [[(org\.keepassxc\.KeePassXC)]], title = "(Unlock Database - KeePassXC)" },
   { initial_class = "com.github.hluk.copyq" },
   { initial_class = apps.package_manager_ui.class },
-  { initial_class = "ckb-next" },
 }, "+medium-floating-window")
 
 windowrule.tag_set_effects("medium-floating-window", {

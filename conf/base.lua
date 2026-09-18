@@ -75,6 +75,7 @@ return {
       scene = "dofus",
     },
     { name = "music", key = "m", class = "([Ss]potify)", cmd = "spotify", desc = "Spotify" },
+    { name = "ckb-next", key = "k", class = "ckb-next", cmd = "ckb-next", desc = "ckb-next" },
   },
   ---@type table<string, AppScope>
   apps = {
