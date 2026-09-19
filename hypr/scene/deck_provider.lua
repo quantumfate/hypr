@@ -257,6 +257,58 @@ function M.place(scene, scene_name, ctx)
   end
 end
 
+---Bring a deck scene's windows to where its scroll says they belong, from
+---OUTSIDE a layout callback.
+---
+---`M.place` already computes this, but it runs inside `recalculate`, and a
+---window move dispatched from there only lands when a real compositor event
+---drove the pass -- a `layoutmsg`-driven recalculate silently drops them
+---(verified live: closing a window left its column empty for as long as you
+---like, while switching workspace and back fixed it instantly). So an event
+---handler calls this instead: it dispatches only the moves, and the
+---compositor's own recalculate that each move triggers does the placing.
+---@param scene_name string workspace/scene name
+function M.reconcile(scene_name)
+  local scenes = spec_lib.load()
+  local scene = scenes and scenes[scene_name]
+  if not scene or not deck.applies(scene) then
+    return
+  end
+  local area
+  for _, m in ipairs(hl.get_monitors() or {}) do
+    local ws = m.active_workspace
+    if ws and (ws.name or ws) == scene_name then
+      area = { x = m.x, y = m.y, w = m.width, h = m.height }
+      break
+    end
+  end
+  if not area then
+    return
+  end
+  local tiles, workspace_of = member_tiles(scene)
+  local gaps_in, gaps_out = gaps(scene_name)
+  local boxes, hold = deck.boxes(scene, tiles, area, {
+    gaps_in = gaps_in,
+    gaps_out = gaps_out,
+    scroll = deck_scroll.get_all(scene_name),
+  })
+  for _, box in ipairs(boxes) do
+    if workspace_of[box.address] ~= scene_name then
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. box.address,
+        workspace = "name:" .. scene_name,
+        follow = false,
+      }))
+    end
+  end
+  for _, address in ipairs(hold) do
+    local at = workspace_of[address]
+    if at and at ~= HOLD then
+      hl.dispatch(hl.dsp.window.move({ window = "address:" .. address, workspace = HOLD, follow = false }))
+    end
+  end
+end
+
 ---Register with whatever the host declares. Separate from `register` so
 ---tests can drive the provider with their own scenes.
 function M.attach()

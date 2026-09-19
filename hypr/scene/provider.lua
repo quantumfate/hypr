@@ -310,7 +310,19 @@ function M.attach()
   -- deferred redraw closes that gap; the tick lets the compositor finish
   -- removing the window first, so the pass sees the stack it actually left.
   hl.on("window.close", function()
-    require("hypr.lib.hypr").oneshot(1, M.recalculate_focused)
+    -- `recalculate_focused` is not enough on a deck scene: it redraws, but a
+    -- window move dispatched from inside that pass does not land (see
+    -- `deck_provider.reconcile`), so the column the closed window occupied
+    -- stayed empty while its replacement sat parked. Reconcile the moves from
+    -- out here, then redraw. The tick lets the compositor finish removing the
+    -- window first, so the pass sees the stack it actually left.
+    require("hypr.lib.hypr").oneshot(1, function()
+      local ws = hl.get_active_workspace()
+      if ws and ws.name then
+        require("hypr.scene.deck_provider").reconcile(ws.name)
+      end
+      M.recalculate_focused()
+    end)
   end)
 end
 
