@@ -3,6 +3,15 @@ local qs = require("hypr.lib.qs")
 local watch = require("hypr.hyprfocus.watch")
 local hyprfocus = require("hypr.hyprfocus")
 
+-- Wired here, as a plain top-level call, not from inside the
+-- `hl.on("hyprland.start", ...)` handler below: that event fires once per
+-- compositor process (verified live), so `watch.attach()`'s own
+-- subscriptions never run again after the first `hyprctl reload` -- this
+-- module's top-level statements do (every `require()` re-executes them), so
+-- this is what keeps LEO-400's capture/restore hooks alive across every
+-- later reload too.
+require("hypr.hyprfocus.focus_history").attach()
+
 -- Same desk every morning: whichever project carries `study` in projects.json
 -- gets opened (its own window template decides the nvim window). Purely a
 -- convenience on top of two stores that may not exist yet on a fresh

@@ -64,6 +64,8 @@ M.MONITOR_ROLES = { primary = true, secondary = true }
 ---@class Hyprfocus.Desk
 ---@field mode string
 ---@field hidden boolean
+---@field main string? the scene this mode calls home (LEO-400); one of this
+---mode's own `scenes`, or nil for a declaration that predates it
 ---@field scenes Hyprfocus.Placement[] the active set, declaration order
 ---@field scene_specs table<string, table> catalog entries of the active set
 ---@field workspaces string[] derived: the active set's names
@@ -262,6 +264,15 @@ function M.validate(declaration, mode)
       end
     end
   end
+
+  -- `main` (LEO-400) names the scene this mode calls home -- the fallback a
+  -- reload restore or a fresh mode entry lands on. Optional for now (a
+  -- pre-LEO-400 declaration has none), but when present it must be one of
+  -- THIS mode's own admitted scenes: naming one the mode does not list would
+  -- make the fallback itself unreachable.
+  if spec.main ~= nil and not listed[spec.main] then
+    return refusal(mode, "unknown_main", ("main '%s' is not one of this mode's own scenes"):format(tostring(spec.main)))
+  end
   return nil
 end
 
@@ -388,6 +399,7 @@ function M.resolve(declaration, mode)
   local desk = {
     mode = mode,
     hidden = spec.hidden == true,
+    main = spec.main,
     scenes = {},
     scene_specs = {},
     workspaces = {},

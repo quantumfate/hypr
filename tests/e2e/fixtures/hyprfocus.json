@@ -62,6 +62,7 @@
     "neutral": {
       "name": "Neutral",
       "hidden": true,
+      "main": "grouped",
       "scenes": [
         { "name": "grouped", "monitor": "primary" },
         { "name": "loose", "monitor": "primary" },
@@ -71,6 +72,7 @@
     },
     "work": {
       "name": "Work",
+      "main": "loose",
       "scenes": [
         { "name": "grouped", "monitor": "primary" },
         { "name": "loose", "monitor": "primary" },
@@ -80,10 +82,12 @@
     },
     "study": {
       "name": "Study",
+      "main": "grouped",
       "scenes": [{ "name": "grouped", "monitor": "primary" }]
     },
     "gaming": {
       "name": "Gaming",
+      "main": "arena",
       "scenes": [
         { "name": "arena", "monitor": "primary" },
         { "name": "grouped", "monitor": "primary" }

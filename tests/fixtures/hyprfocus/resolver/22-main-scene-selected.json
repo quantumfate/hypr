@@ -1,0 +1,92 @@
+{
+  "name": "a mode's declared main scene resolves onto the desk (LEO-400)",
+  "declaration": {
+    "base": {
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "notify": {},
+      "scenes": {
+        "code": {
+          "blocks": []
+        },
+        "gaming": {
+          "blocks": []
+        },
+        "media": {
+          "blocks": []
+        }
+      }
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "main": "code",
+        "scenes": [
+          {
+            "name": "gaming",
+            "monitor": "primary"
+          },
+          {
+            "name": "code",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "x",
+  "expected": {
+    "mode": "x",
+    "hidden": false,
+    "main": "code",
+    "scenes": [
+      {
+        "name": "gaming",
+        "monitor": "primary"
+      },
+      {
+        "name": "code",
+        "monitor": "primary"
+      }
+    ],
+    "scene_specs": {
+      "gaming": {
+        "blocks": []
+      },
+      "code": {
+        "blocks": []
+      }
+    },
+    "workspaces": [
+      "gaming",
+      "code"
+    ],
+    "bindings": [
+      "root",
+      "dofus"
+    ],
+    "services": [
+      "obsidian",
+      "obsidian-index",
+      "state-backup"
+    ],
+    "projects": [
+      "obsidian",
+      "quantumnix"
+    ],
+    "notify": {},
+    "revoke": {},
+    "presentation": {}
+  }
+}

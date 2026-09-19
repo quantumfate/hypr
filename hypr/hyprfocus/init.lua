@@ -697,6 +697,30 @@ apply_mode = function(mode)
     nil
 end
 
+---Land on a mode's declared `main` scene (LEO-400) at the two moments the
+---issue names as legitimate: a genuine mode entry (`M.enter`) and session
+---start (`M.boot`, both its resume and enter-work branches). Never called
+---from `M.converge` alone, which the watcher also uses to re-apply a mode
+---that has not actually changed — that path must stay focus-neutral, or
+---every watcher tick would pull focus home while the user works elsewhere.
+---@param desk Hyprfocus.Desk?
+local function focus_mode_entry(desk)
+  if not desk or not desk.main then
+    return
+  end
+  local ok = pcall(function()
+    hl.dispatch(hl.dsp.focus({ workspace = "name:" .. desk.main }))
+  end)
+  trace.emit({
+    stage = "admit",
+    event = "main_focused",
+    decision = ok and "focus" or "skip",
+    reason = "mode entry falls back to the declared main scene",
+    mode = desk.mode,
+    workspace = desk.main,
+  })
+end
+
 ---Enter a mode: record it, apply this runtime's half, and hand the rest to the
 ---command line.
 ---
@@ -761,7 +785,11 @@ function M.enter(mode, source, until_at)
     end)
   end
 
-  return M.converge(mode)
+  local report, apply_err = M.converge(mode)
+  if report then
+    focus_mode_entry(M.applied_desk())
+  end
+  return report, apply_err
 end
 
 ---Decide and apply what login should do (`hypr/hyprfocus/boot.lua`): enter
@@ -779,7 +807,15 @@ function M.boot()
   local pointer = ok and handle:get() or nil
   local action, mode = boot.decide(pointer, declaration.modes or {}, expired)
   if action == "resume" then
-    return M.converge(mode)
+    -- `M.enter` also focuses main on success; a resuming boot skips it and
+    -- calls the same fallback directly, since resume must not go through
+    -- `enter`'s pointer rewrite (that would clobber the timed mode's own
+    -- `until`/`previous`).
+    local report, apply_err = M.converge(mode)
+    if report then
+      focus_mode_entry(M.applied_desk())
+    end
+    return report, apply_err
   end
   return M.enter(mode, "boot")
 end

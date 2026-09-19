@@ -1,0 +1,50 @@
+{
+  "name": "a main naming a scene the mode itself does not admit refuses (LEO-400)",
+  "declaration": {
+    "base": {
+      "bindings": [
+        "root",
+        "dofus"
+      ],
+      "services": [
+        "obsidian",
+        "obsidian-index",
+        "state-backup"
+      ],
+      "projects": [
+        "obsidian",
+        "quantumnix"
+      ],
+      "notify": {},
+      "scenes": {
+        "code": {
+          "blocks": []
+        },
+        "gaming": {
+          "blocks": []
+        },
+        "media": {
+          "blocks": []
+        }
+      }
+    },
+    "modes": {
+      "x": {
+        "name": "X",
+        "main": "media",
+        "scenes": [
+          {
+            "name": "gaming",
+            "monitor": "primary"
+          },
+          {
+            "name": "code",
+            "monitor": "primary"
+          }
+        ]
+      }
+    }
+  },
+  "mode": "x",
+  "expected_error": "unknown_main"
+}

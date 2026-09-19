@@ -80,6 +80,12 @@ assert_state study "e2e-aside,e2e-tile"
 # effective_mode reads `until` as already past, so the next convergence tick
 # (any of the watcher's subscribed events) must resolve to `previous`
 # (work), not to `study` and never to `neutral`.
+#
+# Study's declared main is "grouped" (LEO-400), and entering it already
+# landed focus there -- `go_workspace grouped` alone would then be a no-op
+# and fire no `workspace.active` at all. Hop through a scratch workspace
+# first so the return to `grouped` is a genuine transition.
+go_workspace leo400-scratch
 go_workspace grouped # fires workspace.active, which the watcher listens on
 none_held() { hc -j clients | jq -e 'map(select(.workspace.name == "special:hyprfocus-held")) | length == 0' >/dev/null; }
 wait_until 50 none_held ||

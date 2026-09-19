@@ -252,6 +252,16 @@ def validate(declaration: dict, mode: str) -> dict | None:
                         **{"class": cls, "scenes": [owner, name]},
                     )
                 claimed_by[key] = name
+
+    # `main` (LEO-400): the scene this mode calls home. Optional (a
+    # pre-LEO-400 declaration has none), but when present it must be one of
+    # THIS mode's own admitted scenes -- naming one the mode does not list
+    # would make the fallback itself unreachable.
+    main = spec.get("main")
+    if main is not None and main not in listed:
+        return refusal(
+            mode, "unknown_main", f"main '{main}' is not one of this mode's own scenes"
+        )
     return None
 
 
@@ -273,6 +283,11 @@ def resolve(declaration: dict, mode: str) -> dict:
         "scene_specs": {p["name"]: base["scenes"][p["name"]] for p in placements},
         "workspaces": [p["name"] for p in placements],
     }
+    # Mirrors Lua's `desk.main = spec.main`: a key present only when the mode
+    # declares one, so a fixture predating LEO-400 (no `main` in `expected`)
+    # still compares equal.
+    if spec.get("main") is not None:
+        desk["main"] = spec["main"]
     removed: dict[str, set[str]] = {}
     for kind in KINDS:
         desk[kind] = apply_delta(
