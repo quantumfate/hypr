@@ -3,3 +3,14 @@
 # (qs, notify-send, uwsm, systemctl, setxkbmap, ,hyprfocus): lib.sh links each
 # name here on a PATH that shadows the real one, and every call is logged.
 echo "$(basename "$0") $*" >>"${E2E_STUB_LOG:-/dev/null}"
+
+# `uwsm app -- CMD...` is a scoping wrapper around a real command, not an
+# action of its own (unlike qs/notify-send/systemctl/setxkbmap/,hyprfocus,
+# which really must not run for real here) — a nested test session has no
+# login manager for it to scope into, but the CMD it wraps is exactly the
+# window a scenario is waiting for. So this one name runs its payload for
+# real, logged the same as any other stubbed call.
+if [ "$(basename "$0")" = uwsm ] && [ "$1" = app ] && [ "$2" = -- ]; then
+    shift 2
+    exec "$@"
+fi

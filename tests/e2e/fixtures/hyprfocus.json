@@ -49,6 +49,12 @@
         "columns": [{ "order": 1, "share": 1, "classes": ["e2e%-deck%-.*"] }],
         "barred": [],
         "bindings": []
+      },
+      "code": {
+        "blocks": [{ "classes": ["Proj%-.*"], "group": true, "order": 1, "share": 1 }],
+        "barred": [],
+        "strays": "slot",
+        "bindings": []
       }
     }
   },

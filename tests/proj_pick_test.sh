@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# Functional tests for `,proj.sh pick` (LEO-377): no separate picker window.
-#
-# Inside tmux, fzf runs in a `tmux display-popup`. From a Hyprland bind with no
-# terminal at all, exactly one project-classed window opens with fzf as its
-# first screen, and that SAME window becomes the project session — never a
-# picker window plus a second one.
-#
-# The real desktop is never touched: `tmux`, `kitty` and `fzf` are all faked
-# via PATH, and PATH carries nothing else but the handful of real tools the
-# script needs (real `hyprctl`/`notify-send`/`uwsm` are deliberately absent —
-# there is no live compositor here, so the script must fall back cleanly, the
-# same way it does on a bare tty).
+# Functional tests for `,proj.sh`: no tmux, no sockets — a
+# project is a set of kitty windows Hyprland groups by class. This replaces
+# the tmux-session-era version of this test: `pick`/`open` now spawn kitty
+# windows directly and the project list comes from the store, so the fakes
+# below are `hyprctl` (window state + dispatch), `kitty` (spawns are just
+# logged + registered), `fzf` (a scripted pick) and `nvim` (a graceful-quit
+# stand-in using a real AF_UNIX socket, so the `-S` check in `,proj.sh`
+# exercises the real code path). Real `jq`/`fd`/`python3` are used — nothing
+# else reaches outside PATH.
 
 set -euo pipefail
 
@@ -66,10 +63,9 @@ count_lines() { # $1 = file -> 0 for a missing/empty file
     wc -l <"$1"
 }
 
-# A scratch desk, a fake project, and a PATH holding only real tools the
-# script actually needs plus three fakes: `tmux` (session bookkeeping, no
-# real server), `kitty` (runs its `-e` command right here, no window), and
-# `fzf` (prints $FZF_PICK_CHOICE, or "cancels" when unset).
+# A scratch desk, a fake project, and a PATH holding only the real tools the
+# script needs (fd, jq, python3, …) plus fakes for the four things a real
+# desktop would supply: `kitty`, `fzf`, `hyprctl` and `nvim`.
 setup() {
     ROOT=$(mktemp -d)
     export XDG_STATE_HOME="$ROOT/state"
@@ -81,7 +77,7 @@ setup() {
         "$QF_STORE" "$XDG_CONFIG_HOME/tms"
 
     PROJDIR="$ROOT/repos/demo"
-    mkdir -p "$PROJDIR"
+    mkdir -p "$PROJDIR/.git"
     cat >"$XDG_CONFIG_HOME/tms/config.toml" <<EOF
 excluded_dirs = [".git"]
 bookmarks = ["$PROJDIR"]
@@ -90,7 +86,8 @@ EOF
     FAKEBIN="$ROOT/bin"
     mkdir -p "$FAKEBIN"
     for tool in fd jq awk sed grep cut sort tr mktemp stat date cksum paste wc \
-        mkdir cat mv rm touch readlink basename dirname tty pgrep id env bash sh printf true false; do
+        mkdir cat mv rm touch readlink basename dirname tty pgrep pkill id env bash sh \
+        printf true false python3 sleep seq xargs; do
         real=$(command -v "$tool" 2>/dev/null) || continue
         ln -sf "$real" "$FAKEBIN/$tool"
     done
@@ -100,124 +97,137 @@ EOF
     export HOME="$ROOT/home"
     mkdir -p "$HOME"
 
-    TMUX_LOG="$ROOT/tmux.log"
-    TMUX_STATE="$ROOT/tmux-state"
-    mkdir -p "$TMUX_STATE"
-    : >"$TMUX_LOG"
-    export TMUX_FAKE_LOG="$TMUX_LOG" TMUX_FAKE_STATE="$TMUX_STATE"
-    cat >"$FAKEBIN/tmux" <<'FAKE_TMUX'
-#!/usr/bin/env bash
-# Fake tmux: no real server. Records every call and keeps just enough state
-# (which session names exist per socket) for ,proj.sh's pick/open to run to
-# completion without a terminal.
-printf '%s\n' "$*" >>"$TMUX_FAKE_LOG"
+    # --- fake hyprctl: window state lives in one JSON file, dispatches are
+    # logged and mutate it exactly like the real compositor's effects would.
+    HYPR_LOG="$ROOT/hyprctl.log"
+    HYPR_CLIENTS="$ROOT/clients.json"
+    HYPR_ACTIVE="$ROOT/active.txt"
+    : >"$HYPR_LOG"
+    printf '[]' >"$HYPR_CLIENTS"
+    : >"$HYPR_ACTIVE"
+    export HYPR_FAKE_LOG="$HYPR_LOG" HYPR_FAKE_CLIENTS="$HYPR_CLIENTS" HYPR_FAKE_ACTIVE="$HYPR_ACTIVE"
+    cat >"$FAKEBIN/hyprctl" <<'FAKE_HYPRCTL'
+#!/usr/bin/env python3
+import json, os, re, subprocess, sys
 
-sock=default
-rest=()
-while [[ $# -gt 0 ]]; do
-    if [[ $1 == -L ]]; then
-        sock=$2
-        shift 2
-        continue
-    fi
-    rest+=("$1")
-    shift
-done
-set -- "${rest[@]}"
-sessions="$TMUX_FAKE_STATE/sessions-$sock"
-touch "$sessions"
+LOG = os.environ["HYPR_FAKE_LOG"]
+CLIENTS = os.environ["HYPR_FAKE_CLIENTS"]
+ACTIVE = os.environ["HYPR_FAKE_ACTIVE"]
 
-find_opt() { # $1 = flag, then "$@" to scan -> its value on stdout
-    local flag=$1
-    shift
-    while [[ $# -gt 0 ]]; do
-        if [[ $1 == "$flag" ]]; then
-            printf '%s' "${2-}"
-            return 0
-        fi
-        shift
-    done
-    return 1
-}
+def clients():
+    with open(CLIENTS) as f:
+        return json.load(f)
 
-cmd=${1-}
-[[ $# -gt 0 ]] && shift
-case "$cmd" in
-has-session)
-    t=$(find_opt -t "$@")
-    t=${t#=}
-    grep -qxF "$t" "$sessions"
-    ;;
-new-session)
-    name=$(find_opt -s "$@")
-    if [[ -n $name ]] && ! grep -qxF "$name" "$sessions"; then
-        printf '%s\n' "$name" >>"$sessions"
-    fi
-    ;;
-new-window | set-option | select-window | kill-session | detach-client | switch-client)
-    exit 0
-    ;;
-list-sessions)
-    while IFS= read -r s; do
-        [[ -n $s ]] && printf '%s\t0\n' "$s"
-    done <"$sessions"
-    ;;
-list-clients)
-    exit 0
-    ;;
-attach-session)
-    # No real client ever attaches in a test: fail fast, like a detached run.
-    exit 1
-    ;;
-display-popup)
-    while [[ $# -gt 0 && $1 != -- ]]; do
-        shift
-    done
-    [[ $# -gt 0 ]] && shift
-    "$@"
-    ;;
-*)
-    exit 0
-    ;;
-esac
-FAKE_TMUX
-    chmod +x "$FAKEBIN/tmux"
+def save(cs):
+    with open(CLIENTS, "w") as f:
+        json.dump(cs, f)
 
+with open(LOG, "a") as f:
+    f.write(" ".join(sys.argv[1:]) + "\n")
+
+def unescape_lua_str(s):
+    # Reverses proj.sh's `lua_str`: literal `\` doubled, literal `"` escaped
+    # as `\"`. A left-to-right scan avoids any ambiguity a chained
+    # str.replace would have between the two escapes.
+    out = []
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s) and s[i + 1] in ('"', "\\"):
+            out.append(s[i + 1])
+            i += 2
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+args = sys.argv[1:]
+if args[:1] == ["clients"]:
+    sys.stdout.write(json.dumps(clients()))
+elif args[:1] == ["activewindow"]:
+    addr = open(ACTIVE).read().strip()
+    for c in clients():
+        if c["address"] == addr:
+            sys.stdout.write(json.dumps(c))
+            break
+    else:
+        sys.stdout.write("{}")
+elif args[:1] == ["dispatch"]:
+    expr = args[1]
+    m = re.match(r'hl\.dsp\.exec_cmd\("(.*)"\)$', expr, re.S)
+    if m:
+        cmd = unescape_lua_str(m.group(1))
+        # Strip a leading "[workspace name:...]" placement prefix — not
+        # meaningful outside a real compositor.
+        cmd = re.sub(r'^\[[^\]]*\]\s*', "", cmd)
+        subprocess.Popen(["bash", "-c", cmd], start_new_session=True)
+    m = re.match(r'hl\.dsp\.window\.tag\(\{ window = "address:([^"]+)", tag = "\+([^"]+)" \}\)$', expr)
+    if m:
+        addr, tag = m.group(1), m.group(2)
+        cs = clients()
+        for c in cs:
+            if c["address"] == addr:
+                c.setdefault("tags", [])
+                if tag not in c["tags"]:
+                    c["tags"].append(tag)
+        save(cs)
+    m = re.match(r'hl\.dsp\.focus\(\{ window = "address:([^"]+)" \}\)$', expr)
+    if m:
+        open(ACTIVE, "w").write(m.group(1))
+    m = re.match(r'hl\.dsp\.window\.close\("address:([^"]+)"\)$', expr)
+    if m:
+        addr = m.group(1)
+        save([c for c in clients() if c["address"] != addr])
+FAKE_HYPRCTL
+    chmod +x "$FAKEBIN/hyprctl"
+
+    # --- fake kitty: registers a client (class, fresh address) instead of
+    # opening a real window, then runs its "-e" command like the old fake did
+    # (so it can see straight through to what that command did).
     KITTY_LOG="$ROOT/kitty.log"
     : >"$KITTY_LOG"
     export KITTY_FAKE_LOG="$KITTY_LOG"
     cat >"$FAKEBIN/kitty" <<'FAKE_KITTY'
-#!/usr/bin/env bash
-# Fake kitty: never opens a real window. Runs its `-e` command right here, so
-# a test can see straight through to what that command actually did.
-printf '%s\n' "$*" >>"$KITTY_FAKE_LOG"
-cmd=()
-found=0
-while [[ $# -gt 0 ]]; do
-    if [[ $1 == -e ]]; then
-        shift
-        cmd=("$@")
-        found=1
+#!/usr/bin/env python3
+import json, os, sys, itertools
+
+log = os.environ["KITTY_FAKE_LOG"]
+with open(log, "a") as f:
+    f.write(" ".join(sys.argv[1:]) + "\n")
+
+argv = sys.argv[1:]
+klass = ""
+cmd = []
+i = 0
+while i < len(argv):
+    if argv[i] == "--class":
+        klass = argv[i + 1]
+        i += 2
+    elif argv[i] == "-e":
+        cmd = argv[i + 1 :]
         break
-    fi
-    shift
-done
-((found)) || exit 0
-exec "${cmd[@]}"
+    else:
+        i += 1
+
+clients_path = os.environ["HYPR_FAKE_CLIENTS"]
+with open(clients_path) as f:
+    cs = json.load(f)
+addr = "0x%x" % (len(cs) + 1)
+cs.append({"address": addr, "class": klass, "tags": []})
+with open(clients_path, "w") as f:
+    json.dump(cs, f)
+
+if cmd:
+    os.execvp(cmd[0], cmd)
 FAKE_KITTY
     chmod +x "$FAKEBIN/kitty"
 
+    # --- fake fzf: prints $FZF_PICK_CHOICE, or "cancels" (exit 130) when unset.
     FZF_LOG="$ROOT/fzf.log"
     : >"$FZF_LOG"
     export FZF_FAKE_LOG="$FZF_LOG"
     cat >"$FAKEBIN/fzf" <<'FAKE_FZF'
 #!/usr/bin/env bash
-# Fake fzf: prints $FZF_PICK_CHOICE (simulating a pick), or "cancels" (fzf's
-# own exit-130 convention) when it is unset.
 printf '%s\n' "$*" >>"$FZF_FAKE_LOG"
-# Drain stdin: real fzf always reads its whole input, and an upstream `cut`
-# left writing into a closed pipe would SIGPIPE — a spurious pipefail failure
-# that has nothing to do with the pick itself.
 cat >/dev/null
 if [[ -n ${FZF_PICK_CHOICE-} ]]; then
     printf '%s\n' "$FZF_PICK_CHOICE"
@@ -227,59 +237,218 @@ exit 130
 FAKE_FZF
     chmod +x "$FAKEBIN/fzf"
 
+    # --- fake nvim: `--listen SOCK` binds a real AF_UNIX socket and holds it
+    # open; `--server SOCK --remote-send ...` (,proj.sh's graceful-quit) drops
+    # a request file the listener polls for. $NVIM_FAKE_UNSAVED=1 makes the
+    # listener treat that request as an unsaved-buffer prompt: it stays open
+    # instead of quitting, exactly like a real `:confirm qa` would.
+    cat >"$FAKEBIN/nvim" <<'FAKE_NVIM'
+#!/usr/bin/env python3
+import os, socket, sys, time
+
+argv = sys.argv[1:]
+if argv[:1] == ["--listen"]:
+    sock_path = argv[1]
+    try:
+        os.remove(sock_path)
+    except FileNotFoundError:
+        pass
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.bind(sock_path)
+    s.listen(1)
+    req = sock_path + ".request"
+    unsaved = os.environ.get("NVIM_FAKE_UNSAVED") == "1"
+    for _ in range(200):  # ~10s ceiling so a stuck test fails fast, not hangs
+        if os.path.exists(req):
+            os.remove(req)
+            if unsaved:
+                open(sock_path + ".prompted", "w").close()
+                continue  # stays open: the "confirm" dialog is up
+            break
+        time.sleep(0.05)
+    s.close()
+    try:
+        os.remove(sock_path)
+    except FileNotFoundError:
+        pass
+    # A clean quit ends nvim's process, which (since kitty execvp'd straight
+    # into it) is the window's only process — so the window itself is gone
+    # too, exactly like a real compositor would report it.
+    clients_path = os.environ.get("HYPR_FAKE_CLIENTS")
+    if clients_path:
+        import json
+        with open(clients_path) as f:
+            cs = json.load(f)
+        cs = [c for c in cs if "slot:nvim" not in c.get("tags", [])]
+        with open(clients_path, "w") as f:
+            json.dump(cs, f)
+elif argv[:1] == ["--server"]:
+    open(argv[1] + ".request", "w").close()
+FAKE_NVIM
+    chmod +x "$FAKEBIN/nvim"
+
     OLD_PATH=$PATH
     export PATH="$FAKEBIN"
 }
 
 teardown() {
+    # nvim's fake listener may still be running (an "unsaved" test leaves it
+    # deliberately blocked) — nothing but this test tree depends on it.
+    pkill -f "$ROOT" 2>/dev/null || true
     export PATH="$OLD_PATH"
-    unset FZF_PICK_CHOICE TMUX HERE INLINE
+    unset FZF_PICK_CHOICE NVIM_FAKE_UNSAVED
     rm -rf "$ROOT"
 }
 
-sessions_for() { # $1 = socket -> its session names, one per line
-    cat "$TMUX_STATE/sessions-$1" 2>/dev/null
+clients_json() { cat "$HYPR_CLIENTS"; }
+
+# The nvim role's fake daemon binds its socket a beat after the client entry
+# appears (client registration happens before `nvim --listen` even starts) —
+# `kill` must not race that, or it reads "no socket yet" as "not nvim".
+wait_for_nvim_sock() { # $1 = class
+    local sock="$XDG_RUNTIME_DIR/proj-nvim/$1.sock"
+    for _ in $(seq 1 40); do
+        [ -S "$sock" ] && return 0
+        sleep 0.05
+    done
+    return 1
 }
 
-echo "inside tmux: pick opens a popup, never a picker window"
+# `,proj.sh open` tags each spawned window one at a time, in the background
+# (`spawn_missing`, so a client-count check alone can pass while a later role
+# is still untagged) — anything that reads role tags (`kill` included) must
+# wait for every expected tag, not just the window count.
+wait_for_tags() { # $1 = expected "slot:a,slot:b,..." (sorted, comma-joined)
+    for _ in $(seq 1 60); do
+        [ "$(clients_json | jq -r '[.[].tags[]?] | sort | join(",")')" = "$1" ] && return 0
+        sleep 0.05
+    done
+    return 1
+}
+
+# A full `open demo` template (all three default roles), fully spawned AND
+# tagged. Anything that reads `demo`'s live windows by role must call this
+# rather than just waiting on the client count.
+wait_full_open() {
+    for _ in $(seq 1 40); do
+        [ "$(jq 'length' "$HYPR_CLIENTS")" = "3" ] && break
+        sleep 0.05
+    done
+    wait_for_tags "slot:nvim,slot:run,slot:zsh"
+}
+
+echo "sync: populates the store from the tms scan, path included"
 setup
-export TMUX="$ROOT/tmux-default,1,0" # some OTHER session, not the new project's own
-export FZF_PICK_CHOICE=demo
-rc=0
-"$PROJ_SH" pick </dev/null || rc=$?
-check "pick exits clean" "0" "$rc"
-contains "the popup is what shows fzf" "display-popup" "$(cat "$TMUX_LOG")"
-check "kitty opened exactly once (the project, not a picker)" "1" "$(count_lines "$KITTY_LOG")"
-not_contains "the one window opened is never the retired picker class" "Proj-Picker" "$(cat "$KITTY_LOG")"
-not_contains "...nor its lowercase would-be successor" "Proj-picker" "$(cat "$KITTY_LOG")"
-contains "it carries the project's own class" "--class Proj-demo" "$(cat "$KITTY_LOG")"
-contains "the project session actually got created" "demo" "$(sessions_for "proj-demo")"
+"$PROJ_SH" sync >/dev/null
+check "the project landed in the store" "demo" \
+    "$(jq -r '.projects.demo.path' "$QF_STORE/projects.json" | xargs -I{} basename {})"
+check "default window template" '["nvim","zsh","run"]' \
+    "$(jq -c '.projects.demo.windows' "$QF_STORE/projects.json")"
+check "default workspace" "code" "$(jq -r '.projects.demo.workspace' "$QF_STORE/projects.json")"
+check "new project defaults to kind=repo" "repo" "$(jq -r '.projects.demo.kind' "$QF_STORE/projects.json")"
 teardown
 
-echo "no terminal at all: one project window, fzf as its first screen"
+echo "sync: leaves hand-set dashboard metadata alone on a rerun"
 setup
-unset TMUX
-export FZF_PICK_CHOICE=demo
-rc=0
-"$PROJ_SH" pick </dev/null || rc=$?
-check "pick exits clean" "0" "$rc"
-not_contains "no tmux popup: there is no tmux client to pop over" "display-popup" "$(cat "$TMUX_LOG")"
-check "exactly one window ever opens" "1" "$(count_lines "$KITTY_LOG")"
-contains "it is the ordinary project class (matches config.apps.project.class), not a dedicated picker rule" \
-    "--class Proj-picker" "$(cat "$KITTY_LOG")"
-contains "and that SAME window becomes the project's session" \
-    "demo" "$(sessions_for "proj-demo")"
+"$PROJ_SH" sync >/dev/null
+jq '.projects.demo.study = true | .projects.demo.priority = 1' \
+    "$QF_STORE/projects.json" >"$QF_STORE/projects.json.tmp"
+mv "$QF_STORE/projects.json.tmp" "$QF_STORE/projects.json"
+"$PROJ_SH" sync >/dev/null
+check "study survives a resync" "true" "$(jq -r '.projects.demo.study' "$QF_STORE/projects.json")"
+check "priority survives a resync" "1" "$(jq -r '.projects.demo.priority' "$QF_STORE/projects.json")"
 teardown
 
-echo "no terminal, cancelled pick: the window closes, nothing opens"
+echo "open: a fresh project spawns its whole window template"
 setup
-unset TMUX
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+# The nvim window daemonizes and needs a beat to bind its socket.
+wait_full_open
+check "three windows, one per template entry" "3" "$(jq 'length' "$HYPR_CLIENTS")"
+check "all carry the project's class" "3" \
+    "$(clients_json | jq '[.[] | select(.class == "Proj-demo")] | length')"
+check "every window got its role tag" "slot:nvim,slot:run,slot:zsh" \
+    "$(clients_json | jq -r '[.[].tags[]?] | sort | join(",")')"
+teardown
+
+echo "open: reopening an already-open project spawns nothing new, just focuses"
+setup
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+"$PROJ_SH" open demo zsh >/dev/null
+check "still exactly three windows (nothing re-spawned)" "3" "$(jq 'length' "$HYPR_CLIENTS")"
+zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
+check "the requested window took focus" "$zsh_addr" "$(cat "$HYPR_ACTIVE")"
+teardown
+
+echo "open: reopening with one window missing spawns only that one"
+setup
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+run_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:run") | .address')
+jq --arg a "$run_addr" '[.[] | select(.address != $a)]' "$HYPR_CLIENTS" >"$HYPR_CLIENTS.tmp"
+mv "$HYPR_CLIENTS.tmp" "$HYPR_CLIENTS"
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+check "back up to three windows" "3" "$(jq 'length' "$HYPR_CLIENTS")"
+teardown
+
+echo "pick: no terminal at all opens one picker window, not a picker + a project window"
+setup
+"$PROJ_SH" sync >/dev/null
+export FZF_PICK_CHOICE=demo
+"$PROJ_SH" pick </dev/null >/dev/null
+for _ in $(seq 1 40); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
+    sleep 0.05
+done
+check "one picker window plus the three project windows" "4" "$(jq 'length' "$HYPR_CLIENTS")"
+contains "the picker itself used the ordinary project class" "Proj-picker" "$(cat "$KITTY_LOG")"
+teardown
+
+echo "pick: cancelled — no project ever opens"
+setup
+"$PROJ_SH" sync >/dev/null
 unset FZF_PICK_CHOICE
-rc=0
-"$PROJ_SH" pick </dev/null || rc=$?
-check "a cancelled pick is not a failure" "0" "$rc"
-check "still only the one (now-cancelled) window" "1" "$(count_lines "$KITTY_LOG")"
-check "no project session was ever created" "" "$(sessions_for "proj-demo")"
+"$PROJ_SH" pick </dev/null >/dev/null
+for _ in $(seq 1 40); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "1" ] && break
+    sleep 0.05
+done
+check "only the (cancelled) picker window" "1" "$(jq 'length' "$HYPR_CLIENTS")"
+teardown
+
+echo "kill: closes plain windows outright, asks nvim to quit gracefully"
+setup
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+wait_for_nvim_sock Proj-demo
+ASSUME_YES=1 "$PROJ_SH" kill demo >/dev/null 2>&1
+for _ in $(seq 1 60); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "0" ] && break
+    sleep 0.05
+done
+check "nothing left standing once nvim quit clean" "0" "$(jq 'length' "$HYPR_CLIENTS")"
+contains "the non-nvim windows were closed directly" "hl.dsp.window.close" "$(cat "$HYPR_LOG")"
+teardown
+
+echo "kill: an nvim window with unsaved buffers is never force-closed"
+setup
+"$PROJ_SH" sync >/dev/null
+# The fake nvim daemon inherits its environment at spawn time, so the
+# unsaved-buffer flag has to be set before `open`, not before `kill`.
+export NVIM_FAKE_UNSAVED=1
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+wait_for_nvim_sock Proj-demo
+err=$(ASSUME_YES=1 "$PROJ_SH" kill demo 2>&1 >/dev/null) || true
+check "nvim's window is still there" "1" \
+    "$(clients_json | jq '[.[] | select(.tags[]? == "slot:nvim")] | length')"
+contains "kill says so instead of pretending it worked" "still open" "$err"
 teardown
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"

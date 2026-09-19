@@ -23,6 +23,11 @@ return {
       -- never a real one — see tests/e2e/fixtures/hyprfocus.json's
       -- "deck-test" and tests/e2e/scenarios/90_deck.sh.
       { workspace = "4", default_name = "deck-test", layout = "deck" },
+      -- `,proj.sh`'s own target workspace: a fixture scene
+      -- with the same `Proj-*` group block the real "code" scene declares,
+      -- so 95_project_group.sh exercises the actual grouping engine a
+      -- project relies on, not a stand-in class.
+      { workspace = "5", default_name = "code" },
     },
     workspace_keys = { "plus", "bracketleft", "braceleft", "parenleft" },
   },

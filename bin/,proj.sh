@@ -1,132 +1,146 @@
 #!/usr/bin/env bash
-# ,proj.sh — one entry point for "put me in project X, on tab Y".
+# ,proj.sh — one entry point for "put me in project X".
 #
-# The project list is not a second source of truth: it is scraped from the tms
-# config (~/.config/tms/config.toml), so tms's own picker and this one always
-# agree on what a project is.
+# A project is a set of kitty windows in one Hyprland group on the `code`
+# scene (docs/scenes.md: the `code` block already groups `Proj-*`) — no
+# sessions, no sockets, nothing tmux-shaped. A project ends
+# when its last window closes; nothing is remembered, so reopening it starts
+# fresh from its template. Opening a project that is already open refocuses
+# it and spawns only whatever window its template says is missing, asked of
+# Hyprland (`hyprctl clients -j`) rather than a socket.
 #
-# A project is a tmux SESSION, and it starts life on a server of its own, socket
-# `proj-<name>`. That keeps projects apart by default: opening one never touches
-# another, and nothing arrives on a socket by accident — the tmux config's
-# picker calls back into this script rather than letting `tms` attach whatever
-# it likes to whichever server you happen to be sitting in.
+# Projects live in the store ($QF_STORE/projects.json, schema in the
+# quickshell repo, registry row in system-config/docs/stores.md): which
+# projects exist, where each one lives, and its window template are read
+# from there at runtime. The store is the source of truth; it is no longer a
+# metadata sidecar next to a filesystem scan. `sync` is the only thing that
+# still scans (the tms config's project roots + bookmarks, same definition
+# tms itself uses, plus each project's `.proj.toml`) — it populates the
+# store, it is not consulted on every `open`/`pick`/`list`. Run it after
+# adding, moving or renaming a repo, or after editing a `.proj.toml`:
 #
-# `--here` is the deliberate exception: it hosts the project you pick as a
-# second session on the window's CURRENT server, so both are one `C-b C-s`
-# apart in the same terminal. Because of that a socket's name says only where a
-# project started, never what it holds now — so identity is resolved by session
-# throughout (`locate_project`), and teardown kills sessions, never the server.
+#   ,proj.sh sync
 #
-# Inside a project's server there is one session with the project's window
-# template (nvim / zsh / run by default, see "per-project config" below); a
-# second terminal on the same project gets a GROUPED session (`new-session -t
-# <proj>`) — same windows, its own current-window — so the two windows stop
-# fighting over the focus.
+# Each window carries the class `Proj-<name>` (Hyprland matches classes as
+# regex, kept to [A-Za-z0-9_-]) plus a launch-time role tag (`slot:nvim`,
+# `slot:zsh`, `slot:run`, stamped by `stamp_slot`) so a
+# reopen can tell which template windows are already live.
 #
-# Each window carries the class `Proj-<name>`, so Hyprland rules can address one
-# project, and so `open` can re-focus a project that is already on screen rather
-# than stacking another terminal on it.
+#   ,proj.sh pick [window]        fzf over the store's projects: a kitty
+#                                 window whose first screen IS fzf when
+#                                 there is no terminal to run it in already
+#                                 (--inline: this process IS that window,
+#                                 used internally to re-exec into it)
+#   ,proj.sh open <name> [window] open a project by its store name, or
+#                                 focus/complete it if some of its windows
+#                                 are already open
+#   ,proj.sh list                 name<TAB>path, one per line, from the store
+#   ,proj.sh sync                 rescan the tms roots + bookmarks and
+#                                 .proj.toml, and write path/windows/
+#                                 workspace into the store (metadata fields —
+#                                 kind/study/priority — are left alone)
+#   ,proj.sh kill [name]          close every window of a project (the
+#                                 focused one if name is omitted); a window
+#                                 running nvim is asked to quit gracefully
+#                                 (see "nvim" below) and is never force-closed
 #
-# The servers are meant to be invisible. Nothing below takes a socket by hand:
-# commands that act on "the current project" resolve it from $TMUX when run in a
-# pane, and otherwise from the focused Hyprland window, by walking its process
-# tree to the tmux client and reading the -L it was started with.
+# --- nvim: always prompts, never closed out from under you -----------------
 #
-#   ,proj.sh pick [window]        fzf over all projects: a tmux popup inside
-#                                 tmux, else one project window with fzf as its
-#                                 first screen (--inline: this process IS that
-#                                 window, used internally to re-exec into it)
-#   ,proj.sh open [-n] <path> [w] open a known path (-n: always a new window)
-#   ,proj.sh ... --here           re-point THIS window at the project, instead
-#                                 of opening another one: the window drops its
-#                                 client and attaches to the other server
-#   ,proj.sh close-window         close the focused window, offering to take the
-#                                 whole project down with it
-#   ,proj.sh list                 name<TAB>path, one per line
-#   ,proj.sh running              project<TAB>socket<TAB>clients<TAB>windows
-#   ,proj.sh window <name>        jump to a window in the current session
-#   ,proj.sh close                detach this window's client — closes the
-#                                 portal, leaves the project running
-#   ,proj.sh kill                 kill the focused project (its sessions; the
-#                                 server goes with it if it held nothing else)
-#   ,proj.sh kill-all             kill every project server
-#   ,proj.sh drift                 compare projects.json's project names
-#                                 against this scan (see "projects.json" below)
+# Quitting nvim through its own commands (`:q`, `:qa`, `:x`) already always
+# refuses on an unsaved buffer (nvim's own E37, `:confirm qa` for the "save
+# changes?" dialog) — nothing new needed there. The risk this chunk has to
+# answer is a window closed FROM OUTSIDE nvim: the terminal is torn down
+# (SIGHUP) before nvim can render anything, so a hard kill (a raw Hyprland
+# `closewindow`, or `kitty --kill`) always throws unsaved work away no
+# matter what nvim would have said.
 #
-# projects.json ($XDG_STATE_HOME/projects.json, schema in the quickshell repo)
-# holds dashboard metadata this scan has no room for — kind, tmux window
-# template for display, `study`, priority — keyed by project name. It does NOT
-# carry a path: this scan is the only thing allowed to say where a project
-# lives, on pain of the exact failure mode this header already warns about.
-# `drift` is the check for the other half — a name in projects.json that this
-# scan no longer produces (renamed, removed, typo'd).
+# So an nvim slot window is launched with `--listen <sock>` (a per-window
+# control socket under $XDG_RUNTIME_DIR/proj-nvim/, named after the window's
+# own class — one nvim per project by construction) and `kill` asks it to
+# quit THROUGH that socket (`nvim --server <sock> --remote-send
+# ':confirm qa<CR>'`) instead of closing the window directly. If nvim has
+# unsaved buffers it shows its own dialog and does not exit — `kill` waits a
+# short beat, and a socket still alive after it means "still deciding" (or
+# "said no"): that window is left exactly alone, never force-closed, and
+# `kill` says so instead of silently taking the rest of the project down
+# around it.
 #
-# Per-project config — `.proj.toml` in the repo root, or a `[projects.<name>]`
-# table in the tms config (the repo file wins):
+# What this does NOT cover: a generic window-close keybind (mod+q) still
+# dispatches an ordinary Hyprland `closewindow`, which does not know about
+# the nvim socket above and closes the terminal directly. Routing THAT
+# through the same remote-quit path is a bindings-contract change (a
+# contextual bind for `slot:nvim` windows), out of scope for a script-only
+# chunk — flagged as a follow-up rather than silently left undocumented.
 #
-#   windows   = ["nvim", "zsh", "run"]   window template, in order
-#   workspace = "code"                   Hyprland workspace to open onto
-#                                        (default: code — only the initial
-#                                        placement, the window moves freely
-#                                        afterwards)
-#
-# A template window named `nvim` is started on `nvim .`; the rest open a shell.
-#
-# `window` defaults to the first template window. `kill`/`kill-all` confirm
-# first — on a tty by prompt, otherwise in a picker window, since they are also
-# reachable from a keybind. `-y` skips the confirmation.
+# Scene teardown (a mode switch away from `code`) never closes windows at
+# all: docs/scenes.md's mode `apply` only relocates workspaces to monitors
+# and applies holds; it has no path that kills a window. So a project's
+# windows are already safe across a mode switch with no change here — this
+# was verified by reading `hypr/hyprfocus/init.lua`'s `apply`, not assumed.
 set -euo pipefail
 
-TMS_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/tms/config.toml"
-# The shared quantum-store directory (QF_STORE), with the legacy read as the
-# migration step back.
+# The shared quantum-store directory (QF_STORE).
 QF_ROOT="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
 PROJECTS_JSON="$QF_ROOT/projects.json"
-CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/proj-list"
-CACHE_TTL=300
+TMS_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/tms/config.toml"
 TEMPLATE_WINDOWS=(nvim zsh run)
-# Where a project window is mapped unless it asks for somewhere else. Both hosts
-# name workspace 1 "code"; a project overrides it with `workspace =`.
+# Where a project window is mapped unless it asks for somewhere else. Both
+# hosts name workspace 1 "code"; a project overrides it with `workspace =`.
 DEFAULT_WORKSPACE=code
 CLASS_PREFIX=Proj-
-SOCKET_PREFIX=proj-
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
-# One handoff file per terminal, named after the pty its tmux client sits on.
-# That pty is the one thing the pane side and the loop side both know.
-HANDOFF_DIR="${XDG_RUNTIME_DIR:-/tmp}/proj-handoff"
-# Separator for grouped-session names. Stripped out of project names below, so
-# `<base>%2` can never collide with a project actually called that.
-GROUP_SEP='%'
+NVIM_SOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}/proj-nvim"
 
-# Most of the callers are keybindings: `run-shell -b` throws stderr away and a
-# Hyprland exec has nowhere to write it at all, so a refusal used to be a window
-# that simply did not appear. Say it where the user is looking.
+# Most callers are keybindings: a Hyprland exec has nowhere to write stderr
+# at all, so a refusal used to be a window that simply did not appear. Say
+# it where the user is looking.
 die() {
     printf '%s: %s\n' "${0##*/}" "$1" >&2
-    if [[ -n ${TMUX-} ]]; then
-        command tmux display-message "proj: $1" 2>/dev/null || true
-    elif command -v notify-send >/dev/null 2>&1; then
+    if command -v notify-send >/dev/null 2>&1; then
         ,notify proj -u critical "" "$1" 2>/dev/null || true
     fi
     exit 1
 }
 
-# Every tmux call goes through here, so no command below has to remember which
-# server it is talking to.
-socket=""
-tmux() { command tmux ${socket:+-L "$socket"} "$@"; }
-
-socket_for() { printf '%s%s\n' "$SOCKET_PREFIX" "${1//\//_}"; }
 # Hyprland matches classes as regex, so the class keeps to [A-Za-z0-9_-].
 class_for() { printf '%s%s\n' "$CLASS_PREFIX" "${1//[^A-Za-z0-9_-]/_}"; }
 
-# --- toml -------------------------------------------------------------------
+# --- store --------------------------------------------------------------
+
+# The store is read-modify-written whole: it is small (per-project metadata,
+# not window state) and jq has no in-place partial-write primitive that
+# would be worth the complexity here.
+store_read() {
+    if [[ -s $PROJECTS_JSON ]]; then
+        cat "$PROJECTS_JSON"
+    else
+        printf '{"projects":{}}\n'
+    fi
+}
+
+store_write() { # stdin = the whole new document
+    mkdir -p "${PROJECTS_JSON%/*}"
+    local tmp
+    tmp=$(mktemp "${PROJECTS_JSON}.XXXXXX")
+    cat >"$tmp"
+    mv "$tmp" "$PROJECTS_JSON"
+}
+
+# One project's object, or empty if it is not in the store.
+store_project() { # $1 = name
+    store_read | jq -c --arg n "$1" '.projects[$n] // empty'
+}
+
+store_field() { # $1 = name, $2 = jq filter over the project object
+    store_project "$1" | jq -r "$2 // empty"
+}
+
+# --- toml (used only by `sync`) ------------------------------------------
 
 # tms's toml is flat and hand-written, so a line scraper beats a toml parser
 # here — no extra runtime dependency for a handful of keys.
 
-# Lines belonging to one table. $2 empty means the top-level (pre-table) keys.
-section() { # $1 = file, $2 = table name, e.g. "projects.foo"
+section() { # $1 = file, $2 = table name, e.g. "projects.foo" ("" = top level)
     [[ -f $1 ]] || return 0
     awk -v want="$2" '
     /^[[:space:]]*\[/ {
@@ -139,12 +153,7 @@ section() { # $1 = file, $2 = table name, e.g. "projects.foo"
   ' "$1"
 }
 
-# Both read a section body on stdin.
-
-# Values of an array key, one per line. Walks from the "[" to the matching "]"
-# rather than using a sed range: a range's end is only looked for on the NEXT
-# line, so a single-line array would swallow the rest of the table.
-conf_array() { # $1 = key
+conf_array() { # $1 = key, section body on stdin
     awk -v k="$1" '
     BEGIN { pat = "^[[:space:]]*" k "[[:space:]]*=[[:space:]]*\\[" }
     !inside && $0 ~ pat { inside = 1; sub(/^[^\[]*\[/, "") }
@@ -163,9 +172,7 @@ conf_array() { # $1 = key
     }
   '
 }
-conf_str() { # $1 = key
-    sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1
-}
+conf_str() { sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1; } # $1 = key, section body on stdin
 
 toml_array() { section "$TMS_CONFIG" "" | conf_array "$1"; }
 
@@ -195,20 +202,21 @@ load_project_conf() { # $1 = project name, $2 = path
     done
 }
 
-# --- project list -----------------------------------------------------------
-
+# The project scan: a project is a git repo under one of tms's roots (its own
+# definition, so tms and this stay in agreement), plus its bookmarks — the
+# same rule `,proj.sh` used before the store existed. Only `sync` calls this
+# now; nothing on the `open`/`pick`/`list` path scans the filesystem.
 scan() {
     local -a excludes=()
     local dir
     while read -r dir; do
-        # ".git" is in tms's exclude list, but it is exactly what the scan matches
-        # on — excluding it would find nothing.
+        # ".git" is in tms's exclude list, but it is exactly what the scan
+        # matches on — excluding it would find nothing.
         if [[ -n $dir && $dir != .git ]]; then
             excludes+=(--exclude "$dir")
         fi
     done < <(toml_array excluded_dirs)
 
-    # A project is a git repo (tms's definition) …
     local path depth
     while read -r path depth; do
         [[ -d $path ]] || continue
@@ -232,246 +240,101 @@ scan() {
     toml_array bookmarks
 }
 
-list() {
-    if [[ ${1-} != --refresh && -f $CACHE ]] &&
-        (($(date +%s) - $(stat -c %Y "$CACHE") < CACHE_TTL)); then
-        cat "$CACHE"
-        return
-    fi
-    mkdir -p "${CACHE%/*}"
-    # Two projects can share a basename, so the display name falls back to
-    # parent/name — and the session and socket names follow it.
+# name<TAB>path for every repo the scan finds, deduping basenames the same
+# way the pre-store scan did (parent/name once a basename collides).
+scan_named() {
     scan | sed 's:/*$::' | sort -u | awk -F/ '
     { name[NR] = $NF; path[NR] = $0; parent[NR] = $(NF-1); n = NR }
     END {
       for (i = 1; i <= n; i++) count[name[i]]++
       for (i = 1; i <= n; i++)
         printf "%s\t%s\n", (count[name[i]] > 1 ? parent[i] "/" name[i] : name[i]), path[i]
-    }' | sort >"$CACHE"
-    cat "$CACHE"
+    }' | sort
 }
 
-# Whatever the cache already knows, without ever rebuilding it. Anything on a
-# keypress path (is_project, running) uses this: a stale answer now beats a
-# correct one after an `fd` sweep of every repo.
-list_cached() {
-    if [[ -f $CACHE ]]; then
-        cat "$CACHE"
-    else
-        list
-    fi
-}
-
-lookup() { # $1 = awk field to match on, $2 = value, $3 = field to print
-    list | awk -F'\t' -v f="$1" -v v="$2" -v o="$3" '$f == v { print $o; exit }'
-}
-
-# A miss is usually a repo created since the cache was written, so every lookup
-# gets one forced rescan before it gives up. Without this a fresh project is
-# invisible for up to CACHE_TTL — and, worse, gets a different session name from
-# the fallback than it will have once the cache catches up.
-lookup_fresh() { # $1 = field, $2 = value, $3 = field to print
-    local hit
-    hit=$(lookup "$@") || true
-    [[ -n $hit ]] || {
-        list --refresh >/dev/null
-        hit=$(lookup "$@") || true
-    }
-    printf '%s\n' "$hit"
-}
-
-# tmux forbids "." and ":" in session names; GROUP_SEP is reserved for grouped
-# sessions, so it goes too.
-project_name() { # $1 = path
-    local p=${1%/} name
-    name=$(lookup_fresh 2 "$p" 1)
-    [[ -n $name ]] || name=${p##*/}
-    printf '%s\n' "${name//[.:$GROUP_SEP]/_}"
-}
-
-# tmux name sanitising is lossy — ".", ":" and "%" all become "_" — so
-# `foo.bar` and `foo_bar` arrive as one name, and the second project opened
-# would silently join the first. The session records the path it was built for;
-# when a name is already taken by a DIFFERENT path, this suffixes it.
-path_digest() { printf '%s' "$1" | cksum | cut -d' ' -f1; }
-
-session_path() { # $1 = session name (on $socket)
-    # Read through list-sessions: `show-options -t` does not resolve the "="
-    # exact-match target, and returns empty for a user option that is plainly set.
-    tmux list-sessions -F "#{session_name}$(printf '\t')#{@proj_path}" 2>/dev/null |
-        awk -F'\t' -v n="$1" '$1 == n { print $2; exit }'
-}
-
-# The session name this path owns: the plain one, unless someone else has it.
-resolve_name() { # $1 = candidate name, $2 = path -> name
-    local name=$1 path=$2 sock owner
-    sock=$(locate_project "$name") || {
-        printf '%s\n' "$name"
-        return 0
-    }
-    local saved=$socket
-    socket=$sock
-    owner=$(session_path "$name")
-    socket=$saved
-    # No recorded path means a session from before this existed, or one a user
-    # made by hand: leave it alone and share it, which is what used to happen.
-    if [[ -z $owner || $owner == "$path" ]]; then
-        printf '%s\n' "$name"
-    else
-        printf '%s-%s\n' "$name" "$(path_digest "$path")"
-    fi
-}
-
-# A project is its SESSION. The socket it lives on is only where it was first
-# opened: `open --here` hosts a second project on the window's current server,
-# so `proj-a` can hold sessions `a` and `b`. Everything below therefore asks
-# "which server has this session" rather than trusting the socket's name.
-locate_project() { # $1 = project name -> the socket holding it
-    local sock guest=""
-    while read -r sock; do
-        command tmux -L "$sock" has-session -t "=$1" 2>/dev/null || continue
-        # Its own server wins over one it is only a guest on, so the answer stays
-        # the same no matter what order the sockets come in.
-        if [[ $sock == "$SOCKET_PREFIX"* ]]; then
-            printf '%s\n' "$sock"
-            return 0
+# Rescans and writes path/windows/workspace into the store, one project at a
+# time. Dashboard metadata (kind/study/priority) is left untouched for a
+# project already in the store, and defaulted for one that is new. Nothing
+# is ever removed here: a repo the scan no longer finds just keeps its last
+# known path, which `sync`'s own report below flags as stale so a human
+# decides whether to drop it (`,proj.sh drop <name>`).
+sync() {
+    command -v jq >/dev/null 2>&1 || die "sync: jq is required"
+    local doc name path added=0 updated=0 stale=0
+    doc=$(store_read)
+    while IFS=$'\t' read -r name path; do
+        [[ -n $name && -n $path ]] || continue
+        load_project_conf "$name" "$path"
+        local windows_json workspace_json existing
+        windows_json=$(printf '%s\n' "${PROJ_WINDOWS[@]}" | jq -R . | jq -sc .)
+        workspace_json=$(printf '%s' "$PROJ_WORKSPACE" | jq -R .)
+        existing=$(printf '%s' "$doc" | jq -c --arg n "$name" '.projects[$n] // empty')
+        if [[ -z $existing ]]; then
+            added=$((added + 1))
+        else
+            updated=$((updated + 1))
         fi
-        [[ -n $guest ]] || guest=$sock
-    done < <(live_sockets)
-    [[ -n $guest ]] || return 1
-    printf '%s\n' "$guest"
-}
+        doc=$(printf '%s' "$doc" | jq -c \
+            --arg n "$name" --arg p "$path" \
+            --argjson w "$windows_json" --argjson ws "$workspace_json" '
+        .projects[$n] = (
+          (.projects[$n] // {kind: "repo", study: false, priority: 5})
+          + {path: $p, windows: $w, workspace: $ws}
+        )')
+    done < <(scan_named)
 
-# The session this pane belongs to. $TMUX's third field is its id; that is the
-# only source that also works under `run-shell`, where display-message resolves
-# nothing.
-current_session() {
-    [[ -n ${TMUX-} ]] || return 1
-    local sess
-    sess=$(tmux list-sessions -F '#{session_id} #{session_name}' 2>/dev/null |
-        awk -v id="\$${TMUX##*,}" '$1 == id { print $2; exit }')
-    if [[ -z $sess && -n ${TMUX_PANE-} ]]; then
-        sess=$(tmux display-message -t "$TMUX_PANE" -p '#{session_name}' 2>/dev/null)
-    fi
-    [[ -n $sess ]] || return 1
-    printf '%s\n' "$sess"
-}
-
-# Is this session one of ours? A server we did not create can hold a project
-# (`--here` seats them anywhere), and a `proj-` server can hold nothing else —
-# so the question is asked of both the socket and the name.
-is_project() { # $1 = session name, $2 = socket
-    [[ $2 == "$SOCKET_PREFIX"* ]] && return 0
-    local name
+    # Report (never prune): a stored project whose path no longer resolves.
+    local stale_names=""
     while read -r name; do
-        [[ $name == "$1" ]] && return 0
-    done < <(list_cached | cut -f1)
-    return 1
-}
-
-# The project a session belongs to: grouped views are "<project>%2".
-project_of_session() { printf '%s\n' "${1%%"$GROUP_SEP"*}"; }
-
-# The session to act on from inside tmux. Normally the pane's own — when you
-# press the key, the pane you are in is the one you can see. But a `run-shell`
-# hook or a background script can be rooted in a pane nobody is looking at, and
-# killing that project instead of the visible one is not a mistake you can undo.
-# So an unattached pane defers to the server's client, when there is just one.
-visible_session() {
-    local sess clients
-    sess=$(current_session) || return 1
-    if [[ -z $(tmux list-clients -t "=$sess" 2>/dev/null) ]]; then
-        clients=$(tmux list-clients -F '#{client_session}' 2>/dev/null)
-        if [[ -n $clients && $(printf '%s\n' "$clients" | wc -l) -eq 1 ]]; then
-            sess=$clients
+        path=$(printf '%s' "$doc" | jq -r --arg n "$name" '.projects[$n].path')
+        if [[ ! -d $path ]]; then
+            stale=$((stale + 1))
+            stale_names="$stale_names  $name -> $path (missing)\n"
         fi
+    done < <(printf '%s' "$doc" | jq -r '.projects | keys[]')
+
+    printf '%s\n' "$doc" | jq . | store_write
+    printf 'sync: %d added, %d updated\n' "$added" "$updated"
+    if ((stale > 0)); then
+        printf 'sync: %d stale entr%s (path no longer exists — nothing removed automatically):\n' \
+            "$stale" "$([[ $stale == 1 ]] && echo y || echo ies)"
+        printf '%b' "$stale_names"
     fi
-    printf '%s\n' "$sess"
 }
 
-# The project a client is looking at.
-client_project() { # $1 = client pid (on $socket)
-    local sess
-    sess=$(tmux list-clients -F '#{client_pid} #{client_session}' 2>/dev/null |
-        awk -v p="$1" '$1 == p { print $2; exit }')
-    [[ -n $sess ]] || return 1
-    project_of_session "$sess"
+drop() { # $1 = name — remove one project from the store by hand
+    local name=${1:?drop: project name required}
+    command -v jq >/dev/null 2>&1 || die "drop: jq is required"
+    store_read | jq -c --arg n "$name" 'del(.projects[$n])' | jq . | store_write
 }
 
-# --- which server am I in ---------------------------------------------------
-
-# The tmux client for a window is a descendant of it, not the window process
-# itself (kitty -> $SHELL -c -> tmux attach), so this walks the tree. Prints
-# "<pid>\t<socket>" for every tmux client under it that names a socket.
-tmux_clients_under() { # $1 = root pid
-    local -a queue=("$1") argv
-    local pid i sock
-    while ((${#queue[@]})); do
-        pid=${queue[0]}
-        queue=("${queue[@]:1}")
-        [[ -r /proc/$pid/cmdline ]] || continue
-        argv=()
-        mapfile -d '' -t argv <"/proc/$pid/cmdline" 2>/dev/null || true
-        # argv[0] may be a path ("/usr/bin/tmux"), so match on its basename.
-        if ((${#argv[@]})) && [[ ${argv[0]##*/} == tmux ]]; then
-            sock=""
-            for ((i = 1; i < ${#argv[@]}; i++)); do
-                if [[ ${argv[i]} == -L ]]; then
-                    sock=${argv[i + 1]-}
-                    break
-                elif [[ ${argv[i]} == -L?* ]]; then
-                    sock=${argv[i]#-L}
-                    break
-                fi
-            done
-            if [[ -n $sock ]]; then
-                printf '%s\t%s\n' "$pid" "$sock"
-            fi
-        fi
-        mapfile -t -O "${#queue[@]}" queue < <(pgrep -P "$pid" 2>/dev/null)
-    done
+list() { # name<TAB>path, from the store
+    command -v jq >/dev/null 2>&1 || die "list: jq is required"
+    store_read | jq -r '.projects | to_entries[] | "\(.key)\t\(.value.path)"' | sort
 }
 
-# A window can hold more than one tmux process (its client, plus whatever a pane
-# spawned), so take the shallowest — the client the window was built around.
-# Preferring a `proj-` socket here used to look right, but a project can now
-# live on any server, and a pane's stray `tmux -L proj-x` call would have
-# outranked the window's actual client.
-client_under() { # $1 = root pid -> "<client pid>\t<socket>"
-    local line
-    while IFS= read -r line; do
-        printf '%s\n' "$line"
-        return 0
-    done < <(tmux_clients_under "$1")
-    return 1
-}
+# --- hyprland ---------------------------------------------------------------
 
 # This Hyprland runs a Lua config plugin, and it parses everything handed to
-# `hyprctl dispatch` as Lua — classic dispatch strings ("closewindow
-# address:0x…") come back as a syntax error, and `hyprctl keyword` is not a
-# request it answers at all. So every dispatch below is written as the Lua the
-# plugin expects.
+# `hyprctl dispatch` as Lua — classic dispatch strings come back as a syntax
+# error, and `hyprctl keyword` is not a request it answers at all. So every
+# dispatch below is written as the Lua the plugin expects.
 hypr_dispatch() { # $1 = lua expression returning a dispatcher
     command -v hyprctl >/dev/null 2>&1 || return 1
     hyprctl dispatch "$1" >/dev/null
 }
 
-# Stamps the launch-time role tag (LEO-311 chunk B) on the window `open` just
+# Stamps the launch-time role tag on the window `open` just
 # exec'd, e.g. `slot:nvim` on a project's editor window. A bracket exec rule
-# ("[tag:+slot:x] cmd") was spiked live and never applies — Hyprland's exec
-# rule syntax does not carry the general windowrule vocabulary that far
-# (verified in tests/e2e/hq); a dispatch-time `window.tag` by address, once
-# the window exists, is the only path that sticks. `identify.lua` cannot make
-# this call itself yet: two open projects share no state it can use to tell
-# their windows apart (LEO-364's slot pool is scoped by class alone), so
-# stamping happens here, from the one place that already knows which project
-# and role this launch is for.
-#
-# `$class` is this project's own class (`Proj-<name>`, already distinct per
-# project), so within it "the untagged one" is an unambiguous match in the
-# common case of one launch in flight at a time. Runs backgrounded — the exec
-# dispatch above returns before the window maps, so this polls for it — and
-# `open` must not block a keybind on that poll.
+# ("[tag:+slot:x] cmd") does not apply — Hyprland's exec-rule syntax does not
+# carry the general windowrule vocabulary that far (verified live,
+# tests/e2e/hq); a dispatch-time `window.tag` by address, once the window
+# exists, is the only path that sticks. `$class` is this project's own class
+# (`Proj-<name>`, already distinct per project), so within it "the untagged
+# one" is unambiguous in the common case of one launch in flight at a time.
+# Runs backgrounded — the exec dispatch above returns before the window
+# maps, so this polls for it — and `open` must not block a keybind on that
+# poll.
 stamp_slot() { # $1 = class, $2 = role
     local class=$1 role=$2 addr tries
     for ((tries = 0; tries < 40; tries++)); do
@@ -487,27 +350,166 @@ stamp_slot() { # $1 = class, $2 = role
     return 1
 }
 
-# `confirm`'s non-tty yes/no prompt. A terminal, not a layer surface: a layer
-# surface has no window to place (rofi chose its output from the POINTER, and
-# handing focus back on unmap raced with our own focus call); a window is
-# placed by the ordinary project window rule (its class matches
-# `config.apps.project.class`) and closing it returns focus the normal way.
-# Blocking on kitty is what makes the choice a plain value again.
+# Live, slotted windows of one project: "<role>\t<address>" per line. A
+# window with no `slot:` tag yet (still being stamped) counts as no role —
+# `open` would rather spawn a possible duplicate for a role it briefly can't
+# see than skip a role that really is missing.
+live_windows() { # $1 = class -> "<slot>\t<address>" per live, slotted window
+    hyprctl clients -j 2>/dev/null | jq -r --arg c "$1" '
+    .[] | select(.class == $c) as $w
+    | ($w.tags // []) | map(select(startswith("slot:")))[]?
+    | sub("^slot:"; "") + "\t" + $w.address'
+}
+
+# Escapes a shell command for embedding in a Lua double-quoted string.
+lua_str() {
+    local v=$1
+    v=${v//\\/\\\\}
+    v=${v//\"/\\\"}
+    printf '%s' "$v"
+}
+
+focused_class() {
+    command -v hyprctl >/dev/null 2>&1 || return 1
+    local class
+    class=$(hyprctl activewindow -j 2>/dev/null | jq -r '.class // empty')
+    [[ -n $class ]] || return 1
+    printf '%s\n' "$class"
+}
+
+# Focus one window, and make it stick. A focus dispatch can land after
+# whatever the caller does next re-steals it, so this re-asserts until the
+# window is actually the active one.
+focus_window() { # $1 = address
+    local i active
+    for ((i = 0; i < 10; i++)); do
+        hypr_dispatch "hl.dsp.focus({ window = \"address:$1\" })" || return 1
+        active=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
+        [[ $active == "$1" ]] && return 0
+        sleep 0.05
+    done
+    return 1
+}
+
+# --- window template ---------------------------------------------------------
+
+# nvim gets a control socket (see the header comment on nvim quitting); every
+# other role opens a plain shell for the user to run something in.
+nvim_sock_for() { printf '%s/%s.sock\n' "$NVIM_SOCK_DIR" "$1"; } # $1 = class
+
+window_command() { # $1 = role, $2 = class, $3 = path -> the command, or nothing
+    [[ $1 == nvim ]] || return 0
+    mkdir -p "$NVIM_SOCK_DIR"
+    local sock
+    sock=$(nvim_sock_for "$2")
+    rm -f "$sock"
+    printf '%s -ic %s\n' "$(printf '%q' "$SHELL")" \
+        "$(printf '%q' "nvim --listen $(printf '%q' "$sock") .")"
+}
+
+# Execs one project window for the given role, on `workspace`. Does not tag
+# it — see `spawn_missing` for why stamping is never backgrounded per-window.
+spawn_window() { # $1 = class, $2 = role, $3 = path, $4 = workspace
+    local class=$1 role=$2 path=$3 workspace=$4 cmd launch_cmd
+    cmd=$(window_command "$role" "$class" "$path")
+    launch_cmd="kitty --class $(printf '%q' "$class") --directory $(printf '%q' "$path")"
+    if [[ -n $cmd ]]; then
+        launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -c $(printf '%q' "$cmd")"
+    fi
+    if command -v uwsm >/dev/null 2>&1; then
+        launch_cmd="uwsm app -- $launch_cmd"
+    fi
+    if command -v hyprctl >/dev/null 2>&1; then
+        launch_cmd="[workspace name:$workspace] $launch_cmd"
+        hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
+        return 0
+    fi
+    exec "$SHELL" -c "$launch_cmd"
+}
+
+# Spawns every role in "$@" and tags each one before the next is spawned —
+# `stamp_slot` picks "the untagged one of this class", which is only
+# unambiguous with at most one untagged window in flight at a time. Opening
+# several missing roles in the same `open` call used to background a
+# `stamp_slot` per spawn, and two windows racing to map at once could both
+# still be untagged when the second poll ran, so one window got both tags
+# and the other got none (caught live in tests/e2e/scenarios/95_project_group.sh,
+# not by the shell-level test, which never spawns two roles close enough
+# together to race). Run as one background job so a keybind still never
+# blocks, but the spawns inside it are strictly one-at-a-time.
+spawn_missing() { # $1 = class, $2 = path, $3 = workspace, roles...
+    local class=$1 path=$2 workspace=$3
+    shift 3
+    local role
+    for role in "$@"; do
+        spawn_window "$class" "$role" "$path" "$workspace"
+        stamp_slot "$class" "$role"
+    done
+}
+
+# open <name> [window]: spawns whatever the template says is missing, then
+# focuses the requested window (or the template's first) — a Hyprland
+# `[workspace name:...]` exec already brings the workspace and its group
+# forward, so a fresh project needs no extra focus call; a project that was
+# already fully open does.
+open() { # $1 = project name, $2 = window (role) to land on
+    local name=${1:?open: project name required} window=${2-}
+    local path class workspace
+    path=$(store_field "$name" '.path')
+    [[ -n $path ]] || die "open: no such project in the store: $name (try: ,proj.sh sync)"
+    [[ -d $path ]] || die "open: $name's path no longer exists: $path"
+    workspace=$(store_field "$name" '.workspace')
+    workspace=${workspace:-$DEFAULT_WORKSPACE}
+    class=$(class_for "$name")
+
+    local -a windows=()
+    mapfile -t windows < <(store_project "$name" | jq -r '.windows[]')
+    ((${#windows[@]})) || windows=("${TEMPLATE_WINDOWS[@]}")
+    window=${window:-${windows[0]}}
+
+    local -A live=()
+    local role addr
+    while IFS=$'\t' read -r role addr; do
+        [[ -n $role ]] && live[$role]=$addr
+    done < <(live_windows "$class")
+
+    local -a missing=()
+    for role in "${windows[@]}"; do
+        [[ -z ${live[$role]-} ]] && missing+=("$role")
+    done
+
+    if ((${#missing[@]})); then
+        (spawn_missing "$class" "$path" "$workspace" "${missing[@]}" &)
+        # A brand-new or partially-spawned project already took the workspace
+        # (and with it, focus) via the first spawn's `[workspace ...]` exec
+        # prefix — nothing further to do until spawn_missing's tagging lands,
+        # which runs backgrounded on purpose.
+        return 0
+    fi
+
+    # Nothing was missing: the project was already fully open, so this is a
+    # "take me there", not "give me another window" — focus the requested
+    # slot if it is already live.
+    if [[ -n ${live[$window]-} ]]; then
+        focus_window "${live[$window]}"
+    fi
+}
+
+# --- picker -------------------------------------------------------------
+
+# `confirm`'s non-tty yes/no prompt. A terminal, not a layer surface — see
+# the historical note this replaces: a layer surface has no window to place,
+# a window is placed by the ordinary project window rule and closing it
+# returns focus the normal way.
 menu() { # $1 = prompt, choices on stdin -> the chosen line on stdout
     local items out rc
     items=$(mktemp) || return 1
     out=$(mktemp) || return 1
     cat >"$items"
-    # `-ic`: the shell's rc is where FZF_DEFAULT_OPTS lives, so the picker looks
-    # like every other fzf in this setup.
     kitty --class "$(class_for confirm)" --title "$1" \
         -o confirm_os_window_close=0 \
         -e "$SHELL" -ic "fzf --prompt='$1 ' --reverse --no-preview --height=100% <$items >$out" \
         >/dev/null 2>&1 || true
-    # The answer is the file, never the exit status: a terminal emulator reports
-    # its own fate, not fzf's, so a cancelled pick came back looking like a
-    # choice — and `--here` then dutifully moved the window to it. fzf writes
-    # nothing unless the user accepts, so an empty file IS the cancellation.
     rc=1
     if [[ -s $out ]]; then
         cat "$out"
@@ -517,61 +519,19 @@ menu() { # $1 = prompt, choices on stdin -> the chosen line on stdout
     return "$rc"
 }
 
-# The project-pick fzf options, shared by every path below — same prompt
-# everywhere it appears.
 FZF_PICK_OPTS=(--prompt=" Project " --reverse --no-preview --height=100%)
 
-# Runs fzf over the project list right here (this shell already IS the
-# terminal): the tty and inline-picker paths in `pick` below.
 fzf_pick() { list | cut -f1 | fzf "${FZF_PICK_OPTS[@]}"; }
 
-# Inside tmux: a floating popup over the pane that asked, not a second window.
-# `-E` closes the popup and blocks the caller until the command exits, so this
-# waits for a choice exactly like `menu` used to. The answer travels through a
-# file for the same reason `menu` used one: the popup's own exit status is not
-# fzf's.
-popup_pick() {
-    local items out cmd part
-    items=$(mktemp) || return 1
-    out=$(mktemp) || return 1
-    list | cut -f1 >"$items"
-    cmd="fzf"
-    for part in "${FZF_PICK_OPTS[@]}"; do
-        cmd="$cmd $(printf '%q' "$part")"
-    done
-    cmd="$cmd <$(printf '%q' "$items") >$(printf '%q' "$out")"
-    tmux display-popup -E -w 60% -h 60% -- "$SHELL" -ic "$cmd" || true
-    local rc=1
-    if [[ -s $out ]]; then
-        cat "$out"
-        rc=0
-    fi
-    rm -f "$items" "$out"
-    return "$rc"
-}
-
-# No terminal at all (a Hyprland bind: no $TMUX, no tty). Opens exactly one
-# project-classed window — `class_for picker` matches the ordinary project rule,
-# so it tiles and places like any other project terminal, no dedicated rule
-# needed — running `pick --inline`, whose fzf IS that window's first screen.
-# `open` (reached from there) then turns this same window into the project's
-# session; never a picker window plus a second one.
+# No terminal at all (a Hyprland bind). Opens exactly one project-classed
+# window — `class_for picker` matches the ordinary project rule, so it tiles
+# like any other project terminal, no dedicated rule needed — running
+# `pick --inline`, whose fzf IS that window's first screen.
 launch_inline_picker() { # $1 = window
     local window=${1-} pick_cmd launch_cmd
     pick_cmd=$(printf '%q pick --inline' "$SELF")
     [[ -n $window ]] && pick_cmd="$pick_cmd $(printf '%q' "$window")"
-    launch_cmd="env -u TMUX -u TMUX_PANE"
-    if [[ ${HERE-} == 1 ]]; then
-        pick_cmd="$pick_cmd --here"
-        # capture_here already ran in THIS process, against the window the user
-        # was actually looking at — the inline window is not born yet, so its
-        # own capture_here would otherwise describe itself. Hand the answer
-        # forward instead of asking again.
-        launch_cmd="$launch_cmd HERE_TTY=$(printf '%q' "$HERE_TTY")"
-        launch_cmd="$launch_cmd HERE_SOCKET=$(printf '%q' "$HERE_SOCKET")"
-        launch_cmd="$launch_cmd HERE_CLIENT=$(printf '%q' "$HERE_CLIENT")"
-    fi
-    launch_cmd="$launch_cmd kitty --class $(printf '%q' "$(class_for picker)")"
+    launch_cmd="kitty --class $(printf '%q' "$(class_for picker)")"
     launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -ic $(printf '%q' "$pick_cmd")"
     if command -v uwsm >/dev/null 2>&1; then
         launch_cmd="uwsm app -- $launch_cmd"
@@ -584,380 +544,13 @@ launch_inline_picker() { # $1 = window
     exec "$SHELL" -c "$launch_cmd"
 }
 
-# Focus one window, and make it stick. Closing the picker hands focus back to
-# whatever held it before, and that can land after our dispatch, so the focus is
-# re-asserted until the window is actually the active one.
-focus_window() { # $1 = address
-    local i active
-    for ((i = 0; i < 10; i++)); do
-        hypr_dispatch "hl.dsp.focus({ window = \"address:$1\" })" || return 1
-        active=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
-        [[ $active == "$1" ]] && return 0
-        sleep 0.05
-    done
-    # Never claim it worked: the caller treats success as "you are there now", and
-    # a false yes leaves the user with neither a focused window nor a new one.
-    return 1
-}
-
-# Escapes a shell command for embedding in a Lua double-quoted string.
-lua_str() {
-    local v=$1
-    v=${v//\\/\\\\}
-    v=${v//\"/\\\"}
-    printf '%s' "$v"
-}
-
-focused_pid() {
-    command -v hyprctl >/dev/null 2>&1 || return 1
-    local pid
-    pid=$(hyprctl activewindow -j 2>/dev/null | jq -r '.pid // empty')
-    [[ -n $pid ]] || return 1
-    printf '%s\n' "$pid"
-}
-
-# Resolution order: an explicit override, the pane we were run from, then the
-# focused window. The last one is what makes a Hyprland bind act on the project
-# you are looking at.
-resolve_socket() {
-    if [[ -n ${PROJ_SOCKET-} ]]; then
-        socket=$PROJ_SOCKET
-        return 0
-    fi
-    if [[ -n ${TMUX-} ]]; then
-        # $TMUX is "<socket path>,<pid>,<session>"; the socket's basename is its -L.
-        socket=$(basename "${TMUX%%,*}")
-        return 0
-    fi
-    local pid info
-    pid=$(focused_pid) || return 1
-    info=$(client_under "$pid") || return 1
-    socket=${info#*$'\t'}
-}
-
-# Any server, not just a `proj-` one: `--here` can seat a project next to
-# whatever a window was already running, and teardown is per session anyway.
-require_socket() { # $1 = what for
-    resolve_socket || die "$1: no project window focused"
-}
-
-# --- sessions ---------------------------------------------------------------
-
-# tmux's "=" exact-match target is only honoured on session targets here
-# (has-session, list-clients, attach, switch-client); set-option and window
-# targets take the bare name, so those are kept apart deliberately.
-has_session() { tmux has-session -t "=$1" 2>/dev/null; }
-
-# Create the session with the project's window template. Windows are addressed
-# by name everywhere below, so the template can be reordered freely.
-# The editor window runs its command as the window's own command instead of
-# being typed into it: `send-keys` raced the shell's rc, and a prompt that is
-# still initialising can swallow the line — an empty shell where nvim should be.
-# `exec $SHELL` afterwards keeps the window when the editor quits.
-window_command() { # $1 = window name -> the command, or nothing
-    [[ $1 == nvim ]] || return 0
-    printf '%s -ic %s\n' "$(printf '%q' "$SHELL")" \
-        "$(printf '%q' "nvim .; exec $(printf '%q' "$SHELL")")"
-}
-
-create_session() { # $1 = name, $2 = path
-    local name=$1 path=$2 w cmd
-    cmd=$(window_command "${PROJ_WINDOWS[0]}")
-    # An empty command must not become an empty argv entry, hence the two calls.
-    if [[ -n $cmd ]]; then
-        tmux new-session -d -s "$name" -c "$path" -n "${PROJ_WINDOWS[0]}" "$cmd"
-    else
-        tmux new-session -d -s "$name" -c "$path" -n "${PROJ_WINDOWS[0]}"
-    fi
-    tmux set-option -t "$name" @proj_path "$path" >/dev/null
-    for w in "${PROJ_WINDOWS[@]:1}"; do
-        cmd=$(window_command "$w")
-        if [[ -n $cmd ]]; then
-            tmux new-window -d -t "$name:" -c "$path" -n "$w" "$cmd"
-        else
-            tmux new-window -d -t "$name:" -c "$path" -n "$w"
-        fi
-    done
-}
-
-# A grouped view is cleaned up by the terminal that owns it (see `serve`). If
-# that terminal is killed outright the view outlives it, and the next window
-# skips to %3, %4, … So sweep the ones nothing is attached to — but only once
-# they are old enough that they cannot be a view created seconds ago by an
-# `open` whose terminal has not attached yet.
-ORPHAN_GRACE=${ORPHAN_GRACE:-60}
-reap_orphan_views() { # $1 = base session name
-    local sess created now
-    now=$(date +%s)
-    while read -r sess created; do
-        [[ $sess == "$1$GROUP_SEP"* ]] || continue
-        ((now - created < ORPHAN_GRACE)) && continue
-        [[ -n $(tmux list-clients -t "=$sess" 2>/dev/null) ]] && continue
-        tmux kill-session -t "$sess" 2>/dev/null || true
-    done < <(tmux list-sessions -F '#{session_name} #{session_created}' 2>/dev/null)
-    return 0
-}
-
-# The session a new client should attach to: the project session itself while
-# nobody is on it, otherwise a fresh member of its group.
-attach_target() { # $1 = base session name
-    local base=$1 clients i
-    reap_orphan_views "$base"
-    clients=$(tmux list-clients -t "=$base" 2>/dev/null | wc -l)
-    if ((clients == 0)); then
-        printf '%s\n' "$base"
-        return
-    fi
-    for ((i = 2; ; i++)); do
-        has_session "$base$GROUP_SEP$i" && continue
-        tmux new-session -d -t "$base" -s "$base$GROUP_SEP$i"
-        printf '%s\n' "$base$GROUP_SEP$i"
-        return
-    done
-}
-
-select_window() { # $1 = session, $2 = window name, $3 = cwd for a missing window
-    tmux select-window -t "$1:$2" 2>/dev/null && return
-    tmux new-window -t "$1:" -n "$2" -c "${3:-$HOME}"
-}
-
-# The project is already on screen: point that window's client at the window we
-# were asked for and focus it, instead of stacking another terminal on it.
-focus_existing() { # $1 = class, $2 = window, $3 = path, $4 = project, $5 = socket
-    command -v hyprctl >/dev/null 2>&1 || return 1
-    local addr pid info cpid sess
-    # Candidates are every project terminal, its own class first. Class alone is
-    # not proof: `open --here` re-points a window at another project and the class
-    # it was mapped with stays behind. The socket its client is actually on is —
-    # so that decides, and it also finds a handed-over window whose class still
-    # names the project it used to hold.
-    while read -r addr pid; do
-        [[ -n $addr && -n $pid ]] || continue
-        info=$(client_under "$pid") || continue
-        [[ ${info#*$'\t'} == "$5" ]] || continue
-        cpid=${info%%$'\t'*}
-        socket=$5
-        sess=$(tmux list-clients -F '#{client_pid} #{client_session}' 2>/dev/null |
-            awk -v p="$cpid" '$1 == p { print $2; exit }')
-        # One server can host several projects now, so "same socket" is not enough:
-        # this window must be the one actually showing this project. A window parked
-        # on a neighbouring project is left alone — hijacking it would lose the view
-        # the user put there.
-        [[ $(project_of_session "$sess") == "$4" ]] || continue
-        select_window "$sess" "$2" "$3"
-        focus_window "$addr"
-        return 0
-    done < <(hyprctl clients -j 2>/dev/null | jq -r --arg c "$1" --arg p "$CLASS_PREFIX" '
-    map(select(.class | startswith($p)))
-    | sort_by(.class != $c)
-    | .[] | "\(.address) \(.pid)"')
-    return 1
-}
-
-handoff_for() { printf '%s/%s\n' "$HANDOFF_DIR" "${1##*/}"; }
-
-# What a project terminal actually runs. Attaching in a loop is what lets one
-# window change projects: a client cannot move between tmux servers, but the
-# shell that owns the window can drop one client and raise another. `open
-# --here` writes the next target next to this terminal's pty and detaches; every
-# other exit path leaves no file, so the loop ends and the window closes.
-serve() { # $1 = socket, $2 = session
-    local sock=$1 target=$2 base handoff
-    # The pty is the key both sides agree on; without one (no terminal at all)
-    # fall back to something unique rather than a name every loop would share.
-    handoff=$(handoff_for "$(tty 2>/dev/null || printf 'pid-%s' "$$")")
-    mkdir -p "$HANDOFF_DIR"
-    while :; do
-        rm -f "$handoff"
-        command tmux -L "$sock" attach-session -t "=$target" || true
-        # A grouped session is a throwaway view, so it dies with its client. Doing
-        # it here rather than with destroy-unattached is deliberate: that option
-        # would reap the session in the gap before the client ever attaches.
-        base=${target%%"$GROUP_SEP"*}
-        if [[ $target != "$base" ]]; then
-            command tmux -L "$sock" kill-session -t "$target" 2>/dev/null || true
-        fi
-        [[ -f $handoff ]] || break
-        IFS=$'\t' read -r sock target <"$handoff" || true
-        rm -f "$handoff"
-        [[ -n $sock && -n $target ]] || break
-    done
-}
-
-# The terminal `open --here` is going to re-point: its pty, the server it is on
-# now, and the client to detach. Captured BEFORE the picker opens, because the
-# picker takes the focus `hyprctl activewindow` would otherwise report.
-HERE_TTY="${HERE_TTY-}"
-HERE_SOCKET="${HERE_SOCKET-}"
-HERE_CLIENT="${HERE_CLIENT-}"
-capture_here() {
-    # Already known: `launch_inline_picker` exported these from the process
-    # that captured them, before the inline window (and its own focus) existed.
-    [[ -n $HERE_TTY && -n $HERE_SOCKET && -n $HERE_CLIENT ]] && return 0
-    local pid info cpid sess base
-
-    # From a pane first — it knows exactly which client asked. Note that
-    # `display-message` is useless here: under `run-shell` (which is how the tmux
-    # binding calls this) it resolves no target and returns empty for every field,
-    # so the session comes out of $TMUX, whose third field is the session id.
-    if [[ -n ${TMUX-} ]]; then
-        socket=$(basename "${TMUX%%,*}")
-        HERE_SOCKET=$socket
-        sess=$(current_session) || sess=""
-        # The client to move is whichever one is viewing this project — the session
-        # itself or one of its grouped views.
-        base=$(project_of_session "$sess")
-        if [[ -n $base ]]; then
-            read -r HERE_CLIENT HERE_TTY < <(tmux list-clients \
-                -F '#{client_name} #{client_tty} #{client_session}' 2>/dev/null |
-                awk -v b="$base" -v g="$GROUP_SEP" '{ s = $3; i = index(s, g);
-          if (i) s = substr(s, 1, i - 1); if (s == b) { print $1, $2; exit } }') || true
-        fi
-    fi
-
-    # Otherwise (a Hyprland bind has no $TMUX) the focused window is the client.
-    if [[ -z $HERE_TTY || -z $HERE_CLIENT ]]; then
-        pid=$(focused_pid) || die "here: run this from a project pane, or focus one"
-        info=$(client_under "$pid") || die "here: the focused window holds no tmux client"
-        cpid=${info%%$'\t'*}
-        HERE_SOCKET=${info#*$'\t'}
-        socket=$HERE_SOCKET
-        read -r HERE_CLIENT HERE_TTY < <(tmux list-clients \
-            -F '#{client_pid} #{client_name} #{client_tty}' 2>/dev/null |
-            awk -v p="$cpid" '$1 == p { print $2, $3; exit }') || true
-    fi
-
-    # Any server will do. A project is a session now, and teardown is scoped to
-    # sessions, so hosting one next to whatever this window already runs — even a
-    # plain `tms` server — costs nothing and is exactly what was asked for.
-    [[ -n $HERE_SOCKET ]] || die "here: cannot tell which tmux server this window is on"
-    [[ -n $HERE_TTY && -n $HERE_CLIENT ]] || die "here: no tmux client to attach the project to"
-}
-
-open() { # $1 = path, $2 = window
-    local path=${1%/} window=${2-} name class target
-    [[ -d $path ]] || die "no such directory: $path"
-    if [[ ${HERE-} == 1 && -z $HERE_TTY ]]; then
-        capture_here
-    fi
-    name=$(project_name "$path")
-    name=$(resolve_name "$name" "$path")
-    # Wherever it already runs; its own socket only if it runs nowhere.
-    socket=$(locate_project "$name") || socket=$(socket_for "$name")
-    class=$(class_for "$name")
-    load_project_conf "$name" "$path"
-    window=${window:-${PROJ_WINDOWS[0]}}
-
-    # Where a brand-new project should be born. `--here` puts it on the window's
-    # current server so both projects sit side by side; this has to be decided
-    # before the session exists, or it would be created on the wrong one.
-    if [[ ${HERE-} == 1 && $socket == "$(socket_for "$name")" ]] && ! has_session "$name"; then
-        socket=$HERE_SOCKET
-    fi
-
-    has_session "$name" || create_session "$name" "$path"
-
-    # Run from a pane on this project's own server: move this client, no new
-    # window. From anywhere else a window is what we came for.
-    if [[ -n ${TMUX-} ]] && [[ $(basename "${TMUX%%,*}") == "$socket" ]]; then
-        select_window "$name" "$window" "$path"
-        # Name the client when we know it: under `run-shell` there is no "current"
-        # one for tmux to guess at, and guessing would move somebody else's window.
-        local -a client_arg=()
-        if [[ -n $HERE_CLIENT ]]; then
-            client_arg=(-c "$HERE_CLIENT")
-        fi
-        tmux switch-client "${client_arg[@]}" -t "=$name" ||
-            die "could not switch this window to $name (its client went away?)"
-        return
-    fi
-
-    # Re-point the window we came from instead of opening another one. The
-    # window keeps the class it was mapped with, so it stays where it is on
-    # screen — that is the point of asking for it here rather than in a new one.
-    if [[ ${HERE-} == 1 ]]; then
-        # The project lives on this window's own server: both are one `C-b C-s`
-        # apart and the client never moves. Teardown is session-scoped (see `kill`),
-        # so the neighbour survives.
-        if [[ $socket == "$HERE_SOCKET" ]]; then
-            select_window "$name" "$window" "$path"
-            tmux switch-client -c "$HERE_CLIENT" -t "=$name" ||
-                die "could not switch this window to $name (its client went away?)"
-            return 0
-        fi
-
-        # It is already running on another server, and a client cannot straddle two.
-        # So the window moves instead: its serve loop picks the handoff up and
-        # re-attaches there.
-        target=$(attach_target "$name")
-        select_window "$target" "$window" "$path"
-        mkdir -p "$HANDOFF_DIR"
-        printf '%s\t%s\n' "$socket" "$target" >"$(handoff_for "$HERE_TTY")"
-        socket=$HERE_SOCKET
-        tmux detach-client -t "$HERE_CLIENT"
-        return 0
-    fi
-
-    # … unless the project already has a window: then this is a "take me there",
-    # not "give me another terminal". `-n` forces the second terminal.
-    if [[ ${FORCE_NEW-} != 1 ]] && focus_existing "$class" "$window" "$path" "$name" "$socket"; then
-        return 0
-    fi
-    # focus_existing repoints `socket` while it probes; put it back.
-    socket=$(locate_project "$name") || socket=$(socket_for "$name")
-
-    target=$(attach_target "$name")
-    select_window "$target" "$window" "$path"
-
-    # This process IS the window `launch_inline_picker` opened: become the
-    # project's session in place, rather than spawning a second terminal for it.
-    if [[ ${INLINE-} == 1 ]]; then
-        exec "$SELF" serve "$socket" "$target"
-    fi
-
-    # TMUX must not survive into the new terminal: opening project B from a pane
-    # of project A would otherwise hand kitty a nested-attach refusal, and the
-    # window would die on the spot.
-    local serve_cmd launch_cmd
-    serve_cmd=$(printf '%q serve %q %q' "$SELF" "$socket" "$target")
-    launch_cmd="env -u TMUX -u TMUX_PANE kitty --class $(printf '%q' "$class")"
-    launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -c $(printf '%q' "$serve_cmd")"
-    if command -v uwsm >/dev/null 2>&1; then
-        launch_cmd="uwsm app -- $launch_cmd"
-    fi
-
-    # Placement rides on the exec itself. A `windowrule` would be the obvious
-    # home for it, but this Hyprland answers no `keyword` request, so there is no
-    # way to add one at runtime — and an exec rule is scoped to this launch
-    # anyway, which a class rule never was.
-    if command -v hyprctl >/dev/null 2>&1; then
-        # Not `silent`: opening a project is a "take me there", so the workspace
-        # comes forward and the new window takes focus, the way a bare launch does.
-        if [[ -n $PROJ_WORKSPACE ]]; then
-            launch_cmd="[workspace name:$PROJ_WORKSPACE] $launch_cmd"
-        fi
-        hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
-        (stamp_slot "$class" "$window" &)
-        return 0
-    fi
-    # Outside a Hyprland session the exec rule would just be noise in argv.
-    exec "$SHELL" -c "$launch_cmd"
-}
-
 pick() { # $1 = window
-    local choice path
-    # Before the picker opens: it takes the focus `capture_here` reads from.
-    if [[ ${HERE-} == 1 ]]; then
-        capture_here
-    fi
+    local choice
     if [[ ${INLINE-} == 1 ]]; then
-        # This process IS the terminal (`launch_inline_picker` spawned it): fzf
-        # is its first screen.
+        # This process IS the terminal (`launch_inline_picker` spawned it):
+        # fzf is its first screen.
         choice=$(fzf_pick) || exit 0
-    elif [[ -n ${TMUX-} ]]; then
-        choice=$(popup_pick) || exit 0
     elif [[ -t 0 ]]; then
-        # A plain tty, no tmux: still our own terminal, run fzf right here.
         choice=$(fzf_pick) || exit 0
     else
         # A Hyprland bind, no terminal in sight — hand off to one.
@@ -965,74 +558,15 @@ pick() { # $1 = window
         return
     fi
     [[ -n $choice ]] || exit 0
-    # One path, even if two entries somehow share a display name — `open` takes a
-    # single directory, and two lines here used to abort it.
-    path=$(lookup_fresh 1 "$choice" 2)
-    [[ -n $path ]] || die "no path for project: $choice"
-    open "$path" "${1-}"
+    open "$choice" "${1-}"
 }
 
-# A killed server leaves its socket file behind, so liveness is decided by
-# actually talking to it — and the dead ones are swept while we are here.
-#
-# EVERY server, not just the `proj-` ones: since `--here` can seat a project on
-# whatever server a window already had, that is where a project may have to be
-# found. Looking only at `proj-*` made such a project invisible, and the next
-# `open` of it built a second copy on its own socket.
-live_sockets() {
-    local sock saved=$socket
-    for sock in "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/"*; do
-        [[ -S $sock ]] || continue
-        socket=${sock##*/}
-        if tmux list-sessions >/dev/null 2>&1; then
-            printf '%s\n' "$socket"
-        else
-            rm -f "$sock"
-        fi
-    done
-    socket=$saved
-}
-
-# Only the servers this script creates. `kill-all` is about undoing its own
-# work, so it must not reach a server that merely happens to host a project.
-project_sockets() {
-    local sock
-    while read -r sock; do
-        [[ $sock == "$SOCKET_PREFIX"* ]] && printf '%s\n' "$sock"
-    done < <(live_sockets)
-    return 0
-}
-
-# Servers are no longer one-to-one with projects, so this lists what each one
-# actually holds.
-running() {
-    local sock sess
-    # Scanning every server also turns up servers that are none of our business —
-    # the log server, a stray `tms` one. A session there counts only if it is
-    # actually a project, which is what `--here` would have seated.
-    local -A known=()
-    while read -r sess; do
-        known[$sess]=1
-    done < <(list_cached | cut -f1)
-
-    while read -r sock; do
-        socket=$sock
-        while read -r sess; do
-            [[ $sess == *"$GROUP_SEP"* ]] && continue
-            [[ $sock == "$SOCKET_PREFIX"* || -n ${known[$sess]-} ]] || continue
-            printf '%s\t%s\t%s client(s)\t%s window(s)\n' "$sess" "$sock" \
-                "$(tmux list-clients -t "=$sess" 2>/dev/null | wc -l)" \
-                "$(tmux list-windows -t "$sess" 2>/dev/null | wc -l)"
-        done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
-    done < <(live_sockets)
-}
-
-# --- teardown ---------------------------------------------------------------
+# --- teardown -----------------------------------------------------------
 
 # Reachable from a keybind, where there is no tty to prompt on, so the same
-# terminal picker stands in. Defaults to "no" in both forms.
-# 0 = yes, 1 = no, 2 = cancelled. The third one matters: escaping a prompt must
-# not be read as "no" and quietly do half the thing anyway.
+# terminal picker stands in. Defaults to "no". 0 = yes, 1 = no, 2 =
+# cancelled — escaping a prompt must not be read as "no" and quietly do half
+# the thing anyway.
 confirm() { # $1 = question
     if [[ ${ASSUME_YES-} == 1 ]]; then
         return 0
@@ -1048,209 +582,78 @@ confirm() { # $1 = question
     [[ $picked == yes ]]
 }
 
-# Close the portal, not the project: detach the one client living in the
-# focused window. Its kitty exits with it; the server keeps running.
-close() {
-    local pid info client want
-    if [[ -n ${TMUX-} ]]; then
-        resolve_socket
-        tmux detach-client
-        return
+# Ask a `slot:nvim` window to quit through its own confirm-quit path instead
+# of closing it outright (see the header comment). Returns 0 once the
+# window is actually gone, 1 if it is still standing (nvim is showing its
+# own prompt, or the user said no) — the caller must never force past a 1.
+quit_nvim_window() { # $1 = class, $2 = address
+    local class=$1 addr=$2 sock i
+    sock=$(nvim_sock_for "$class")
+    if [[ -S $sock ]] && command -v nvim >/dev/null 2>&1; then
+        nvim --server "$sock" --remote-send '<C-\><C-n>:confirm qa<CR>' 2>/dev/null || true
     fi
-    pid=$(focused_pid) || die "close: no tty and no focused window"
-    info=$(client_under "$pid") || die "close: focused window holds no tmux client"
-    want=${info%%$'\t'*}
-    socket=${info#*$'\t'}
-    # Match on the client's own pid, so a project with several windows open loses
-    # exactly the one you are looking at.
-    client=$(tmux list-clients -F '#{client_pid} #{client_name}' |
-        awk -v want="$want" '$1 == want { print $2 }')
-    [[ -n $client ]] || die "close: no tmux client in the focused window"
-    tmux detach-client -t "$client"
-}
-
-# The close bind. A window holding no project client just closes; one that does
-# is offered the bigger hammer first, because closing it silently would leave a
-# server running that nothing on screen points at any more. Answering no still
-# closes the window — the project keeps running, same as `close`.
-#
-# Everything about the target is resolved BEFORE the prompt: the picker window
-# takes the focus, so `hyprctl activewindow` would report it by the time we
-# acted on the answer.
-close_window() {
-    local pid addr info cpid name client
-    command -v hyprctl >/dev/null 2>&1 || die "close-window: no hyprctl"
-    read -r addr pid < <(hyprctl activewindow -j 2>/dev/null |
-        jq -r '. as $w | if $w.address then "\($w.address) \($w.pid)" else empty end') || true
-    [[ -n ${addr-} && -n ${pid-} ]] || die "close-window: no window focused"
-
-    # Any tmux client, on any socket: a project can be seated next to whatever a
-    # window already ran, so the socket's name proves nothing either way.
-    if ! info=$(client_under "$pid"); then
-        hypr_dispatch "hl.dsp.window.close(\"address:$addr\")"
-        return 0
-    fi
-
-    cpid=${info%%$'\t'*}
-    socket=${info#*$'\t'}
-    name=$(client_project "$cpid") || name=${socket#"$SOCKET_PREFIX"}
-    client=$(tmux list-clients -F '#{client_pid} #{client_name}' 2>/dev/null |
-        awk -v p="$cpid" '$1 == p { print $2; exit }')
-
-    # A terminal that holds tmux but no project of ours — the log server, a bare
-    # `tms` session — just closes. Offering to kill it would be answering a
-    # question nobody asked.
-    if ! is_project "$name" "$socket"; then
-        hypr_dispatch "hl.dsp.window.close(\"address:$addr\")"
-        return 0
-    fi
-
-    # The project this window shows — never the whole server, which may be hosting
-    # another project alongside it. Escaping the prompt cancels the close as well:
-    # the window you asked about is still there to ask again.
-    local answer=0
-    confirm "Closing $name — kill the project too (all its windows)?" || answer=$?
-    case $answer in
-    0) kill_sessions "$name" ;;
-    2) return 0 ;;
-    esac
-    # Detaching this one client is what closes the window: its serve loop finds no
-    # handoff waiting and ends, taking the terminal with it. After a kill the
-    # client may already be gone, hence the fallback.
-    if [[ -n $client ]] && tmux detach-client -t "$client" 2>/dev/null; then
-        return 0
-    fi
-    hypr_dispatch "hl.dsp.window.close(\"address:$addr\")"
-}
-
-# Kill one project outright — server and all. Scoped by construction: this
-# socket holds nothing but this project.
-# Every session this project owns on the current server: the project session
-# plus the grouped views extra windows attached to it.
-project_sessions() { # $1 = project name
-    tmux list-sessions -F '#{session_name}' 2>/dev/null |
-        awk -v n="$1" -v g="$GROUP_SEP" 'index($0, n) == 1 &&
-      (length($0) == length(n) || substr($0, length(n) + 1, 1) == g)'
-}
-
-# Kills the project, not the server. Since `open --here` a server can hold more
-# than one project, and `kill-server` would take the neighbour with it. tmux
-# exits on its own once the last session goes, so this still cleans up whole.
-kill_sessions() { # $1 = project name
-    local sess
-    while read -r sess; do
-        [[ -n $sess ]] && tmux kill-session -t "$sess" 2>/dev/null
-    done < <(project_sessions "$1")
-}
-
-kill_project() {
-    local pid info cpid name
-    require_socket kill
-    # Which project — the one the focused window is showing, not the one the
-    # socket happens to be named after.
-    if [[ -n ${TMUX-} ]]; then
-        name=$(project_of_session "$(visible_session)")
-    else
-        pid=$(focused_pid) || die "kill: no project window focused"
-        info=$(client_under "$pid") || die "kill: no project window focused"
-        cpid=${info%%$'\t'*}
-        name=$(client_project "$cpid") || die "kill: that window shows no project"
-    fi
-    confirm "Kill project $name (all its windows)?" || exit 0
-    kill_sessions "$name"
-}
-
-kill_all() {
-    local -a socks=()
-    mapfile -t socks < <(project_sockets)
-    ((${#socks[@]})) || die "no project servers running"
-    confirm "Kill all ${#socks[@]} project server(s)?" || exit 0
-    for socket in "${socks[@]}"; do
-        tmux kill-server 2>/dev/null || true
+    # Give nvim a moment to either exit clean or put its dialog up; either
+    # way this never force-closes what it finds still there afterward.
+    for ((i = 0; i < 20; i++)); do
+        [[ -S $sock ]] || return 0
+        sleep 0.1
     done
-}
-
-# The other half of "not a second source of truth": projects.json carries
-# metadata this scan cannot, keyed by a name it must still recognise. A name
-# that survives here after the project is gone from the scan is stale
-# metadata nobody will notice until the dashboard shows a repo that no longer
-# exists.
-drift() {
-    [[ -f $PROJECTS_JSON ]] || {
-        echo "no projects.json at $PROJECTS_JSON (nothing to check)"
-        return 0
-    }
-    command -v jq >/dev/null 2>&1 || die "drift: jq is required"
-    local -a known=() stale=()
-    mapfile -t known < <(jq -r '.projects | keys[]' "$PROJECTS_JSON")
-    local name
-    for name in "${known[@]}"; do
-        if [[ -z $(lookup 1 "$name" 1) ]]; then
-            stale+=("$name")
-        fi
-    done
-    if ((${#stale[@]} == 0)); then
-        echo "projects.json: no drift (${#known[@]} project(s) checked)"
-        return 0
-    fi
-    printf 'projects.json: %d stale entr%s not in the current scan:\n' \
-        "${#stale[@]}" "$([[ ${#stale[@]} == 1 ]] && echo y || echo ies)"
-    printf '  %s\n' "${stale[@]}"
+    hyprctl clients -j 2>/dev/null | jq -e --arg a "$addr" '.[] | select(.address == $a)' \
+        >/dev/null 2>&1 || return 0
     return 1
 }
 
-# Flags are accepted on either side of the subcommand, so `open -n <path>`
-# reads the way the usage above spells it.
-FLAGS_EATEN=0
-parse_flags() {
-    FLAGS_EATEN=0
-    while [[ ${1-} == -y || ${1-} == --yes || ${1-} == -n || ${1-} == --new ||
-        ${1-} == --here || ${1-} == --inline ]]; do
-        case $1 in
-        -y | --yes) ASSUME_YES=1 ;;
-        -n | --new) FORCE_NEW=1 ;;
-        --here) HERE=1 ;;
-        # `pick`'s own re-exec into itself (`launch_inline_picker`): this
-        # process is already the terminal, so `pick` runs fzf right here
-        # instead of spawning another one.
-        --inline) INLINE=1 ;;
-        esac
-        shift
-        FLAGS_EATEN=$((FLAGS_EATEN + 1))
-    done
+# Every project window, name resolved from an explicit argument or the
+# focused window's class.
+kill_project() { # $1 = project name (optional)
+    local name=${1-}
+    if [[ -z $name ]]; then
+        local class
+        class=$(focused_class) || die "kill: no project window focused"
+        [[ $class == "$CLASS_PREFIX"* ]] || die "kill: focused window is not a project"
+        name=${class#"$CLASS_PREFIX"}
+    fi
+    confirm "Kill project $name (all its windows)?" || exit 0
+    local class
+    class=$(class_for "$name")
+    local -a blocked=()
+    local role addr
+    while IFS=$'\t' read -r role addr; do
+        [[ -n $addr ]] || continue
+        if [[ $role == nvim ]]; then
+            quit_nvim_window "$class" "$addr" || {
+                blocked+=("$role")
+                continue
+            }
+        else
+            hypr_dispatch "hl.dsp.window.close(\"address:$addr\")" || true
+        fi
+    done < <(live_windows "$class")
+    if ((${#blocked[@]})); then
+        printf '%s: %s still open — nvim has unsaved changes or is waiting on an answer\n' \
+            "${0##*/}" "${blocked[*]}" >&2
+    fi
 }
 
-parse_flags "$@"
-shift "$FLAGS_EATEN"
-
 case "${1-pick}" in
-list) list "${2-}" ;;
-running) running ;;
-drift) drift ;;
+list) list ;;
+sync) sync ;;
+drop) drop "${2-}" ;;
 pick)
     shift
-    parse_flags "$@"
-    shift "$FLAGS_EATEN"
+    # `--inline`: this process IS the picker window `launch_inline_picker`
+    # spawned (`pick_cmd`, above) — re-exec'd here instead of parsed as a
+    # project argument.
+    if [[ ${1-} == --inline ]]; then
+        INLINE=1
+        shift
+    fi
     pick "${1-}"
     ;;
 open)
     shift
-    parse_flags "$@"
-    shift "$FLAGS_EATEN"
-    open "$@"
+    open "${1-}" "${2-}"
     ;;
-window)
-    [[ -n ${TMUX-} ]] || die "window: not inside tmux"
-    resolve_socket
-    select_window "$(current_session)" "${2:?window name}" "$PWD"
-    ;;
-close) close ;;
-close-window) close_window ;;
-serve)
-    shift
-    serve "${1:?socket}" "${2:?session}"
-    ;;
-kill) kill_project ;;
-kill-all) kill_all ;;
+kill) kill_project "${2-}" ;;
 *) die "unknown command: $1" ;;
 esac

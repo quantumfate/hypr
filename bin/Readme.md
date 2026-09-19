@@ -13,17 +13,22 @@ integrate with the shared state / UI:
   (`qfs theme cycle`, `qfs window rename "..."`, `qfs show`, …). Zsh completion
   `_qfs` lives in the quickshell repo's `completions/`.
 
-- `bin/,proj.sh` — the tmux project manager: one entry point for "put me in
-  project X". `pick` chooses a project with fzf, never in a separate window —
-  inside tmux it's a `tmux display-popup`; from a Hyprland bind (no terminal at
-  all) it opens one project-classed kitty window whose first screen IS fzf,
-  and the same window becomes the project session once you choose
-  (`pick --inline`, used internally for that re-exec). Full reference in the
-  script's own header comment.
+- `bin/,proj.sh` — the project manager (tmux is gone from
+  here). A project is a set of kitty windows in one Hyprland group on the
+  `code` scene — no sessions, no sockets; the project ends when its last
+  window closes and nothing is remembered. `$QF_STORE/projects.json` is the
+  source of truth for which projects exist and their window template
+  (`,proj.sh sync` populates it from a filesystem scan; nothing else scans).
+  `pick` chooses a project with fzf, never in a separate window — from a
+  Hyprland bind (no terminal at all) it opens one project-classed kitty
+  window whose first screen IS fzf, and that window's `open` call brings up
+  the rest of the project's windows (`pick --inline`, used internally for
+  that re-exec). Full reference, including how an nvim window is asked to
+  quit rather than force-closed, in the script's own header comment.
 
 - `bin/,job.sh` — starts a long-running job (dev server, build, watcher) as a
   transient `systemd --user` service instead of a plain background process, so
-  it survives a compositor restart (LEO-311). `systemd-run --user`, not
+  it survives a compositor restart. `systemd-run --user`, not
   `--scope` and not `uwsm app --`: a scope inherits the caller's own stdio
   rather than the journal, and `uwsm app --` parents the command to the
   graphical session (`wayland-session@hyprland.desktop.target`), the exact

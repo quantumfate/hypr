@@ -12,7 +12,9 @@ E2E_KEEP=1 just e2e ...                         # keep the sandbox for logs
 ```
 
 Needs a Wayland session (the nested compositor opens a window), `foot` and
-`jq`. Not part of `just check`: it is not headless.
+`jq`; `95_project_group.sh` additionally needs `kitty` (`,proj.sh`'s own
+terminal) and skips itself when it is missing. Not part of `just check`: it
+is not headless.
 
 ## Isolation
 
@@ -27,7 +29,10 @@ Needs a Wayland session (the nested compositor opens a window), `foot` and
 - puts `stubs/stub` first on `PATH` as `qs`, `uwsm`, `notify-send`,
   `systemctl`, `setxkbmap` and `,hyprfocus`, logging calls to
   `$E2E_ROOT/stubs.log`, so nothing reaches the live session's shell or user
-  units;
+  units — except `uwsm app -- CMD`, which the stub still logs but then runs
+  CMD for real: uwsm itself is only a scoping wrapper with no login manager
+  to scope into here, and a scenario waiting on the window CMD opens (e.g.
+  `,proj.sh`'s own launches) needs it to actually run;
 - waits for the nested `.socket.sock`, and refuses to continue if its
   signature equals the parent's.
 
@@ -90,6 +95,7 @@ Token-saving guidance for agents:
 | `90_live_gaps.sh`            | editing `conf/base.lua` gap numbers + reload applies them live (general + scene rule gaps)                                                                                          | no   |
 | `90_deck.sh`                 | deck layout: exactly one member visible, flip changes it and follows focus                                                                                                          | yes  |
 | `95_whichkey.sh`             | submap enter/leave against `hypr/lib/submap.lua`+`whichkey.lua`: enter is a real submap event, exit unwinds a nested chain and dismisses, a withheld tree never appears in the dump | yes  |
+| `95_project_group.sh`        | `,proj.sh open` groups a project's real kitty windows on `code`; reopen refocuses/completes; last-window-close ends it      | no   |
 
 A scenario is a script that sources `lib.sh`, calls `e2e_start`, and exits
 non-zero on failure (`e2e_fail`). Each gets its own nested compositor.

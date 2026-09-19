@@ -27,14 +27,9 @@ local function open_study_project()
     hl.exec_cmd("notify-send 'focus' 'still on from last session' >/dev/null 2>&1")
   end
 
-  -- `,proj.sh` (not this file) is the only thing that knows a project's path
-  -- — projects.json deliberately doesn't carry one, see its schema — so the
-  -- name is resolved through its own `list` rather than duplicating the scan.
-  local cmd = (
-    "path=$(,proj.sh list | awk -F'\\t' -v n=%s '$1==n{print $2; exit}'); "
-    .. '[ -n "$path" ] && ,proj.sh open "$path" >/dev/null 2>&1'
-  ):format(("%q"):format(study_name))
-  hl.exec_cmd(cmd)
+  -- The store now carries the project's path itself, so
+  -- `,proj.sh open` takes the name directly — no scan or lookup needed here.
+  hl.exec_cmd(("%s open %s >/dev/null 2>&1"):format(",proj.sh", ("%q"):format(study_name)))
 end
 
 hl.on("hyprland.start", function()
