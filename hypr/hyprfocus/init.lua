@@ -610,7 +610,7 @@ apply_mode = function(mode)
     occupied[name] = nil
   end
 
-  local withdrawn, refused = workspaces.admit(desk.workspaces, occupied)
+  local withdrawn, refused = workspaces.admit(desk.workspaces, occupied, desk.main)
 
   for _, name in ipairs(desk.workspaces) do
     trace.emit({

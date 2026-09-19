@@ -55,18 +55,35 @@ end
 ---withdrawn: a workspace disabled while its windows stand on it leaves them
 ---somewhere the user cannot reach, which is indistinguishable from having lost
 ---them. The caller holds or moves the windows first, then asks again.
+---`main` is enabled LAST. Enabling a persistent workspace brings it up on its
+---output, and the last one to come up there is the one left showing -- so the
+---plain sorted order quietly handed the desk to whichever admitted workspace
+---sorted last per monitor (`proton` beat `code` on the primary, alphabetically,
+---every reload). The mode already declares which scene it considers main; this
+---is what makes that declaration decide the question instead of the alphabet.
 ---@param admitted string[]
 ---@param occupied table<string, true>? workspaces that still hold windows
+---@param main string? the running mode's declared main scene, enabled last
 ---@return string[] withdrawn, string[] refused because they were occupied
-function M.admit(admitted, occupied)
+function M.admit(admitted, occupied, main)
   occupied = occupied or {}
   local wanted = {}
   for _, name in ipairs(admitted or {}) do
     wanted[name] = true
   end
 
-  local withdrawn, refused = {}, {}
+  local order = {}
   for _, name in ipairs(M.names()) do
+    if name ~= main then
+      order[#order + 1] = name
+    end
+  end
+  if main and rules[main] then
+    order[#order + 1] = main
+  end
+
+  local withdrawn, refused = {}, {}
+  for _, name in ipairs(order) do
     local on = wanted[name] == true
     if not on and occupied[name] then
       on = true
