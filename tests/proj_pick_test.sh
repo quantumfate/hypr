@@ -451,5 +451,82 @@ check "nvim's window is still there" "1" \
 contains "kill says so instead of pretending it worked" "still open" "$err"
 teardown
 
+echo "focus: resolves against whichever project's group is focused, not a hardcoded name"
+setup
+cat >"$PROJDIR/.proj.toml" <<EOF
+[scopes]
+test = "echo run-tests"
+EOF
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
+printf '%s' "$zsh_addr" >"$HYPR_ACTIVE" # focus starts on the shell window
+"$PROJ_SH" focus nvim >/dev/null
+nvim_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:nvim") | .address')
+check "focus nvim lands on the nvim-tagged window" "$nvim_addr" "$(cat "$HYPR_ACTIVE")"
+"$PROJ_SH" focus run >/dev/null
+run_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:run") | .address')
+check "focus run lands on the run-tagged window" "$run_addr" "$(cat "$HYPR_ACTIVE")"
+teardown
+
+echo "sync: folds a project's declared scopes into the store"
+setup
+cat >"$PROJDIR/.proj.toml" <<EOF
+[scopes]
+test = "echo run-tests"
+logs = "echo tail-logs"
+EOF
+"$PROJ_SH" sync >/dev/null
+check "both scopes landed, name to command" '{"logs":"echo tail-logs","test":"echo run-tests"}' \
+    "$(jq -Sc '.projects.demo.scopes' "$QF_STORE/projects.json")"
+teardown
+
+echo "scope: spawns a declared scope with its own command and joins the group"
+setup
+cat >"$PROJDIR/.proj.toml" <<EOF
+[scopes]
+test = "echo run-tests"
+EOF
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
+printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
+"$PROJ_SH" scope test >/dev/null
+for _ in $(seq 1 40); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
+    sleep 0.05
+done
+wait_for_tags "slot:nvim,slot:run,slot:test,slot:zsh"
+check "the scope window joined the project's class" "4" \
+    "$(clients_json | jq '[.[] | select(.class == "Proj-demo")] | length')"
+contains "it spawned with the scope's own command" "run-tests" "$(cat "$KITTY_LOG")"
+teardown
+
+echo "scope: re-invoking an already-live scope focuses it instead of spawning again"
+setup
+cat >"$PROJDIR/.proj.toml" <<EOF
+[scopes]
+test = "echo run-tests"
+EOF
+"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
+printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
+"$PROJ_SH" scope test >/dev/null
+for _ in $(seq 1 40); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
+    sleep 0.05
+done
+wait_for_tags "slot:nvim,slot:run,slot:test,slot:zsh"
+printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
+"$PROJ_SH" scope test >/dev/null
+check "still exactly four windows (nothing re-spawned)" "4" "$(jq 'length' "$HYPR_CLIENTS")"
+test_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:test") | .address')
+check "focused the existing scope window instead" "$test_addr" "$(cat "$HYPR_ACTIVE")"
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -43,6 +43,38 @@
 #                                 focused one if name is omitted); a window
 #                                 running nvim is asked to quit gracefully
 #                                 (see "nvim" below) and is never force-closed
+#   ,proj.sh focus <role>         focus the FOCUSED project's <role>-tagged
+#                                 window (e.g. "nvim", "run") — resolved from
+#                                 whichever project's group is focused right
+#                                 now, never a hardcoded name (bound as
+#                                 SUPER+Space p n / p r; the Lua-side
+#                                 equivalent hypr/lib/project.lua is what a
+#                                 bind closure actually calls, this
+#                                 subcommand exists for scripts/CLI use)
+#   ,proj.sh pick-scope           fzf, inline, over the FOCUSED project's
+#                                 declared scopes (see "scopes" below);
+#                                 spawns or focuses the chosen one
+#   ,proj.sh scope <name>         open the FOCUSED project's declared scope
+#                                 <name> directly, no picker
+#
+# --- scopes: a project's own working context, on demand -------------------
+#
+# Beyond the fixed nvim/zsh/run template, a project can declare named
+# scopes — a terminal with a command the project's own configuration
+# carries, "like scenes but for projects". Declared in `.proj.toml`'s
+# `[scopes]` table (repo root) or the tms config's
+# `[projects.<name>.scopes]`, one plain `name = "command"` per line, e.g.:
+#
+#   [scopes]
+#   test = "just test"
+#   logs = "journalctl --user -f"
+#
+# `sync` folds this into the store's `scopes` object the same way it folds
+# `windows`/`workspace` (later source wins, whole-table replace — see
+# `load_project_conf`). A scope's role tag is `slot:<name>`, the same
+# `slot:` vocabulary the fixed template uses, so `open`/`focus`/`kill` never
+# need to know a window is a scope rather than a template role — the store
+# and the live tag are the only difference.
 #
 # --- nvim: always prompts, never closed out from under you -----------------
 #
@@ -174,17 +206,32 @@ conf_array() { # $1 = key, section body on stdin
 }
 conf_str() { sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1; } # $1 = key, section body on stdin
 
+# `[scopes]`'s body, as name<TAB>command per declared scope (quoted-string
+# assignments only — a nested table would need its own `[scopes.x]` section,
+# which this flat reader does not descend into).
+conf_kv() { # section body on stdin -> "key<TAB>value" per line
+    sed -n 's/^[[:space:]]*\([A-Za-z0-9_.-]*\)[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1\t\2/p'
+}
+
 toml_array() { section "$TMS_CONFIG" "" | conf_array "$1"; }
 
-# Resolves the window template and target workspace for one project into
-# PROJ_WINDOWS / PROJ_WORKSPACE. Later sources win, so the repo's own file
-# overrides the central tms config.
+# {"name":"cmd",...} for a project's `[scopes]` (or `[projects.<n>.scopes]`)
+# body on stdin, or "{}" for a body that declares none.
+scopes_json() {
+    conf_kv | jq -R 'split("\t") | {(.[0]): .[1]}' | jq -sc 'add // {}'
+}
+
+# Resolves the window template, target workspace and declared scopes for one
+# project into PROJ_WINDOWS / PROJ_WORKSPACE / PROJ_SCOPES. Later sources
+# win, so the repo's own file overrides the central tms config.
 PROJ_WINDOWS=()
 PROJ_WORKSPACE=""
+PROJ_SCOPES="{}"
 load_project_conf() { # $1 = project name, $2 = path
     PROJ_WINDOWS=("${TEMPLATE_WINDOWS[@]}")
     PROJ_WORKSPACE=$DEFAULT_WORKSPACE
-    local body ws
+    PROJ_SCOPES="{}"
+    local body ws scopes_body sc
     local -a bodies=() w=()
     bodies+=("$(section "$TMS_CONFIG" "projects.$1")")
     bodies+=("$(section "$2/.proj.toml" "")")
@@ -199,6 +246,14 @@ load_project_conf() { # $1 = project name, $2 = path
         if [[ -n $ws ]]; then
             PROJ_WORKSPACE=$ws
         fi
+    done
+    # `[scopes]` is its own top-level table (repo `.proj.toml`) or
+    # `[projects.<n>.scopes]` (tms config) — read separately from the flat
+    # bodies above since `section()` only ever returns one named table.
+    for scopes_body in "$(section "$TMS_CONFIG" "projects.$1.scopes")" "$(section "$2/.proj.toml" "scopes")"; do
+        [[ -n $scopes_body ]] || continue
+        sc=$(printf '%s\n' "$scopes_body" | scopes_json)
+        [[ $sc != "{}" ]] && PROJ_SCOPES=$sc
     done
 }
 
@@ -276,10 +331,10 @@ sync() {
         fi
         doc=$(printf '%s' "$doc" | jq -c \
             --arg n "$name" --arg p "$path" \
-            --argjson w "$windows_json" --argjson ws "$workspace_json" '
+            --argjson w "$windows_json" --argjson ws "$workspace_json" --argjson sc "${PROJ_SCOPES}" '
         .projects[$n] = (
           (.projects[$n] // {kind: "repo", study: false, priority: 5})
-          + {path: $p, windows: $w, workspace: $ws}
+          + {path: $p, windows: $w, workspace: $ws, scopes: $sc}
         )')
     done < <(scan_named)
 
@@ -409,9 +464,9 @@ window_command() { # $1 = role, $2 = class, $3 = path -> the command, or nothing
 
 # Execs one project window for the given role, on `workspace`. Does not tag
 # it — see `spawn_missing` for why stamping is never backgrounded per-window.
-spawn_window() { # $1 = class, $2 = role, $3 = path, $4 = workspace
-    local class=$1 role=$2 path=$3 workspace=$4 cmd launch_cmd
-    cmd=$(window_command "$role" "$class" "$path")
+spawn_window() { # $1 = class, $2 = role, $3 = path, $4 = workspace, $5 = explicit command (a scope's own; unset uses window_command's template rule)
+    local class=$1 role=$2 path=$3 workspace=$4 explicit=${5-} cmd launch_cmd
+    cmd=${explicit:-$(window_command "$role" "$class" "$path")}
     launch_cmd="kitty --class $(printf '%q' "$class") --directory $(printf '%q' "$path")"
     if [[ -n $cmd ]]; then
         launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -c $(printf '%q' "$cmd")"
@@ -544,6 +599,99 @@ launch_inline_picker() { # $1 = window
     exec "$SHELL" -c "$launch_cmd"
 }
 
+# The FOCUSED project's name (never an explicit argument — every scope/focus
+# entry point resolves against whatever project's group is focused right
+# now, per LEO-311 chunk D). Dies with a clear message off a project window.
+project_of_focused() {
+    local class
+    class=$(focused_class) || die "no project window focused"
+    [[ $class == "$CLASS_PREFIX"* ]] || die "focused window is not a project"
+    printf '%s\n' "${class#"$CLASS_PREFIX"}"
+}
+
+# Focuses the FOCUSED project's <role>-tagged window (hypr/lib/project.lua's
+# Lua-side twin of this; a bind closure calls that directly, this exists for
+# scripts/CLI use of the same resolution).
+focus_role() { # $1 = role
+    local role=${1:?focus: role required} name class addr
+    name=$(project_of_focused)
+    class=$(class_for "$name")
+    addr=$(live_windows "$class" | awk -F'\t' -v r="$role" '$1 == r { print $2; exit }')
+    [[ -n $addr ]] || die "focus: $name has no live '$role' window"
+    focus_window "$addr"
+}
+
+# A project's declared scope command, or empty if it has none by that name.
+store_scope_cmd() { # $1 = project name, $2 = scope name
+    store_project "$1" | jq -r --arg s "$2" '(.scopes // {})[$s] // empty'
+}
+
+# Every declared scope name of a project, one per line.
+store_scope_names() { # $1 = project name
+    store_project "$1" | jq -r '.scopes // {} | keys[]'
+}
+
+# Opens the FOCUSED project's declared scope <name>: focuses it if a
+# `slot:<name>` window is already live, otherwise spawns it with the scope's
+# own command and tags it — joining the group by construction, since it
+# shares the project's class. Runs backgrounded (like `spawn_missing`) so a
+# keybind never blocks on the tag poll.
+scope_open() { # $1 = project name, $2 = scope name
+    local name=$1 scope=$2 class cmd path workspace addr
+    class=$(class_for "$name")
+    cmd=$(store_scope_cmd "$name" "$scope")
+    [[ -n $cmd ]] || die "scope: $name has no declared scope '$scope'"
+    addr=$(live_windows "$class" | awk -F'\t' -v r="$scope" '$1 == r { print $2; exit }')
+    if [[ -n $addr ]]; then
+        focus_window "$addr"
+        return 0
+    fi
+    path=$(store_field "$name" '.path')
+    workspace=$(store_field "$name" '.workspace')
+    workspace=${workspace:-$DEFAULT_WORKSPACE}
+    (
+        spawn_window "$class" "$scope" "$path" "$workspace" "$cmd"
+        stamp_slot "$class" "$scope"
+    ) &
+}
+
+# fzf, inline, over one project's declared scopes — same "this process IS
+# the picker window" shape as `launch_inline_picker`/`pick`, except the
+# project name is resolved and handed down BEFORE the picker window spawns
+# and steals focus, since by the time it exists the focused window has
+# already changed.
+launch_inline_scope_picker() { # $1 = project name
+    local name=$1 pick_cmd launch_cmd
+    pick_cmd=$(printf '%q pick-scope --inline %q' "$SELF" "$name")
+    launch_cmd="kitty --class $(printf '%q' "$(class_for picker)")"
+    launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -ic $(printf '%q' "$pick_cmd")"
+    if command -v uwsm >/dev/null 2>&1; then
+        launch_cmd="uwsm app -- $launch_cmd"
+    fi
+    if command -v hyprctl >/dev/null 2>&1; then
+        launch_cmd="[workspace name:$DEFAULT_WORKSPACE] $launch_cmd"
+        hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
+        return 0
+    fi
+    exec "$SHELL" -c "$launch_cmd"
+}
+
+pick_scope() { # $1 = project name (resolved by the caller, before the picker spawned)
+    local name=${1:?pick-scope: project name required} choice
+    choice=$(store_scope_names "$name" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name scope ") || exit 0
+    [[ -n $choice ]] || exit 0
+    scope_open "$name" "$choice"
+}
+
+# A Hyprland bind, no terminal in sight: resolve the focused project NOW
+# (before anything spawns and steals focus), then hand off to a picker
+# window that already knows which project it's picking a scope for.
+cmd_pick_scope() {
+    local name
+    name=$(project_of_focused)
+    launch_inline_scope_picker "$name"
+}
+
 pick() { # $1 = window
     local choice
     if [[ ${INLINE-} == 1 ]]; then
@@ -605,14 +753,8 @@ quit_nvim_window() { # $1 = class, $2 = address
 
 # Every project window, name resolved from an explicit argument or the
 # focused window's class.
-kill_project() { # $1 = project name (optional)
-    local name=${1-}
-    if [[ -z $name ]]; then
-        local class
-        class=$(focused_class) || die "kill: no project window focused"
-        [[ $class == "$CLASS_PREFIX"* ]] || die "kill: focused window is not a project"
-        name=${class#"$CLASS_PREFIX"}
-    fi
+kill_project() { # $1 = project name (optional; defaults to the focused project)
+    local name=${1:-$(project_of_focused)}
     confirm "Kill project $name (all its windows)?" || exit 0
     local class
     class=$(class_for "$name")
@@ -655,5 +797,19 @@ open)
     open "${1-}" "${2-}"
     ;;
 kill) kill_project "${2-}" ;;
+focus) focus_role "${2-}" ;;
+scope) scope_open "$(project_of_focused)" "${2-}" ;;
+pick-scope)
+    shift
+    # `--inline`: this process IS the picker window `launch_inline_scope_picker`
+    # spawned — its project name travels as an explicit argument since the
+    # focused window has already changed by the time this runs.
+    if [[ ${1-} == --inline ]]; then
+        shift
+        pick_scope "${1-}"
+    else
+        cmd_pick_scope
+    fi
+    ;;
 *) die "unknown command: $1" ;;
 esac

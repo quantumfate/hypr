@@ -113,49 +113,73 @@ submap.tree({
   },
 })
 
--- Projects. One picker (`,proj.sh`, whose list is scraped from the tms config,
--- so it and `C-b C-o` inside tmux always agree), and the key you press picks
--- which window of the project session the new client lands on.
-submap.tree({
-  name = "project",
-  desc = "Projects",
-  entries = {
-    -- No window name: the project's own template decides which tab it lands on
-    -- (`.proj.toml` in the repo, or `[projects.<name>]` in the tms config).
-    bind.project_entry("p", nil, "Open a project (its default window)"),
-    bind.project_entry("n", "nvim", "Open a project on its nvim window"),
-    bind.project_entry("s", "zsh", "Open a project on its shell window"),
-    bind.project_entry("r", "run", "Open a project on its run window"),
-    -- Plain open focuses the window the project already has; SHIFT says "a
-    -- second terminal on it, please".
-    bind.project_entry("p", nil, "Open a project in a new window", { config.secondary_mod }, true),
-    -- Add another project to the window you are in instead of opening one: it
-    -- joins this window's server (or, if it is already running elsewhere, the
-    -- window moves to it), and `C-b C-s` switches between them.
-    bind.project_entry("h", nil, "Attach another project to THIS window", nil, false, true),
-    -- Teardown, in widening blast radius. `close` is the everyday one: it
-    -- detaches this window's tmux client, so the window goes and the project
-    -- keeps running. The two kills are behind SHIFT and ask in a picker
-    -- first, since a keybind has no tty to prompt on.
-    {
-      key = "c",
-      desc = "Close this window's project client (project keeps running)",
-      action = hl.dsp.exec_cmd(",proj.sh close"),
+-- Projects, redesigned for a world without tmux (LEO-311 chunk D). A
+-- project is kitty windows in one Hyprland group classed `Proj-<name>`
+-- (bin/,proj.sh), so "focus this project's nvim/run window" and "spawn one
+-- of its declared scopes" resolve against whichever project's group is
+-- focused right now — hypr/lib/project.lua, never a hardcoded name — and
+-- serve every project with the same two keys. tmux's own vocabulary
+-- (attach-here, detach, per-server kill) is gone: there is no session left
+-- to attach to or detach from.
+do
+  local project = require("hypr.lib.project")
+
+  ---Focuses the active project's `role`-tagged window, if it has one right
+  ---now. A no-op when nothing project-classed is focused, or that role
+  ---isn't live — never guesses at a project name.
+  ---@param role string
+  local function focus_project_slot(role)
+    local w = hl.get_active_window()
+    local class = project.focused_class(w)
+    if not class then
+      return
+    end
+    local addr = project.slot_address(hl.get_windows() or {}, class, role)
+    if addr then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. addr }))
+    end
+  end
+
+  submap.tree({
+    name = "project",
+    desc = "Projects",
+    entries = {
+      -- No window name: the project's own template decides which tab it lands on
+      -- (`.proj.toml` in the repo, or `[projects.<name>]` in the tms config).
+      bind.project_entry("p", nil, "Open a project (its default window)"),
+      {
+        key = "n",
+        desc = "Focus the active project's nvim window",
+        action = function()
+          focus_project_slot("nvim")
+        end,
+      },
+      {
+        key = "r",
+        desc = "Focus the active project's run window",
+        action = function()
+          focus_project_slot("run")
+        end,
+      },
+      -- Scopes are declared per project (.proj.toml's `[scopes]`, synced
+      -- into the store — docs/... next to projects.schema.json): a name,
+      -- a command, and the `slot:<name>` role tag it spawns with. The
+      -- names vary per project, so one dynamic picker stands in for what
+      -- would otherwise be one static key per scope.
+      {
+        key = "o",
+        desc = "Open a project scope (picker)",
+        action = hl.dsp.exec_cmd(",proj.sh pick-scope"),
+      },
+      {
+        key = "k",
+        mods = { config.secondary_mod },
+        desc = "Kill the focused project (all its windows)",
+        action = hl.dsp.exec_cmd(",proj.sh kill"),
+      },
     },
-    {
-      key = "k",
-      mods = { config.secondary_mod },
-      desc = "Kill the focused project (others on its server survive)",
-      action = hl.dsp.exec_cmd(",proj.sh kill"),
-    },
-    {
-      key = "k",
-      mods = { config.secondary_mod, config.primary_mod },
-      desc = "Kill every project server",
-      action = hl.dsp.exec_cmd(",proj.sh kill-all"),
-    },
-  },
-})
+  })
+end
 
 bind.exec("r", config.apps.app_launcher.cmd, {
   description = "Open Application Launcher",
