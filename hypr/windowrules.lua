@@ -310,7 +310,15 @@ windowrule.tag_set_effects("gnome-app", {
   dynamic = { rounding = 12 },
 })
 
--- feh opens floating in place; it no longer takes a special workspace.
+-- feh opens floating, centred, and capped to the same frame a tiled window
+-- would get -- the monitor minus default_gaps' outer margin (conf/base.lua,
+-- the one place gap numbers are invented). feh sizes its own window to the
+-- image by default, which is why it used to spill past the screen on a large
+-- wallpaper; the launch flags in services/Theme.qml do the actual fitting
+-- (--geometry caps the window, --scale-down/--auto-zoom fit the image inside
+-- it), this rule is the floor that keeps the window from exceeding the desk's
+-- spacing even if a flag is ever dropped.
+local feh_gaps = config.default_gaps.gaps_out
 hl.window_rule({
   name = "feh",
   match = { initial_class = "feh" },
@@ -319,6 +327,10 @@ hl.window_rule({
   center = true,
   rounding = 0,
   opacity = "1 override 1 override",
+  size = {
+    "monitor_w - " .. (feh_gaps.left + feh_gaps.right),
+    "monitor_h - " .. (feh_gaps.top + feh_gaps.bottom),
+  },
 })
 
 -- Spotify lives on the "music" shelf (declared drawer, hypr/lib/drawer.lua).
