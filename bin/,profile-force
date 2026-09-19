@@ -40,9 +40,9 @@ except FileNotFoundError:
     doc = {}
 forced = doc.get("forced")
 if forced:
-    print(f"forced: {forced} until {doc.get(\"forced_until\")}")
+    print("forced: %s until %s" % (forced, doc.get("forced_until")))
 else:
-    print(f"not forced (published live profile: {doc.get(\"profile\")})")
+    print("not forced (published live profile: %s)" % doc.get("profile"))
 ' "$store_file"
     ;;
 desk-dual | laptop-solo)
