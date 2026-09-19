@@ -160,8 +160,6 @@
               self + "/session/systemd/hypridle.service";
             xdg.configFile."systemd/user/awww-daemon.service".source =
               self + "/session/systemd/awww-daemon.service";
-            xdg.configFile."systemd/user/quickshell.service".source =
-              self + "/session/systemd/quickshell.service";
           };
         };
     }

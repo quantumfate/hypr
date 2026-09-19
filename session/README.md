@@ -9,7 +9,6 @@ compositor config proper). Deployed identically by both delivery paths
 | `uwsm/env-hyprland`           | `~/.config/uwsm/env-hyprland`                | GPU block gated by `hypr_gpu`.                                                                         |
 | `systemd/hypridle.service`    | `~/.config/systemd/user/hypridle.service`    | Custom unit, bound to the hyprland session target.                                                     |
 | `systemd/awww-daemon.service` | `~/.config/systemd/user/awww-daemon.service` | Custom unit; `PartOf=monitors-changed.target`. Restores the cached last wallpaper per output on login. |
-| `systemd/quickshell.service`  | `~/.config/systemd/user/quickshell.service`  | Custom unit; runs `qs -c quantumfate`. Nothing else ever launched the shell -- no `exec-once`, no unit. |
 | `greeter/dms-hypr.conf`       | greeter config dir (DMS greeter)             | Login-screen Hyprland fragment.                                                                        |
 
 Not owned here (packaged units, only **enabled** into the session by both
