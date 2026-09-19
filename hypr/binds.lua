@@ -501,7 +501,15 @@ do
     if not tile then
       return
     end
+    -- Wrap at the ends: a deck column is a loop, not a list with edges, so
+    -- `next` past the last member lands on the first and `prev` before the
+    -- first lands on the last. `nav.window_neighbor` stops at the ends on
+    -- purpose -- `mod+j/k` walking a group must not cycle -- so the wrap
+    -- belongs here rather than in it.
     local target = nav.window_neighbor(tile.plain, w.address, dir)
+    if not target and #tile.plain > 1 then
+      target = dir == "next" and tile.plain[1] or tile.plain[#tile.plain]
+    end
     if not target then
       return
     end

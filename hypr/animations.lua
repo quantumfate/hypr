@@ -15,8 +15,15 @@ hl.config({ animations = { enabled = true } })
 hl.animation({ leaf = "global", enabled = true, speed = 10, bezier = "default" })
 hl.animation({ leaf = "border", enabled = true, speed = 3, bezier = "default" })
 hl.animation({ leaf = "windows", enabled = true, speed = 4.79, bezier = "easeOutQuint" })
-hl.animation({ leaf = "windowsIn", enabled = true, speed = 3, bezier = "default" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 3, bezier = "default" })
+-- Vertical slide, because the one place windows routinely appear and vanish
+-- on this desk is a deck column scrolling (docs/deck.md): the member being
+-- shown is moved onto the workspace and the one it replaces is moved off to
+-- `special:deck-hold`. A default pop or a horizontal slide reads as "a window
+-- appeared", not "the column moved" -- the columns sit side by side, so
+-- horizontal motion says the wrong thing. Sliding the outgoing one up and the
+-- incoming one in from below makes the swap read as one strip scrolling.
+hl.animation({ leaf = "windowsIn", enabled = true, speed = 3, bezier = "default", style = "slide bottom" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 3, bezier = "default", style = "slide top" })
 hl.animation({ leaf = "fadeIn", enabled = true, speed = 1.73, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeOut", enabled = true, speed = 1.46, bezier = "almostLinear" })
 hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "default" })
