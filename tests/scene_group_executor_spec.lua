@@ -166,6 +166,77 @@ t.describe("group executor", function()
     t.eq(1, #ejected)
   end)
 
+  t.it("seeds a group in the class adapter's order, not open order", function()
+    local _, stub, windows = fresh_scene()
+    local group_adapters = require("hypr.scene.group_adapters")
+    local saved = group_adapters.registry["Dofus.x64"]
+    -- A test-double adapter standing in for the roster: deliberately the
+    -- reverse of address order, so a pass that still just appended in
+    -- `decision.members` order (address order) would be caught.
+    group_adapters.registry["Dofus.x64"] = {
+      order = function(members)
+        local addrs = {}
+        for _, m in ipairs(members) do
+          addrs[#addrs + 1] = m.address
+        end
+        table.sort(addrs, function(x, y)
+          return x > y
+        end)
+        return addrs
+      end,
+      enter = saved.enter,
+    }
+
+    local a = win(windows, { address = "0x1", class = "Dofus.x64" })
+    local b = win(windows, { address = "0x2", class = "Dofus.x64" })
+    open(stub, b)
+
+    local order = {}
+    for _, m in ipairs(a.group.members) do
+      order[#order + 1] = m.address
+    end
+    t.eq({ "0x2", "0x1" }, order, "physical member order follows the adapter, not open/address order")
+
+    group_adapters.registry["Dofus.x64"] = saved
+  end)
+
+  t.it("inserts a joining member at its adapter-ordered slot, not always at the end", function()
+    local _, stub, windows = fresh_scene()
+    local group_adapters = require("hypr.scene.group_adapters")
+    local saved = group_adapters.registry["Dofus.x64"]
+    -- Roster order: 0x1, 0x2, 0x3 — the joiner (0x2) belongs in the middle
+    -- of the two windows already grouped (0x1, 0x3).
+    local rank = { ["0x1"] = 1, ["0x2"] = 2, ["0x3"] = 3 }
+    group_adapters.registry["Dofus.x64"] = {
+      order = function(members)
+        local addrs = {}
+        for _, m in ipairs(members) do
+          addrs[#addrs + 1] = m.address
+        end
+        table.sort(addrs, function(x, y)
+          return rank[x] < rank[y]
+        end)
+        return addrs
+      end,
+      enter = saved.enter,
+    }
+
+    local a = win(windows, { address = "0x1", class = "Dofus.x64" })
+    local d = win(windows, { address = "0x3", class = "Dofus.x64" })
+    hl_stub.new_group({ a, d })
+    local c = win(windows, { address = "0x2", class = "Dofus.x64" })
+
+    open(stub, c)
+
+    local order = {}
+    for _, m in ipairs(a.group.members) do
+      order[#order + 1] = m.address
+    end
+    t.eq({ "0x1", "0x2", "0x3" }, order, "the joiner lands between its roster neighbours, not appended")
+
+    group_adapters.registry["Dofus.x64"] = saved
+  end)
+
   t.it("does nothing for a lone block window with no peer yet", function()
     local calls, stub, windows = fresh_scene()
     local a = win(windows, { address = "0x1", class = "Dofus.x64" })

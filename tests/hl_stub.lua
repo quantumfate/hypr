@@ -297,8 +297,11 @@ function M.new_group(seed)
     group.members[#group.members + 1] = { address = w.address }
     w.group = group
   end
-  function group:add(w)
-    self.members[#self.members + 1] = { address = w.address }
+  -- `index` mirrors Hyprland's `HL.Group:add` (1-based insertion position,
+  -- default: append) so a spec can assert physical member order, not just
+  -- membership.
+  function group:add(w, index)
+    table.insert(self.members, index or (#self.members + 1), { address = w.address })
     w.group = self
   end
   function group:remove(w)

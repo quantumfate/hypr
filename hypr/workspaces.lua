@@ -5,6 +5,15 @@
 --   engine.layout_opts -- consumed by hypr/events/layout_opts.lua; workspace
 --     rules only implement layoutopt:orientation, and hl.workspace_rule rejects
 --     the nested per-layout tables outright.
+--   engine.hide_groupbar_for -- classes whose groupbar/border/shadow this
+--     workspace hides (LEO-380 live complaint: Hyprland has no workspace-rule
+--     knob for the groupbar specifically — `HL.WorkspaceRuleSpec.decorate`
+--     exists but is never read by the window-rule applicator the groupbar's
+--     `visible()` check consults, source-verified against Hyprland 0.56's
+--     `WindowRuleApplicator.cpp`. The only lever that actually reaches it is
+--     a window rule's own `decorate` effect, scoped to this workspace via a
+--     `workspace:` match condition — which also drops the border and shadow,
+--     there being no separate "groupbar only" effect.
 -- A spec with a `default_name` keys its rule on that name, not on the id. The
 -- rest of the environment addresses workspaces by name (binds, hold restore,
 -- window rules, the scene actuator), and when a mode withdrew an id-keyed
@@ -29,4 +38,11 @@ for _, workspace_spec in ipairs(config.host.workspaces.workspace_specs) do
   end
   rule.layout = layout.rule_layout(rule.layout)
   registry.record(workspace_spec.default_name, hl.workspace_rule(rule))
+
+  local hide_groupbar_for = workspace_spec.engine and workspace_spec.engine.hide_groupbar_for
+  if hide_groupbar_for then
+    for _, class in ipairs(hide_groupbar_for) do
+      hl.window_rule({ match = { class = class, workspace = rule.workspace }, decorate = false })
+    end
+  end
 end

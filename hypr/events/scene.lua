@@ -220,19 +220,36 @@ local function apply_group_decision(w)
   local block_field = decision.block and ("%s/%d"):format(scene_name, decision.block.order)
 
   if decision.action == "seed" and decision.members and #decision.members >= 2 then
-    local anchor = decision.members[1]
+    -- Hyprland places members in the order they are `group:add`ed, not in
+    -- whatever order the caller iterates them (the
+    -- physical tab order didn't match the roster driving mod+j/k). Sort
+    -- `decision.members` (address order, from grouping.lua) into the
+    -- adapter's order first, so the first `add` call already lands the
+    -- anchor the adapter would pick first.
+    local by_address = {}
+    for _, m in ipairs(decision.members) do
+      by_address[m.address] = m
+    end
+    local ordered = {}
+    for _, address in ipairs(group_adapters.for_class(w.class).order(decision.members, {})) do
+      if by_address[address] then
+        ordered[#ordered + 1] = by_address[address]
+      end
+    end
+
+    local anchor = ordered[1] or decision.members[1]
     hl.dispatch(hl.dsp.group.toggle({ window = "address:" .. anchor.address }))
     local seeded = hl.get_window("address:" .. anchor.address)
     if seeded and seeded.group then
       local group_key = grouping.group_key(seeded)
       group_adapters.record_join(group_key, anchor.address)
-      for i = 2, #decision.members do
-        local member = hl.get_window("address:" .. decision.members[i].address)
+      for i = 2, #ordered do
+        local member = hl.get_window("address:" .. ordered[i].address)
         if member then
           pcall(function()
             seeded.group:add(member)
           end)
-          group_adapters.record_join(group_key, decision.members[i].address)
+          group_adapters.record_join(group_key, ordered[i].address)
         end
       end
     end
@@ -247,10 +264,25 @@ local function apply_group_decision(w)
     local target = hl.get_window("address:" .. decision.target.address)
     local joiner = hl.get_window("address:" .. w.address)
     if target and target.group and joiner then
+      -- Same reordering, for a window arriving after the group already
+      -- exists: `HL.Group:add(window, index)` takes a 1-based insertion
+      -- index (verified against Hyprland 0.56's Lua binding source), so the
+      -- joiner is placed at its adapter-ordered slot among the group's
+      -- current members instead of always landing at the end.
+      local current = group_adapters.normalize_members(target.group)
+      current[#current + 1] = { address = joiner.address, title = joiner.title }
+      local group_key = grouping.group_key(target)
+      local index
+      for i, address in ipairs(group_adapters.for_class(w.class).order(current, { group_key = group_key })) do
+        if address == joiner.address then
+          index = i
+          break
+        end
+      end
       pcall(function()
-        target.group:add(joiner)
+        target.group:add(joiner, index)
       end)
-      group_adapters.record_join(grouping.group_key(target), w.address)
+      group_adapters.record_join(group_key, w.address)
     end
     trace.emit(window_fields(w, scene_name, {
       stage = "arrange",

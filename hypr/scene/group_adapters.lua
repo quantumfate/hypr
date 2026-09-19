@@ -139,7 +139,9 @@ end
 local function dofus_order(members)
   local by_title, present = {}, {}
   for _, m in ipairs(members) do
-    by_title[m.title] = m.address
+    if m.title then -- a titleless member (a test double, or a window before its title lands) can't match the roster
+      by_title[m.title] = m.address
+    end
     present[m.address] = true
   end
 
@@ -179,6 +181,21 @@ M.registry = {
 ---@return GroupAdapter
 function M.for_class(class)
   return (class and M.registry[class]) or M.default
+end
+
+---A live `HL.Group`'s members as `{ address, title }`, normalized the way
+---every group reader here needs (`HL.Group.members` is a bare `HL.Window`,
+---not a one-element array, when the group holds exactly one).
+---@param group HL.Group
+---@return { address: string, title: string? }[]
+function M.normalize_members(group)
+  local raw = group.members
+  raw = (raw and raw.title) and { raw } or (raw or {})
+  local members = {}
+  for _, m in ipairs(raw) do
+    members[#members + 1] = { address = m.address, title = m.title }
+  end
+  return members
 end
 
 return M

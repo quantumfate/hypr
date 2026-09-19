@@ -49,7 +49,13 @@ return {
       -- capture region, so this scene's declaration must opt out of solo
       -- framing itself (`solo_frame = false`); the per-host opt-out field
       -- that used to live here belonged to a now-retired framing module.
-      { workspace = "4", default_name = "dofus" },
+      -- `hide_groupbar_for` (LEO-380 live complaint): the physical order fix
+      -- already puts the team roster in the right visual order, but the user
+      -- also asked to drop the groupbar here specifically. Hyprland ties the
+      -- groupbar to the window rule `decorate` effect (hypr/workspaces.lua),
+      -- which also drops the border and shadow — there is no groupbar-only
+      -- knob (source-verified against Hyprland 0.56).
+      { workspace = "4", default_name = "dofus", engine = { hide_groupbar_for = { "Dofus.x64" } } },
       -- Pokemon: emulator + streaming media. On primary beside dofus.
       { workspace = "5", default_name = "pokemon" },
       -- Steam games: fullscreen proton/steam windows, no split.
