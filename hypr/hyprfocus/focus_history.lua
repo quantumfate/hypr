@@ -216,26 +216,49 @@ function M.restore(desk, output_for)
   local moves, refocus = M.plan_restore(snapshot, monitors_ok and monitors or {}, admitted, main, main_monitor)
 
   local trace = require("hypr.lib.trace")
-  for _, move in ipairs(moves) do
-    hl.dispatch(hl.dsp.focus({ workspace = "name:" .. move.workspace }))
-    trace.emit({
-      stage = "admit",
-      event = "focus_restored",
-      decision = move.reason == "restore" and "restore" or "fallback",
-      reason = move.reason == "restore" and "reload must not move focus"
-        or "previously focused workspace no longer admitted",
-      monitor = move.monitor,
-      workspace = move.workspace,
-    })
-  end
 
-  if refocus then
-    if refocus.window and window_alive(refocus.window) then
-      hl.dispatch(hl.dsp.focus({ window = "address:" .. refocus.window }))
-    else
-      hl.dispatch(hl.dsp.focus({ workspace = "name:" .. refocus.workspace }))
+  ---Apply the plan. Run twice on purpose -- see the re-assert below.
+  ---@param emit boolean whether to trace; only the first pass reports
+  local function apply(emit)
+    for _, move in ipairs(moves) do
+      hl.dispatch(hl.dsp.focus({ workspace = "name:" .. move.workspace }))
+      if emit then
+        trace.emit({
+          stage = "admit",
+          event = "focus_restored",
+          decision = move.reason == "restore" and "restore" or "fallback",
+          reason = move.reason == "restore" and "reload must not move focus"
+            or "previously focused workspace no longer admitted",
+          monitor = move.monitor,
+          workspace = move.workspace,
+        })
+      end
+    end
+
+    if refocus then
+      if refocus.window and window_alive(refocus.window) then
+        hl.dispatch(hl.dsp.focus({ window = "address:" .. refocus.window }))
+      else
+        hl.dispatch(hl.dsp.focus({ workspace = "name:" .. refocus.workspace }))
+      end
     end
   end
+
+  apply(true)
+  -- Re-assert shortly after. `config.reloaded` fires BEFORE the reload has
+  -- finished activating workspaces: re-creating the mode's persistent
+  -- workspaces focuses the last one to come up on each output, which put the
+  -- primary on `proton` (the last enabled primary spec) however this restore
+  -- had just set it. The pass above therefore plans nothing -- at that instant
+  -- no monitor has drifted yet -- and the drift lands afterwards, unopposed.
+  --
+  -- The plan re-applied is deliberately the one computed above, from the
+  -- snapshot read before any of that: re-planning here would read whatever the
+  -- reload's own workspace change had meanwhile told `M.capture` to write, and
+  -- would restore the desk to the very drift this exists to undo.
+  require("hypr.lib.hypr").oneshot(150, function()
+    apply(false)
+  end)
 end
 
 ---Register the capture/restore hooks. Called as a plain top-level statement
