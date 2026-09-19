@@ -193,10 +193,28 @@ integrate with the shared state / UI:
   `,hyprfocus log --follow` in a kitty window, since `logview`'s spec
   vocabulary has no generic "journal filtered by `SYSLOG_IDENTIFIER`" source.
 
+- `bin/,profile-force` — forces `hypr/lib/profile.lua`'s geometry profile
+  (`desk-dual`/`laptop-solo`) to test one machine's layout from the other. A
+  typed command on purpose, never a keybind: the override outranks the live
+  monitor fingerprint on every config load, so a single mis-tapped key once
+  cost two weeks of invisible bad geometry. Every force carries an expiry
+  (default 120 minutes, `,profile-force <name> [minutes]`) and announces
+  itself loudly — a notification plus a `stage=profile` trace record — on
+  every load while it stands (`hypr/lib/profile.lua`'s `M.announce`, called
+  from `conf/host.lua`). `,profile-force clear` drops it early; `,profile-force
+status` reads the store directly for what is standing and until when.
+
 How the shared state + IPC bridges work:
 [quickshell/ARCHITECTURE.md](https://github.com/quantumfate/quickshell/blob/main/ARCHITECTURE.md).
 
 The desk's shared state lives in one store directory: `$QF_STORE` (default
 `$XDG_STATE_HOME/quantum-store`, exported by `env-hyprland`). Every runtime
 reads backward one step to the location before it existed, so a store not yet
-moved still answers and migrates on the next write.
+moved still answers and migrates on the next write — except `hyprfocus.json`
+(the scene declaration), which opts out on both sides (`hypr/lib/store.lua`'s
+`NO_LEGACY`, quickshell's `Store { legacyMigration: false }` in
+`Hyprfocus.qml`): a missing declaration must leave the engine inert and say
+so, never resurrect an old one. Seeding and reseeding now run themselves at
+session start (`hypr/lib/maintenance.lua`, called from `hypr/events/start.lua`)
+and log every action with `stage=maintenance` — `,hyprfocus seed` and
+`,proj.sh sync` are no longer something to remember to run by hand.

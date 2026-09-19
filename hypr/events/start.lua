@@ -33,6 +33,14 @@ local function open_study_project()
 end
 
 hl.on("hyprland.start", function()
+  -- Seed what is missing, reseed what is stale, before anything reads the
+  -- declaration it might need (hypr/lib/maintenance.lua). Skipped under the
+  -- nested e2e compositor: its fixtures ARE the declaration under test, and
+  -- reseeding over them would test the shipped asset instead of the fixture.
+  if os.getenv("QF_E2E") ~= "1" then
+    require("hypr.lib.maintenance").run()
+  end
+
   -- Login always enters `work`, unless the pointer names a still-running
   -- timed mode (docs/desktop-model.md "Pointer"). Runs under the nested e2e
   -- compositor too, deliberately: e2e's fixture pointer already starts at
