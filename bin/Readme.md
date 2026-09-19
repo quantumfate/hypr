@@ -74,6 +74,14 @@ integrate with the shared state / UI:
   Quickshell store's older writes are not stranded. `bin/,wallpaper.sh` is now
   a thin wrapper over `,theme.sh wallpaper` for keybinds.
 
+  Every apply also writes `$XDG_CONFIG_HOME/zsh/theme.zsh` — `BAT_THEME` and
+  `FZF_DEFAULT_OPTS` for the resolved palette, since zsh/fzf read no store and
+  get no live D-Bus poke of their own. The zsh role's rc file must `source
+~/.config/zsh/theme.zsh` (after this file exists) for a shell to pick up
+  the palette it was started under; a shell already running picks it up the
+  next time something re-sources rc (a new prompt does not re-source on its
+  own — same "next launch" tier as Zen/Obsidian below).
+
   A palette's folder is one pool; each monitor draws from it at random, but
   only from the images that actually fit that monitor's live pixel size read
   from `hyprctl monitors -j` (aspect and scale, never a hardcoded output

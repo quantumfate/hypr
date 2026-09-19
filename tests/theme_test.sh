@@ -835,5 +835,54 @@ check "no held mode means the baseline answers by day" "mocha" "$(THEME_HOUR=10 
 check "and by night" "mocha" "$(THEME_HOUR=22 "$THEME" get)"
 teardown
 
+echo "shell: zsh/fzf get a generated theme file matching the resolved palette"
+setup
+"$THEME" set mocha >"$ROOT/out" 2>&1
+check "BAT_THEME follows the palette" "Catppuccin Mocha" \
+    "$(bash -c '. "$1" && printf "%s" "$BAT_THEME"' _ "$XDG_CONFIG_HOME/zsh/theme.zsh")"
+contains "fzf gets mocha's own colours" "hl:#f38ba8" "$(cat "$XDG_CONFIG_HOME/zsh/theme.zsh")"
+contains "shell is reported as applied, not pending" "shell: Mocha" "$(cat "$ROOT/out")"
+"$THEME" set latte >/dev/null 2>&1
+check "a second palette rewrites the same file" "Catppuccin Latte" \
+    "$(bash -c '. "$1" && printf "%s" "$BAT_THEME"' _ "$XDG_CONFIG_HOME/zsh/theme.zsh")"
+teardown
+
+echo "one path: the automatic poll (\`get\`) and a manual \`set\` land on the same surfaces"
+# LEO-398: Theme.qml's clock decides whether to fan out by asking \`,theme.sh
+# get\` for the resolved palette (the same resolver \`apply\`/\`set\`/\`toggle\`
+# use) rather than re-deriving lease/baseline itself — so this pins that the
+# automatic trigger and a manual one are not two routes that can drift: both
+# end up running the identical \`apply\`, writing the identical surfaces.
+setup
+printf '{"modes":{"work":{"name":"work","presentation":{"palette":{"day":"latte","night":"mocha"}}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"work","until":null}\n' >"$XDG_STATE_HOME/quantum-store/focus.json"
+
+# What the clock's poll would see at night, and what it would then apply —
+# exactly the two calls \`noteLease\`/\`applyToSystem\` make, in order.
+resolved_night=$(THEME_HOUR=22 "$THEME" get)
+check "the automatic poll resolves the leased night half" "mocha" "$resolved_night"
+THEME_HOUR=22 "$THEME" apply >"$ROOT/automatic.out" 2>&1
+automatic_kitty=$(readlink "$XDG_CONFIG_HOME/kitty/current-theme.conf")
+automatic_bat=$(bash -c '. "$1" && printf "%s" "$BAT_THEME"' _ "$XDG_CONFIG_HOME/zsh/theme.zsh")
+automatic_gsettings=$(gsettings_log)
+
+# A manual pick of the same palette, from a clean store, must write the
+# identical surfaces — proving there is exactly one code path underneath.
+teardown
+setup
+printf '{"modes":{"work":{"name":"work","presentation":{"palette":{"day":"latte","night":"mocha"}}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+printf '{"mode":"work","until":null}\n' >"$XDG_STATE_HOME/quantum-store/focus.json"
+THEME_HOUR=22 "$THEME" set mocha >"$ROOT/manual.out" 2>&1
+manual_kitty=$(readlink "$XDG_CONFIG_HOME/kitty/current-theme.conf")
+manual_bat=$(bash -c '. "$1" && printf "%s" "$BAT_THEME"' _ "$XDG_CONFIG_HOME/zsh/theme.zsh")
+manual_gsettings=$(gsettings_log)
+
+check "kitty: automatic matches manual" "$manual_kitty" "$automatic_kitty"
+check "shell theme: automatic matches manual" "$manual_bat" "$automatic_bat"
+check "gsettings: automatic matches manual" "$manual_gsettings" "$automatic_gsettings"
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
