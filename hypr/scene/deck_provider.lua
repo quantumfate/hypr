@@ -66,16 +66,21 @@ end
 ---has no notion of "current workspace".
 ---@param spec Scene.Spec
 ---@return Scene.Tile[]
----@return Scene.Tile[]
+---@return Scene.Tile[] tiles
+---@return table<string, string> workspace_of live workspace name per address
 local function member_tiles(spec)
-  local tiles = {}
+  local tiles, workspace_of = {}, {}
   for _, w in ipairs(hl.get_windows() or {}) do
     local tile = scene_provider.window_tile(w)
     if deck.column_for(spec, tile) then
       tiles[#tiles + 1] = tile
+      local ws = w.workspace
+      if tile.address and ws and ws.name then
+        workspace_of[tile.address] = ws.name
+      end
     end
   end
-  return tiles
+  return tiles, workspace_of
 end
 
 ---Every address each deck scene held on its last placement, so a window that
@@ -207,7 +212,7 @@ function M.place(scene, scene_name, ctx)
     end
 
     local gaps_in, gaps_out = gaps(scene_name)
-    local tiles = member_tiles(scene)
+    local tiles, workspace_of = member_tiles(scene)
     scroll_to_arrivals(scene, scene_name, tiles)
     local boxes, hold = deck.boxes(scene, tiles, ctx.area, {
       gaps_in = gaps_in,
@@ -233,9 +238,15 @@ function M.place(scene, scene_name, ctx)
     end
 
     for _, address in ipairs(hold) do
-      -- Only park what is actually still tiled here; a member already in
-      -- HOLD (or not yet arrived) needs no move.
-      if by_address[address] then
+      -- Ask the COMPOSITOR where the window is, not this layout's target
+      -- list. A window can sit on the deck's workspace while the layout has
+      -- not adopted it -- moving one back from `HOLD` leaves it on the
+      -- workspace but absent from `ctx.targets` -- and gating on the target
+      -- list then skipped its move forever, stranding it as a full-width
+      -- overlay over the columns (verified live). A member already in `HOLD`,
+      -- or not yet anywhere, still needs no move.
+      local at = workspace_of[address]
+      if at and at ~= HOLD then
         hl.dispatch(hl.dsp.window.move({
           window = "address:" .. address,
           workspace = HOLD,

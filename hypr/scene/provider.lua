@@ -302,6 +302,16 @@ function M.attach()
   M.register(spec_lib.load)
   hl.on("config.reloaded", M.recalculate_focused)
   hl.on("workspace.active", recalculate_on_arrival)
+  -- A closing window frees the slot its column was showing, and on a deck
+  -- scene the member that should take that slot is parked on another
+  -- workspace -- so nothing left on this one changes, and the compositor
+  -- calls no recalculate at all. The column simply stayed empty until a
+  -- workspace switch happened to trigger `recalculate_on_arrival`. One
+  -- deferred redraw closes that gap; the tick lets the compositor finish
+  -- removing the window first, so the pass sees the stack it actually left.
+  hl.on("window.close", function()
+    require("hypr.lib.hypr").oneshot(1, M.recalculate_focused)
+  end)
 end
 
 return M
