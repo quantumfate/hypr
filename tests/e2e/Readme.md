@@ -96,6 +96,67 @@ Token-saving guidance for agents:
 | `90_deck.sh`                 | deck layout: exactly one member visible, flip changes it and follows focus                                                                                                          | yes  |
 | `95_whichkey.sh`             | submap enter/leave against `hypr/lib/submap.lua`+`whichkey.lua`: enter is a real submap event, exit unwinds a nested chain and dismisses, a withheld tree never appears in the dump | yes  |
 | `95_project_group.sh`        | `,proj.sh open` groups a project's real kitty windows on `code`; reopen refocuses/completes; last-window-close ends it                                                              | no   |
+| `97_bar_truth.sh`            | the REAL bar (not the `qs` stub): workspace rows populate, active row follows a same-monitor switch, compositor truth after a cross-monitor switch                                  | no   |
 
 A scenario is a script that sources `lib.sh`, calls `e2e_start`, and exits
 non-zero on failure (`e2e_fail`). Each gets its own nested compositor.
+
+## Real bar (`E2E_REAL_BAR=1`, `97_bar_truth.sh`)
+
+Every scenario above replaces `qs` with a logging stub (see "Isolation"), so
+the bar's displayed state disagreeing with the compositor's actual state is
+invisible to the suite by construction — a same-monitor workspace switch
+that never updates the active-row highlight, say, would pass every scenario
+here. `97_bar_truth.sh` is the one opt-out.
+
+**Opting in** (per scenario, additive — every other scenario is unaffected
+and keeps the fast stub):
+
+```sh
+E2E_REAL_BAR=1     # qs stays off the stub PATH; falls through to the real binary
+E2E_BIG_MONITOR=1  # WAYLAND-1 sized wide enough that the bar's islands don't overlap
+e2e_start
+bar_start WAYLAND-1                    # launch the real bar, wait for its layer
+bar_shot WAYLAND-1 "$path.png"         # screenshot exactly the bar's own layer geometry
+bar_diff "$a.png" "$b.png"             # differing-pixel count between two shots
+```
+
+`bar_start` launches `qs -p <sibling quickshell checkout>/shell.qml` directly
+(the same "run from a checkout" mode quickshell's own README documents),
+bypassing `hypr/events/start.lua`'s production launch line entirely — that
+file deliberately never launches anything under `QF_E2E` (its own comment:
+the nested compositor "starts nothing outside itself"), so these helpers
+launch the bar the same deliberate, sandboxed way `spawn_test_window`
+launches a test client. The checkout is found via `E2E_QS_PATH` if set, else
+the sibling of this repo's own main checkout (not a worktree) named
+`quickshell` — `bar_qs_path` resolves it with
+`git worktree list --porcelain`, since a scenario run from inside
+`.claude/worktrees/<name>` is not itself that sibling's neighbour.
+
+**Sizing the nested output.** `hyprctl keyword monitor` / `monitorv2`
+against a running instance is a confirmed no-op on this Lua-config build —
+both answer `unknown request`, live, not a timing race — so the small
+default output (auto mode/scale; a real bar's three islands overlap
+unreadably at that width) cannot be resized after boot. What actually works:
+sizing at **config load**, before Hyprland locks in the output's mode.
+`hypr/monitors.lua` reads `QF_E2E_BIG_MONITOR` (set by `E2E_BIG_MONITOR=1`
+before `e2e_start`) and calls `hl.monitor()` for `WAYLAND-1` explicitly, the
+same mechanism the file's own default catch-all rule already uses. This is
+opt-in and e2e-only (gated on `QF_E2E` too) — every other scenario keeps
+today's small, fast output.
+
+**What real pixels can and can't prove here.** `bar_shot` crops to the
+`quickshell-bar` layer's own advertised geometry (from `hc -j layers`), so a
+diff reflects the bar's actual rendered content, not notifications or
+tooltips compositing elsewhere on the output. Confirmed working, live,
+against the real `WAYLAND-1` backend output (`WLR_RENDERER=pixman`, same as
+`hq shot`). Against a `headless` output (`hyprctl output create headless
+...`, used for the secondary monitor / `aside` scene), `grim` fails outright
+with `failed to create buffer` — a headless output has no compositor-side
+buffer to screencopy at all, unrelated to `WLR_RENDERER` (which only fixes
+this for a real backend output). So `97_bar_truth.sh`'s cross-monitor leg
+verifies the switch through compositor truth (`hyprctl -j monitors`) and
+confirms the primary bar keeps rendering correctly once a second bar
+instance exists, rather than pixel-diffing the secondary bar directly — a
+real gap, not a stub covering for it, documented here since every future
+on-screen scenario runs into the same limits.

@@ -8,6 +8,13 @@
 # are all under one mktemp root; external commands the config spawns (qs,
 # uwsm, notify-send, systemctl, setxkbmap, ,hyprfocus) resolve to logging
 # stubs.
+#
+# Opt-in real bar (per scenario, off by default): set `E2E_REAL_BAR=1` before
+# calling `e2e_start`/`e2e_boot`. `qs` is then left off the stub PATH, so it
+# resolves to the real quickshell binary, and `bar_start` launches it
+# directly against the sibling checkout (see its header below). Every other
+# scenario is unaffected -- the stub is still linked for `qs` whenever
+# `E2E_REAL_BAR` is unset, exactly as before.
 
 set -euo pipefail
 
@@ -19,6 +26,13 @@ E2E_ROOT=""
 E2E_PID=""
 E2E_SIG=""
 E2E_WAYLAND=""
+E2E_BAR_PID=""
+declare -a E2E_EXTRA_PIDS=()
+
+# Track a background PID (e.g. the real bar) so e2e_stop kills it too --
+# nothing outside the nested compositor's own client list dies with it
+# automatically.
+e2e_track_pid() { E2E_EXTRA_PIDS+=("$1"); }
 
 e2e_log() { printf 'e2e: %s\n' "$*" >&2; }
 e2e_fail() {
@@ -28,6 +42,11 @@ e2e_fail() {
 
 # Kill the nested compositor and remove the sandbox. Safe to call twice.
 e2e_stop() {
+    local pid
+    for pid in "${E2E_EXTRA_PIDS[@]-}"; do
+        [[ -n $pid ]] && kill -TERM "$pid" 2>/dev/null || true
+    done
+    E2E_EXTRA_PIDS=()
     if [[ -n $E2E_PID ]] && kill -0 "$E2E_PID" 2>/dev/null; then
         kill -TERM "$E2E_PID" 2>/dev/null || true
         for _ in $(seq 50); do
@@ -71,6 +90,9 @@ e2e_boot() {
     # Named off the store rule so the privacy gate never reads a fixture as a diary.
     cp "$E2E_DIR/fixtures/focus.pointer.json" "$E2E_ROOT/store/focus.json"
     for name in qs notify-send uwsm systemctl setxkbmap ,hyprfocus; do
+        # E2E_REAL_BAR opts a scenario out of the qs stub alone: leaving it
+        # unlinked here lets PATH fall through to the real quickshell binary.
+        [[ $name == qs && ${E2E_REAL_BAR:-0} == 1 ]] && continue
         ln -s "$E2E_DIR/stubs/stub" "$E2E_ROOT/bin/$name"
     done
 
@@ -83,6 +105,10 @@ e2e_boot() {
     export QF_HOST=e2e
     export E2E_STUB_LOG="$E2E_ROOT/stubs.log"
     export PATH="$E2E_ROOT/bin:$E2E_REPO/bin:$PATH"
+    # Opt-in (E2E_BIG_MONITOR=1): hypr/monitors.lua sizes WAYLAND-1 to fit a
+    # real bar's islands without overlap. Read at config load, not set here
+    # via hyprctl -- see the "Real bar" section of this directory's Readme.
+    [[ ${E2E_BIG_MONITOR:-0} == 1 ]] && export QF_E2E_BIG_MONITOR=1 || unset QF_E2E_BIG_MONITOR
     # Software rendering: dmabuf screencopy from a nested Wayland-backend
     # output is unreliable across GPUs/sandboxes ("failed to create buffer" in
     # grim); pixman buffers are plain shm and `hq shot` needs those to work.
@@ -125,8 +151,10 @@ e2e_boot() {
     done
     [[ -n $E2E_WAYLAND ]] || e2e_fail "nested compositor has no wayland socket"
     wait_until 100 hc -j monitors >/dev/null
-    # Small window: conf/hosts/e2e.lua is data and can't call hl.monitor()
-    # itself, so pin WAYLAND-1's mode here, once, for every caller.
+    # Confirmed no-op on this Lua-config build ("unknown request" from
+    # `hyprctl keyword`/`monitorv2` alike) -- kept as a harmless attempt in
+    # case a future Hyprland build honors it, but E2E_BIG_MONITOR above
+    # (hypr/monitors.lua, applied at config load) is what actually works.
     hc keyword monitor "WAYLAND-1,1280x360@60,0x0,1" >/dev/null || true
     e2e_log "nested instance $E2E_SIG up (pid $E2E_PID, $E2E_WAYLAND, root $E2E_ROOT)"
 }
@@ -190,4 +218,73 @@ go_workspace() {
         e2e_fail "could not focus workspace $1"
     wait_until 50 sh -c "hyprctl -i '$E2E_SIG' -j activeworkspace | jq -e --arg n '$1' '.name == \$n'" ||
         e2e_fail "workspace $1 never became active"
+}
+
+# --- Real bar (E2E_REAL_BAR=1 scenarios only) ------------------------------
+#
+# hypr/events/start.lua never launches qs under QF_E2E by design (see its
+# comment: the nested compositor "starts nothing outside itself"), so these
+# helpers launch it directly, the same way spawn_test_window launches a test
+# client directly -- deliberate, sandboxed, and independent of the
+# production `hl.exec_cmd("... uwsm app -- qs ...")` launch line.
+
+# The quickshell checkout this repo is developed alongside: `E2E_QS_PATH` if
+# set, else the sibling of this repo's OWN main checkout (not this worktree)
+# named `quickshell`.
+bar_qs_path() {
+    if [[ -n ${E2E_QS_PATH:-} ]]; then
+        printf '%s\n' "$E2E_QS_PATH"
+        return
+    fi
+    local main_wt
+    main_wt=$(git -C "$E2E_REPO" worktree list --porcelain | awk '/^worktree /{print $2; exit}')
+    printf '%s\n' "$(dirname "$main_wt")/quickshell"
+}
+
+# Is a quickshell-bar layer up on the given monitor?
+bar_layer_up() {
+    hc -j layers | jq -e --arg m "$1" \
+        '(.[$m].levels["2"] // []) | map(select(.namespace == "quickshell-bar")) | length > 0' \
+        >/dev/null
+}
+
+# bar_start <monitor>: launch the real bar against the nested instance and
+# wait for its layer-shell surface to attach to <monitor>. Requires
+# E2E_REAL_BAR=1 (so `qs` isn't the stub) and a sibling quickshell checkout.
+bar_start() {
+    [[ ${E2E_REAL_BAR:-0} == 1 ]] || e2e_fail "bar_start: set E2E_REAL_BAR=1 before e2e_start"
+    local monitor=$1 qs_path
+    qs_path=$(bar_qs_path)
+    [[ -f "$qs_path/shell.qml" ]] || e2e_fail "bar_start: no shell.qml at $qs_path (set E2E_QS_PATH)"
+    QT_QPA_PLATFORM=wayland qs -p "$qs_path/shell.qml" >"$E2E_ROOT/qs.log" 2>&1 &
+    E2E_BAR_PID=$!
+    e2e_track_pid "$E2E_BAR_PID"
+    wait_until 300 bar_layer_up "$monitor" || {
+        tail -n 40 "$E2E_ROOT/qs.log" >&2
+        e2e_fail "real bar never attached to $monitor"
+    }
+}
+
+# bar_shot <monitor> <out.png>: screenshot exactly the bar's own layer
+# geometry on <monitor> (real pixels off the nested compositor's own
+# output -- see tests/e2e/Readme.md "Real bar" for what this can and can't
+# capture).
+bar_shot() {
+    local monitor=$1 out=$2 geo
+    # `|| true`: a plain assignment's exit status is the pipeline's under
+    # `set -e`, and hc can glitch mid-transition -- surface the real error
+    # via the explicit checks below instead of dying here with no message.
+    geo=$(hc -j layers | jq -r --arg m "$monitor" \
+        '(.[$m].levels["2"] // []) | map(select(.namespace == "quickshell-bar")) | first
+         | if . == null then empty else "\(.x),\(.y) \(.w)x\(.h)" end') || true
+    [[ -n $geo ]] || e2e_fail "bar_shot: no quickshell-bar layer on $monitor"
+    WAYLAND_DISPLAY="$E2E_WAYLAND" grim -g "$geo" "$out" || e2e_fail "bar_shot: grim failed for $monitor ($geo)"
+}
+
+# bar_diff <img1> <img2>: count of differing pixels between two screenshots.
+# `compare` exits 1 when the images DIFFER (its normal, expected outcome
+# here) and 2 on a real error -- `|| true` so a genuine difference doesn't
+# look like a shell failure under `set -e`.
+bar_diff() {
+    compare -metric AE "$1" "$2" null: 2>&1 | awk '{print $1}' || true
 }
