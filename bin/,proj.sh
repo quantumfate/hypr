@@ -446,6 +446,75 @@ focus_window() { # $1 = address
     return 1
 }
 
+# The address of the window this process is itself running inside. Not
+# `$PPID`-based: Hyprland is a subreaper, so a `kitty -e` child is reparented
+# to the compositor itself the moment kitty's own launch wrapper exits,
+# leaving `$PPID` naming Hyprland, not kitty (verified live) — no pid link
+# back to "which client is this" survives that. So this reads `activewindow`
+# and checks it against OUR OWN class — `class_for picker` is a fixed, known
+# literal, so "the focused window is the picker" is unambiguous.
+#
+# Call this only AFTER the picker's fzf has returned a choice, never before
+# it paints: by then the user has typed into this very window, so focus has
+# demonstrably settled here and one read answers. Called up front instead it
+# would have to poll against focus still in transit, and those round-trips
+# are latency the user spends staring at an empty picker. The few retries
+# below cover only a compositor that has not caught up within a frame.
+own_window_address() {
+    local class tries addr
+    class=$(class_for picker)
+    for ((tries = 0; tries < 5; tries++)); do
+        addr=$(hyprctl activewindow -j 2>/dev/null | jq -r --arg c "$class" 'select(.class == $c) | .address // empty')
+        if [[ -n $addr ]]; then
+            printf '%s\n' "$addr"
+            return 0
+        fi
+        sleep 0.05
+    done
+    return 1
+}
+
+# The picker window closing (kitty's own close-on-child-exit, once `pick`
+# returns) is itself a background group member closing, and that can steal
+# focus back from the window `open`/`scope_open` just focused even though
+# `focus_window` above already confirmed it stuck first — verified live,
+# tests/e2e/scenarios/97_project_picker.sh. `focus_window`'s own reassert
+# loop cannot cover this: it runs and returns before the picker's window is
+# gone, and the picker process is dead the moment its window closes, so
+# nothing left inside `,proj.sh` can react to the close itself. The caller
+# starts this via `setsid $SELF _reassert-focus ...` rather than a plain
+# backgrounded `&` job: a bare `&` still shares the picker's controlling
+# terminal, and the pty hangup from the picker's own window closing
+# (SIGHUP) killed it right when it needed to still be waiting (verified
+# live) — `setsid` gives it its own session before that signal can reach
+# it. This function itself just waits for the picker's address to actually
+# leave `hyprctl clients`, then re-asserts focus once more.
+reassert_focus_after_picker_closes() { # $1 = picker's own address, $2 = target address
+    local picker_addr=$1 addr=$2 tries
+    [[ -n $addr ]] || return 0
+    for ((tries = 0; tries < 40; tries++)); do
+        if hyprctl clients -j 2>/dev/null | jq -e --arg a "$picker_addr" \
+            '[.[] | select(.address == $a)] | length == 0' >/dev/null 2>&1; then
+            focus_window "$addr"
+            return 0
+        fi
+        sleep 0.05
+    done
+}
+
+# The live address of a project's <role> window (or its template's first,
+# same default `open` uses) — what the picker just landed the user on, so
+# `reassert_focus_after_picker_closes` knows what to re-assert.
+current_role_address() { # $1 = project name, $2 = window (role), optional
+    local name=$1 window=${2-} class
+    class=$(class_for "$name")
+    local -a windows=()
+    mapfile -t windows < <(store_project "$name" | jq -r '.windows[]')
+    ((${#windows[@]})) || windows=("${TEMPLATE_WINDOWS[@]}")
+    window=${window:-${windows[0]}}
+    live_windows "$class" | awk -F'\t' -v r="$window" '$1 == r { print $2; exit }'
+}
+
 # --- window template ---------------------------------------------------------
 
 # nvim gets a control socket (see the header comment on nvim quitting); every
@@ -582,6 +651,24 @@ fzf_pick() { list | cut -f1 | fzf "${FZF_PICK_OPTS[@]}"; }
 # window — `class_for picker` matches the ordinary project rule, so it tiles
 # like any other project terminal, no dedicated rule needed — running
 # `pick --inline`, whose fzf IS that window's first screen.
+#
+# Pinning needs no picker-specific code: the `code` scene groups by BLOCK
+# (`Kitty-Main`/`Proj-*`, one shared group), and `hypr/scene/grouping.lua`
+# joins a new member to whichever group already holds the most of that
+# block's live peers — matched by block, never by literal class. So
+# `Proj-picker` folds into the project group already on screen the instant
+# it opens, the same way a declared scope does; nothing here asks for that.
+#
+# Unpinning is not quite as free: `pick`'s `open()` call (below) dispatches
+# focus to the chosen window and `focus_window` confirms it stuck, but
+# kitty then closes the picker window once its own shell exits, and closing
+# THAT background group member can still steal focus back even though it
+# was never the active one — verified live, this was NOT a race
+# (`focus_window`'s reassert had already succeeded) but a real Hyprland
+# group-close behaviour (tests/e2e/scenarios/97_project_picker.sh caught
+# it). `reassert_focus_after_picker_closes`, backgrounded and decoupled
+# from the picker's own process (which is dead the instant its window
+# closes), waits for that close and re-asserts focus once more.
 launch_inline_picker() { # $1 = window
     local window=${1-} pick_cmd launch_cmd
     pick_cmd=$(printf '%q pick --inline' "$SELF")
@@ -677,10 +764,17 @@ launch_inline_scope_picker() { # $1 = project name
 }
 
 pick_scope() { # $1 = project name (resolved by the caller, before the picker spawned)
-    local name=${1:?pick-scope: project name required} choice
+    local name=${1:?pick-scope: project name required} choice own_addr addr
     choice=$(store_scope_names "$name" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name scope ") || exit 0
     [[ -n $choice ]] || exit 0
+    # Before `scope_open` moves focus off this window — see `own_window_address`.
+    own_addr=$(own_window_address) || true
     scope_open "$name" "$choice"
+    addr=$(live_windows "$(class_for "$name")" | awk -F'\t' -v r="$choice" '$1 == r { print $2; exit }')
+    if [[ -n $own_addr && -n $addr ]]; then
+        setsid "$SELF" _reassert-focus "$own_addr" "$addr" </dev/null >/dev/null 2>&1 &
+        disown
+    fi
 }
 
 # A Hyprland bind, no terminal in sight: resolve the focused project NOW
@@ -693,10 +787,11 @@ cmd_pick_scope() {
 }
 
 pick() { # $1 = window
-    local choice
+    local choice own_addr inline=0
     if [[ ${INLINE-} == 1 ]]; then
         # This process IS the terminal (`launch_inline_picker` spawned it):
-        # fzf is its first screen.
+        # fzf is its first screen, so nothing may delay reaching it.
+        inline=1
         choice=$(fzf_pick) || exit 0
     elif [[ -t 0 ]]; then
         choice=$(fzf_pick) || exit 0
@@ -706,7 +801,15 @@ pick() { # $1 = window
         return
     fi
     [[ -n $choice ]] || exit 0
+    # Read this window's own address before `open` moves focus off it, and
+    # only now that fzf has returned — see `own_window_address`.
+    ((inline)) && { own_addr=$(own_window_address) || true; }
     open "$choice" "${1-}"
+    if [[ -n ${own_addr-} ]]; then
+        setsid "$SELF" _reassert-focus "$own_addr" "$(current_role_address "$choice" "${1-}")" \
+            </dev/null >/dev/null 2>&1 &
+        disown
+    fi
 }
 
 # --- teardown -----------------------------------------------------------
@@ -811,5 +914,13 @@ pick-scope)
         cmd_pick_scope
     fi
     ;;
+# Private: `pick`/`pick_scope` below launch this detached (`setsid`) rather
+# than call `reassert_focus_after_picker_closes` in a plain backgrounded
+# subshell — a bare `&` job still shares the picker's controlling terminal,
+# and the pty hangup from the picker's own window closing (SIGHUP) killed it
+# right when it needed to still be waiting (verified live). Not a public
+# subcommand: it exists only so `setsid $SELF ...` has a fresh process to
+# start, detached from that session before it can be hung up.
+_reassert-focus) reassert_focus_after_picker_closes "${2-}" "${3-}" ;;
 *) die "unknown command: $1" ;;
 esac
