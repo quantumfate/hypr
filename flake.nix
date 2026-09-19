@@ -160,6 +160,10 @@
               self + "/session/systemd/hypridle.service";
             xdg.configFile."systemd/user/awww-daemon.service".source =
               self + "/session/systemd/awww-daemon.service";
+            xdg.configFile."systemd/user/theme-auto.service".source =
+              self + "/session/systemd/theme-auto.service";
+            xdg.configFile."systemd/user/theme-auto.timer".source =
+              self + "/session/systemd/theme-auto.timer";
           };
         };
     }

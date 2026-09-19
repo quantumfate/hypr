@@ -1,0 +1,8 @@
+[Unit]
+Description=Re-apply the theme baseline so the palette follows the sun
+After=wayland-session@hyprland.desktop.target
+BindsTo=wayland-session@hyprland.desktop.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/hypr/bin/,theme.sh apply

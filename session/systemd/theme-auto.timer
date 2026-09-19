@@ -1,0 +1,16 @@
+[Unit]
+Description=Hourly sun check for the theme baseline
+BindsTo=wayland-session@hyprland.desktop.target
+
+[Timer]
+# `,theme.sh` splits day from night on the hour (daytime(): 07 <= hour < 19),
+# so an hourly tick is exactly as fine-grained as the decision it drives.
+OnStartupSec=10s
+OnCalendar=hourly
+# A machine asleep across the boundary still converges on the next tick
+# rather than sitting on yesterday's palette.
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=wayland-session@hyprland.desktop.target
