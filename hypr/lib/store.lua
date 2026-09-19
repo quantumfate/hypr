@@ -51,6 +51,11 @@ end
 ---@type table<string, Store.Handle>
 local handles = {}
 
+-- Stores exempt from legacy-document fallback: a missing file must leave the
+-- engine inert, never resurrect an old document (the quickshell counterpart's
+-- equivalent fallback did exactly that for hyprfocus.json).
+local NO_LEGACY = { hyprfocus = true }
+
 ---@param cmd string
 ---@return string
 local function shell(cmd)
@@ -227,10 +232,14 @@ end
 function M.define(name)
   local path = ROOT() .. "/" .. name .. ".json"
   if not handles[path] then
+    local legacy = nil
+    if not NO_LEGACY[name] then
+      legacy = LEGACY_ROOT() .. "/" .. name .. ".json"
+    end
     handles[path] = setmetatable({
       name = name,
       path = path,
-      legacy = LEGACY_ROOT() .. "/" .. name .. ".json",
+      legacy = legacy,
       _data = nil,
       _mtime = nil,
     }, Handle)

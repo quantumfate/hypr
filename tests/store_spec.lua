@@ -72,6 +72,17 @@ t.describe("store", function()
     t.eq(2, s:get("v"))
   end)
 
+  t.it("hyprfocus never adopts a legacy document -- a missing declaration stays missing", function()
+    local legacy_path = dir .. "/legacy/hyprfocus.json"
+    os.execute("mkdir -p " .. dir .. "/legacy")
+    local f = assert(io.open(legacy_path, "w"))
+    f:write('{"version": 1, "base": {"scenes": {"gaming": {}}}}')
+    f:close()
+
+    local s = Store.define("hyprfocus")
+    t.eq({}, s:get()) -- no adoption: an empty table, not the legacy version-1 document
+  end)
+
   t.it("reload(true) forces a re-read even with an unchanged mtime", function()
     local s = Store.define("spec/force")
     s:put({ v = 1 })
