@@ -169,6 +169,15 @@ function Handle:reload(force)
   return self._data or {}
 end
 
+-- The store's on-disk mtime, refreshed like get(). A caller that memoizes its
+-- own derived state (e.g. hypr/scene/spec.lua normalizing scenes) keys its
+-- cache on this, so a store edit invalidates it without a config reload.
+---@return string
+function Handle:mtime()
+  self:reload()
+  return self._mtime or ""
+end
+
 -- Get the whole table, or drill into keys: get("teams", "pioneer").
 ---@param ... string|integer keys to index into, in order
 ---@return any

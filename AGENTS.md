@@ -261,11 +261,12 @@ New to the repo, read in this order — each layer points at the next:
 2. [ARCHITECTURE.md](ARCHITECTURE.md) — the packaging model: dual delivery (Nix + Ansible), repo scope, ecosystem coupling, release channels.
 3. [docs/scenes.md](docs/scenes.md) — the scene contract (below is the enforcement; this is the reasoning). [docs/shelves.md](docs/shelves.md) — the shelf submap for apps that never tile.
 4. [docs/lifecycle.md](docs/lifecycle.md) — the window lifecycle: current behaviour per stage and the draft contract.
-5. [bin/Readme.md](bin/Readme.md) — the shell helpers the desktop spawns, and the state/IPC seams to the quickshell sibling repo.
-6. [system-config/docs/bindings.md](../system-config/docs/bindings.md) — the
+5. [docs/live-config.md](docs/live-config.md) — what the compositor watches/re-executes on a reload, what our engine caches, and what a store/code edit needs to reach a running desk.
+6. [bin/Readme.md](bin/Readme.md) — the shell helpers the desktop spawns, and the state/IPC seams to the quickshell sibling repo.
+7. [system-config/docs/bindings.md](../system-config/docs/bindings.md) — the
    binding architecture (LEO-303): system-level / contextual / mode-scoped
    keybinds, and why a withheld tree takes its door and rendering with it.
-7. Cross-repo: `system-config/docs/hyprfocus.md` (the full `hyprfocus` engine)
+8. Cross-repo: `system-config/docs/hyprfocus.md` (the full `hyprfocus` engine)
    and quickshell `ARCHITECTURE.md` (shared state + IPC). This repo is one
    executor of declarations those repos also execute.
 

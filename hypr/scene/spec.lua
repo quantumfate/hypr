@@ -34,6 +34,9 @@ local M = {}
 ---@field bindings string[] binding trees admitted while this scene is active
 ---@field moods string[] mood tags this scene matches
 ---@field machines table<string, table> machine-specific geometry overrides
+---@field gaps_in number? scene-declared inner gap (LEO-397); wins over the host
+---workspace-spec and the global `general:gaps_in` where set
+---@field gaps_out Scene.CssGap|number? scene-declared outer gap; same precedence
 
 ---Also carries a host map field except the name to fill: the document is
 ---keyed by workspace `default_name`, so the caller passes the key rather
@@ -109,6 +112,8 @@ local function normalize(name, raw)
     -- "deck" changes anything, and no live scene declares it yet.
     layout = raw.layout == "deck" and "deck" or "scene",
     columns = normalize_columns(raw.columns),
+    gaps_in = tonumber(raw.gaps_in),
+    gaps_out = raw.gaps_out,
   }
 end
 
@@ -162,16 +167,15 @@ end
 
 ---The raw scene table: the hyprfocus declaration's `base.scenes`, the only
 ---stored scene document (docs/scenes.md, "Source of truth").
+---@param handle Store.Handle
 ---@return table raw scenes keyed by default_name
-local function document()
-  local store = require("hypr.lib.store")
-  local ok, handle = pcall(store.define, "hyprfocus")
-  local declaration = ok and handle:get() or nil
+local function document(handle)
+  local declaration = handle:get()
   if type(declaration) ~= "table" or not declaration.base then
-    report_missing(ok and "no declaration in the store" or tostring(handle))
+    report_missing("no declaration in the store")
     return {}
   end
-  pcall(migrate_legacy, store, handle, declaration)
+  pcall(migrate_legacy, require("hypr.lib.store"), handle, declaration)
   local scenes = declaration.base.scenes
   if type(scenes) ~= "table" or not next(scenes) then
     report_missing("declaration has no base.scenes")
@@ -180,19 +184,40 @@ local function document()
   return scenes
 end
 
----Every declared scene, keyed by name. Memoized: the compiler and the event
----layer both want the scenes, and normalizing twice would hand them tables
----that compare unequal — `block_for` results are used as identity.
+-- The store mtime `cache` was normalized against (LEO-397). A store edit
+-- (scene blocks, gaps, ...) bumps the handle's mtime, so the next `M.load()`
+-- re-normalizes instead of handing back a declaration frozen since whenever
+-- this Lua state last required this module — no `hyprctl reload` needed.
+---@type string?
+local cached_mtime
+
+---Every declared scene, keyed by name. Memoized against the store's mtime: the
+---compiler and the event layer both want the scenes, and normalizing twice
+---would hand them tables that compare unequal — `block_for` results are used
+---as identity — but a stale-forever cache would mean a scene/gaps edit never
+---reaches a running desk without a full config reload.
 ---@return table<string, Scene.Spec>
 function M.load()
-  if cache then
+  local ok, handle = pcall(require("hypr.lib.store").define, "hyprfocus")
+  if not ok then
+    report_missing(tostring(handle))
+    return cache or {}
+  end
+  -- A handle without :mtime() (test fixtures stub only get/put) can't prove
+  -- freshness, so it never gets the cache -- correct for tests, which swap
+  -- the fake store's data and expect the very next load() to see it.
+  local has_mtime, mtime = pcall(function()
+    return handle:mtime()
+  end)
+  if has_mtime and cache and mtime == cached_mtime then
     return cache
   end
   local out = {}
-  for name, raw in pairs(document()) do
+  for name, raw in pairs(document(handle)) do
     out[name] = normalize(name, raw)
   end
   cache = out
+  cached_mtime = mtime
   return out
 end
 
