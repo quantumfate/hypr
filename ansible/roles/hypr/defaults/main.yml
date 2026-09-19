@@ -107,3 +107,4 @@ hypr_enable_units: >-
 hypr_custom_units:
   - hypridle.service
   - awww-daemon.service
+  - quickshell.service

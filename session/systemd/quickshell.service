@@ -1,0 +1,11 @@
+[Unit]
+Description=Quickshell desktop shell (quantumfate config)
+After=wayland-session@hyprland.desktop.target
+BindsTo=wayland-session@hyprland.desktop.target
+
+[Service]
+ExecStart=/usr/bin/qs -c quantumfate
+Restart=on-failure
+
+[Install]
+WantedBy=wayland-session@hyprland.desktop.target
