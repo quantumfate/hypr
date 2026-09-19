@@ -60,7 +60,8 @@ t.describe("the config loads", function()
 
     local ok2, err2 = load_config("quantum-desktop")
     t.ok(ok2, "config failed to load after the fallback: " .. tostring(err2))
-    t.eq("lua:scene", hl.workspace_rules[1].layout)
+    -- Workspace 1 is quantum-desktop's "code" scene, on the deck layout.
+    t.eq("lua:deck", hl.workspace_rules[1].layout)
   end)
 
   t.it("registers binds and workspace rules", function()
@@ -70,6 +71,7 @@ t.describe("the config loads", function()
     t.ok(#hl.binds > 10, "expected the bind tree to be built")
     t.ok(#hl.workspace_rules > 0, "expected workspace rules")
     t.ok(hl.layouts and hl.layouts.scene, "expected the scene layout to register")
+    t.ok(hl.layouts and hl.layouts.deck, "expected the deck layout to register")
 
     -- A named workspace keys its rule on the name, or any auto-named duplicate
     -- created while the id-backed workspace is withdrawn inherits no rule.
@@ -80,6 +82,6 @@ t.describe("the config loads", function()
       end
     end
     t.eq("name:code", named.code.workspace, "workspace 1 must key its rule on default_name")
-    t.eq("lua:scene", named.code.layout, "workspace 1 is the desktop's scene workspace")
+    t.eq("lua:deck", named.code.layout, "workspace 1 is the desktop's deck-layout scene")
   end)
 end)

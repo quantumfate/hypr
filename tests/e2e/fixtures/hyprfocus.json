@@ -6,16 +6,31 @@
     "projects": [],
     "requires": {},
     "wants": {},
-    "notify": { "default": "show" },
+    "notify": {
+      "default": "show"
+    },
     "drawers": {
-      "signal": { "key": "s", "class": "signal", "desc": "Signal", "launch": "signal-desktop" },
-      "gizmo": { "key": "g", "class": "e2e-gizmo", "desc": "Gizmo", "launch": "e2e-gizmo" }
+      "signal": {
+        "key": "s",
+        "class": "signal",
+        "desc": "Signal",
+        "launch": "signal-desktop"
+      },
+      "gizmo": {
+        "key": "g",
+        "class": "e2e-gizmo",
+        "desc": "Gizmo",
+        "launch": "e2e-gizmo"
+      }
     },
     "scenes": {
       "grouped": {
         "blocks": [
           {
-            "classes": ["e2e-grp-a", "e2e-grp-b"],
+            "classes": [
+              "e2e-grp-a",
+              "e2e-grp-b"
+            ],
             "group": true,
             "order": 1,
             "share": 1
@@ -26,34 +41,132 @@
         "bindings": []
       },
       "loose": {
-        "blocks": [{ "classes": ["e2e-tile"], "order": 1, "share": 1 }],
+        "blocks": [
+          {
+            "classes": [
+              "e2e-tile"
+            ],
+            "order": 1,
+            "share": 1
+          }
+        ],
         "barred": [],
         "strays": "float",
         "bindings": []
       },
       "arena": {
-        "blocks": [{ "classes": ["e2e-game"], "order": 1, "share": 1 }],
+        "blocks": [
+          {
+            "classes": [
+              "e2e-game"
+            ],
+            "order": 1,
+            "share": 1
+          }
+        ],
         "barred": [],
         "strays": "float",
         "bindings": [],
-        "drawers": ["gizmo"]
+        "drawers": [
+          "gizmo"
+        ]
       },
       "aside": {
-        "blocks": [{ "classes": ["e2e-aside"], "order": 1, "share": 1 }],
+        "blocks": [
+          {
+            "classes": [
+              "e2e-aside"
+            ],
+            "order": 1,
+            "share": 1
+          }
+        ],
         "barred": [],
         "strays": "slot",
         "bindings": []
       },
       "deck-test": {
         "layout": "deck",
-        "columns": [{ "order": 1, "share": 1, "classes": ["e2e%-deck%-.*"] }],
+        "columns": [
+          {
+            "order": 1,
+            "share": 1,
+            "classes": [
+              "e2e%-deck%-.*"
+            ]
+          }
+        ],
         "barred": [],
         "bindings": []
       },
       "code": {
-        "blocks": [{ "classes": ["Proj%-.*"], "group": true, "order": 1, "share": 1 }],
+        "blocks": [
+          {
+            "classes": [
+              "Proj%-.*"
+            ],
+            "group": true,
+            "order": 1,
+            "share": 1
+          }
+        ],
         "barred": [],
         "strays": "slot",
+        "bindings": []
+      },
+      "code-deck": {
+        "layout": "deck",
+        "columns": [
+          {
+            "order": 1,
+            "share": 0.67,
+            "classes": [
+              "e2e-proj-alpha-a",
+              "e2e-proj-alpha-b",
+              "e2e-proj-beta",
+              "e2e-proj-gamma"
+            ],
+            "deck": "projects"
+          },
+          {
+            "order": 2,
+            "share": 0.33,
+            "classes": [
+              "e2e-browser"
+            ]
+          }
+        ],
+        "blocks": [
+          {
+            "classes": [
+              "e2e-proj-alpha-a",
+              "e2e-proj-alpha-b"
+            ],
+            "order": 1,
+            "group": true
+          },
+          {
+            "classes": [
+              "e2e-proj-beta"
+            ],
+            "order": 2,
+            "group": true
+          },
+          {
+            "classes": [
+              "e2e-proj-gamma"
+            ],
+            "order": 3,
+            "group": true
+          },
+          {
+            "classes": [
+              "e2e-browser"
+            ],
+            "order": 4
+          }
+        ],
+        "barred": [],
         "bindings": []
       }
     }
@@ -64,33 +177,76 @@
       "hidden": true,
       "main": "grouped",
       "scenes": [
-        { "name": "grouped", "monitor": "primary" },
-        { "name": "loose", "monitor": "primary" },
-        { "name": "aside", "monitor": "secondary" },
-        { "name": "deck-test", "monitor": "primary" }
+        {
+          "name": "grouped",
+          "monitor": "primary"
+        },
+        {
+          "name": "loose",
+          "monitor": "primary"
+        },
+        {
+          "name": "aside",
+          "monitor": "secondary"
+        },
+        {
+          "name": "deck-test",
+          "monitor": "primary"
+        },
+        {
+          "name": "code-deck",
+          "monitor": "primary"
+        }
       ]
     },
     "work": {
       "name": "Work",
       "main": "loose",
       "scenes": [
-        { "name": "grouped", "monitor": "primary" },
-        { "name": "loose", "monitor": "primary" },
-        { "name": "aside", "monitor": "secondary" },
-        { "name": "deck-test", "monitor": "primary" }
+        {
+          "name": "grouped",
+          "monitor": "primary"
+        },
+        {
+          "name": "loose",
+          "monitor": "primary"
+        },
+        {
+          "name": "aside",
+          "monitor": "secondary"
+        },
+        {
+          "name": "deck-test",
+          "monitor": "primary"
+        },
+        {
+          "name": "code-deck",
+          "monitor": "primary"
+        }
       ]
     },
     "study": {
       "name": "Study",
       "main": "grouped",
-      "scenes": [{ "name": "grouped", "monitor": "primary" }]
+      "scenes": [
+        {
+          "name": "grouped",
+          "monitor": "primary"
+        }
+      ]
     },
     "gaming": {
       "name": "Gaming",
       "main": "arena",
       "scenes": [
-        { "name": "arena", "monitor": "primary" },
-        { "name": "grouped", "monitor": "primary" }
+        {
+          "name": "arena",
+          "monitor": "primary"
+        },
+        {
+          "name": "grouped",
+          "monitor": "primary"
+        }
       ]
     }
   }

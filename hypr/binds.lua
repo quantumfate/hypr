@@ -463,36 +463,13 @@ do
       return
     end
     if deck.applies(scene) then
-      -- `mod+j/k` on a deck: scroll the focused column, not just refocus
-      -- within it — `tile.plain` keeps arrival order, so `window_neighbor`
-      -- is the same "next/prev, no wrap" decision a stacked block's window
-      -- list already uses (docs/deck.md "Navigation").
-      local tiles = deck_tiles(scene)
-      local index = nav.tile_index(tiles, w.address)
-      local tile = index and tiles[index]
-      if not tile then
-        return
-      end
-      local target = nav.window_neighbor(tile.plain, w.address, dir)
-      if not target then
-        return
-      end
-      local new_index
-      for i, address in ipairs(tile.plain) do
-        if address == target then
-          new_index = i
-        end
-      end
-      deck_scroll.set(scene.name, tile.column, new_index)
-      -- The target may still be held off the workspace; bring it home and
-      -- focus it. The provider's next `recalculate` sees the new scroll
-      -- index and parks the window this replaces (deck_provider.lua).
-      hl.dispatch(hl.dsp.window.move({
-        window = "address:" .. target,
-        workspace = "name:" .. scene.name,
-        follow = false,
-      }))
-      hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
+      -- `mod+j/k` never scrolls a deck column (docs/deck.md "Navigation",
+      -- correcting this document's own earlier revision): what is inside a
+      -- thing does not change because the column presents `flip`. A group
+      -- already returned above via `focus_in_group`; a bare single-window
+      -- thing has nothing to step to, so this is a no-op, the same as an
+      -- ungrouped one-window `stack` tile today. Scrolling the strip is
+      -- `mod+ctrl+j/k` (`scroll_deck_column` below).
       return
     end
     local tiles = nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
@@ -505,6 +482,45 @@ do
     if target then
       hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
     end
+  end
+
+  ---`mod+ctrl+j/k`: scroll the focused deck column to the next/prev thing
+  ---(docs/deck.md "Navigation"), regardless of whether the currently shown
+  ---thing is a group or a bare window — unlike `mod+j/k`, this never looks
+  ---at `w.group` first, since scrolling the strip is a different action
+  ---from stepping within whatever the strip currently shows.
+  ---@param dir "next"|"prev"
+  local function scroll_deck_column(dir)
+    local w, scene = focused_scene()
+    if not w or not scene or not deck.applies(scene) then
+      return
+    end
+    local tiles = deck_tiles(scene)
+    local index = nav.tile_index(tiles, w.address)
+    local tile = index and tiles[index]
+    if not tile then
+      return
+    end
+    local target = nav.window_neighbor(tile.plain, w.address, dir)
+    if not target then
+      return
+    end
+    local new_index
+    for i, address in ipairs(tile.plain) do
+      if address == target then
+        new_index = i
+      end
+    end
+    deck_scroll.set(scene.name, tile.column, new_index)
+    -- The target may still be held off the workspace; bring it home and
+    -- focus it. The provider's next `recalculate` sees the new scroll index
+    -- and parks the window this replaces (deck_provider.lua).
+    hl.dispatch(hl.dsp.window.move({
+      window = "address:" .. target,
+      workspace = "name:" .. scene.name,
+      follow = false,
+    }))
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
   end
 
   ---@param dir "left"|"right"
@@ -570,6 +586,19 @@ do
   bind.exec("k", function()
     focus_window_in_tile("prev")
   end, { description = "Focus the previous window in this tile", submap_universal = true })
+
+  -- SUPER+CTRL+J/K: scroll a deck column's strip (docs/deck.md
+  -- "Navigation"). A no-op off a deck scene, mirroring how mod+shift+h/l's
+  -- swap is already a no-op off the scene layout. Checked against every
+  -- other bind: SUPER+CTRL is otherwise only used inside submap-local
+  -- entries, never a submap_universal root chord, and SUPER+ALT+J/K already
+  -- belongs to the resize submap, so this collides with neither.
+  bind.exec("j", function()
+    scroll_deck_column("next")
+  end, { mods = { "CTRL" }, description = "Scroll this column to the next thing", submap_universal = true })
+  bind.exec("k", function()
+    scroll_deck_column("prev")
+  end, { mods = { "CTRL" }, description = "Scroll this column to the previous thing", submap_universal = true })
 
   bind.exec("h", function()
     swap_tile("left")

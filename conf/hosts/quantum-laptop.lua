@@ -18,9 +18,9 @@ return {
   kb_options = "caps:swapescape",
   workspaces = {
     workspace_specs = {
-      -- Explicit "scene" here is redundant with conf/host.lua's default, but
-      -- spelled out since this is the primary workspace.
-      { workspace = "1", default = true, default_name = "code", layout = "scene" },
+      -- Deck (docs/deck.md): the project column flips through open project
+      -- groups, the browser column sits beside it (hyprfocus scene "code").
+      { workspace = "1", default = true, default_name = "code", layout = "deck" },
       { workspace = "3", default_name = "proton" },
       -- Dofus: the tile geometry is a fixed capture region, so this scene's
       -- declaration must opt out of solo framing itself (`solo_frame =

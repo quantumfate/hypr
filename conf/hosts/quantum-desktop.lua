@@ -34,14 +34,13 @@ return {
       -- are two tiles however many project windows are open — the group left,
       -- the browser right, and the groupbar saying which terminal you are
       -- looking at.
-      {
-        workspace = "1",
-        default = true,
-        default_name = "code",
-        -- Two-tile ratio is the scene's declared `share` (docs/scenes.md), not
-        -- a layout_opts field; only scrolling's own column width lives here.
-        engine = { layout_opts = { scrolling = { column_width = 0.67 } } },
-      },
+      -- Deck (docs/deck.md): the project column flips through open project
+      -- groups, the browser column sits beside it. Column widths are the
+      -- scene's own declared `share` (docs/scenes.md), not a layout_opts
+      -- field — the stale `scrolling.column_width` this workspace carried
+      -- under the old "scrolling" builtin layout is dropped along with the
+      -- switch, since "deck" reads no layout_opts of its own.
+      { workspace = "1", default = true, default_name = "code", layout = "deck" },
       -- Proton shared across gaming + work + study modes. The 50/50 split
       -- (mail left, pass companion right) is declared by the scene.
       { workspace = "3", default_name = "proton" },

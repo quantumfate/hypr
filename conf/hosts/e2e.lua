@@ -28,6 +28,12 @@ return {
       -- so 95_project_group.sh exercises the actual grouping engine a
       -- project relies on, not a stand-in class.
       { workspace = "5", default_name = "code" },
+      -- LEO-349: the real "code" scene's shape, mirrored with e2e-safe
+      -- classes — a deck project column (one block per project, per
+      -- docs/columns.md §11's "declared by hand" fallback, so three
+      -- concurrently open projects stay three separate groups) beside a
+      -- stack-behaving browser column. See tests/e2e/scenarios/97_code_deck.sh.
+      { workspace = "6", default_name = "code-deck", layout = "deck" },
     },
     workspace_keys = { "plus", "bracketleft", "braceleft", "parenleft" },
   },
