@@ -42,23 +42,72 @@ t.describe("profile.fingerprint", function()
   end)
 end)
 
-t.describe("profile.resolve / switch", function()
+t.describe("profile.resolve / force", function()
   t.it("resolve() follows the live fingerprint with no override standing", function()
     hl.monitors = { { width = 1920 } }
     t.eq(profile.LAPTOP_SOLO, profile.resolve())
   end)
 
-  t.it("switch() flips resolve() away from the live fingerprint and persists it", function()
+  t.it("force() overrides resolve() away from the live fingerprint and persists it", function()
     hl.monitors = { { width = 1920 } } -- fingerprints laptop-solo
-    local forced = profile.switch()
-    t.eq(profile.DESK_DUAL, forced)
+    local ok, err = profile.force(profile.DESK_DUAL, 60)
+    t.ok(ok, err)
     t.eq(profile.DESK_DUAL, profile.resolve()) -- override wins over the fingerprint
   end)
 
-  t.it("switch() again flips back", function()
-    local forced = profile.switch()
-    t.eq(profile.LAPTOP_SOLO, forced)
+  t.it("force() refuses an unknown profile name", function()
+    local ok, err = profile.force("ultrawide-solo")
+    t.ok(not ok)
+    t.ok(err and err:match("unknown profile"), tostring(err))
   end)
+
+  t.it("clear() drops a standing override; resolve() returns to the fingerprint", function()
+    hl.monitors = { { width = 1920 } }
+    profile.force(profile.DESK_DUAL, 60)
+    profile.clear()
+    t.eq(profile.LAPTOP_SOLO, profile.resolve())
+  end)
+
+  t.it("a force past its own expiry is treated as unset, not honoured forever", function()
+    -- force() always sets a future expiry, so simulate the passage of time by
+    -- writing an already-past one directly, the way a stale store would read.
+    require("hypr.lib.store").define("hypr/monitor-profile"):set({
+      forced = profile.DESK_DUAL,
+      forced_until = "2000-01-01T00:00:00Z",
+    })
+    hl.monitors = { { width = 1920 } }
+    t.eq(profile.LAPTOP_SOLO, profile.resolve())
+  end)
+end)
+
+t.describe("profile.announce", function()
+  local emitted
+  t.it("logs a 'profile' stage event while a force stands", function()
+    package.loaded["hypr.lib.trace"] = {
+      emit = function(r)
+        emitted = r
+      end,
+    }
+    package.loaded["hypr.lib.profile"] = nil
+    profile = require("hypr.lib.profile")
+
+    profile.force(profile.DESK_DUAL, 60)
+    emitted = nil
+    profile.announce()
+    t.ok(emitted, "announce() should emit while a force stands")
+    t.eq("profile", emitted.stage)
+    t.eq("forced_active", emitted.event)
+    t.eq(profile.DESK_DUAL, emitted.decision)
+  end)
+
+  t.it("emits nothing once the force is cleared", function()
+    profile.clear()
+    emitted = nil
+    profile.announce()
+    t.eq(nil, emitted)
+  end)
+
+  package.loaded["hypr.lib.trace"] = nil
 end)
 
 os.getenv = real_getenv

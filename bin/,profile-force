@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# ,profile-force — force the geometry profile (hypr/lib/profile.lua), to test
+# one machine's layout from the other.
+#
+# Deliberately a typed command, not a keybind: the override outranks the live
+# monitor fingerprint on every config load, so setting one by a single
+# mis-tapped key cost two weeks of an invisible bug once already. It always
+# carries an expiry (default 120 minutes) so a forgotten force clears itself.
+#
+#   ,profile-force desk-dual            force desk-dual for 120 minutes
+#   ,profile-force laptop-solo 30       force laptop-solo for 30 minutes
+#   ,profile-force clear                drop a standing force now
+#   ,profile-force status               what is forced, and until when
+set -euo pipefail
+
+verb=${1:-}
+if [[ -z "$verb" ]]; then
+    echo "usage: ,profile-force <desk-dual|laptop-solo> [minutes] | clear | status" >&2
+    exit 1
+fi
+
+run_lua() {
+    hyprctl dispatch "$1" >/dev/null
+}
+
+case "$verb" in
+clear)
+    run_lua 'function() require("hypr.lib.profile").clear() end'
+    echo "cleared"
+    ;;
+status)
+    # Read the store directly (not via hyprctl dispatch): dispatch is
+    # fire-and-forget, its Lua's stdout never reaches this shell.
+    store_file="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}/hypr/monitor-profile.json"
+    python3 -c '
+import json, sys
+try:
+    doc = json.load(open(sys.argv[1]))
+except FileNotFoundError:
+    doc = {}
+forced = doc.get("forced")
+if forced:
+    print(f"forced: {forced} until {doc.get(\"forced_until\")}")
+else:
+    print(f"not forced (published live profile: {doc.get(\"profile\")})")
+' "$store_file"
+    ;;
+desk-dual | laptop-solo)
+    minutes=${2:-}
+    run_lua "function()
+        local ok, err = require(\"hypr.lib.profile\").force(\"$verb\"${minutes:+, $minutes})
+        if not ok then print(\"refused: \" .. tostring(err)) end
+    end"
+    echo "forced $verb${minutes:+ for $minutes minutes}"
+    ;;
+*)
+    echo "usage: ,profile-force <desk-dual|laptop-solo> [minutes] | clear | status" >&2
+    exit 1
+    ;;
+esac

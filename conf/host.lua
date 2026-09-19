@@ -105,10 +105,11 @@ function M.build()
   fill_spec_defaults(config.host.workspaces.workspace_specs)
 
   -- Geometry is decided by output fingerprint rather than hostname — see
-  -- hypr/lib/profile.lua's header for why. `resolve()` honors a manual
-  -- SUPER Space w m override over the live fingerprint.
+  -- hypr/lib/profile.lua's header for why. `resolve()` honors a `,profile-force`
+  -- override over the live fingerprint; `announce()` makes a standing one loud.
   config.profile = profile.resolve()
   profile.publish(config.profile)
+  profile.announce()
 
   geometry.resolve(
     config.host.workspaces.workspace_specs,
