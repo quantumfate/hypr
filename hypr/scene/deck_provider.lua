@@ -92,11 +92,22 @@ local function deck_scenes(scenes)
   return out
 end
 
----@param scenes table<string, Scene.Spec>
+---@param scenes table<string, Scene.Spec>|fun(): table<string, Scene.Spec>
 function M.register(scenes)
-  local decks = deck_scenes(scenes)
+  -- Same contract as `hypr/scene/provider.lua`'s register, and for the same
+  -- reason (LEO-397): `M.attach()` passes a resolver so every recalculate
+  -- re-reads the live declaration. Resolving once at registration froze the
+  -- deck set to whatever the store held at config-load -- before it was
+  -- readable, that set came up empty, `scene_name` below never matched, and
+  -- the deck silently drew nothing on a workspace that declares it. Tests
+  -- pass a plain table fixture, read once, which is fine since they own the
+  -- whole lifetime of that table.
+  local get_scenes = type(scenes) == "function" and scenes or function()
+    return scenes
+  end
   hl.layout.register(NAME, {
     recalculate = function(ctx)
+      local decks = deck_scenes(get_scenes())
       local targets = ctx.targets or {}
       local scene_name
       for _, target in ipairs(targets) do
@@ -161,7 +172,7 @@ end
 ---Register with whatever the host declares. Separate from `register` so
 ---tests can drive the provider with their own scenes.
 function M.attach()
-  M.register(spec_lib.load())
+  M.register(spec_lib.load)
 end
 
 M.HOLD = HOLD
