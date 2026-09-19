@@ -66,6 +66,7 @@ end
 ---has no notion of "current workspace".
 ---@param spec Scene.Spec
 ---@return Scene.Tile[]
+---@return Scene.Tile[]
 local function member_tiles(spec)
   local tiles = {}
   for _, w in ipairs(hl.get_windows() or {}) do
@@ -75,6 +76,62 @@ local function member_tiles(spec)
     end
   end
   return tiles
+end
+
+---Every address each deck scene held on its last placement, so a window that
+---has just arrived can be told apart from one deliberately scrolled out of
+---view.
+---@type table<string, table<string, true>>
+local seen = {}
+
+---Point a column at a window that has just arrived in it.
+---
+---Without this, a newly-spawned window landed wherever its column's scroll
+---already sat, was therefore not that column's visible member, and got parked
+---in `HOLD` -- a special workspace, which the compositor then focuses. Opening
+---a terminal on a deck workspace threw the desk onto an empty special
+---workspace, which is the bug this exists to stop. Opening a window is an
+---implicit request to see it, so its column scrolls to it rather than hiding
+---it. A window scrolled away by hand is untouched: it is not new.
+---@param spec Deck.Spec
+---@param scene_name string
+---@param tiles Scene.Tile[]
+local function scroll_to_arrivals(spec, scene_name, tiles)
+  local previous = seen[scene_name]
+  -- Record EVERY member, not just the ones on the workspace. Recording only
+  -- the on-workspace ones meant a held member never entered the set, so it
+  -- read as new on the very next pass -- the column scrolled to it, which
+  -- held the other one, which then read as new in turn. The two swapped
+  -- places forever and the deck never settled. Membership is the right key:
+  -- "new" must mean "this scene has never placed this window", which happens
+  -- exactly once per window.
+  local current = {}
+  for _, tile in ipairs(tiles) do
+    if tile.address then
+      current[tile.address] = true
+    end
+  end
+  seen[scene_name] = current
+  for order, stack in pairs(deck.stacks(spec, tiles)) do
+    for index, tile in ipairs(stack) do
+      -- An arrival is a member this pass has not seen before that is ALSO
+      -- sitting on the deck's own workspace. The workspace test is what makes
+      -- the very first pass correct: with no previous set every member looks
+      -- new, but a member already parked in `HOLD` is not on the workspace, so
+      -- only something that genuinely just opened qualifies. It also keeps a
+      -- reload from yanking a column off a position chosen by hand.
+      -- Deliberately NOT gated on the window being on the deck's workspace:
+      -- the pass that first sees a new window can run while the compositor is
+      -- still placing it, and the pass after that it has already been parked
+      -- in `HOLD` -- so it would never once qualify. Membership is enough,
+      -- since `seen` makes "new" mean "this scene has never placed it".
+      local unseen = tile.address and previous and not previous[tile.address]
+      if unseen then
+        deck_scroll.set(scene_name, order, index)
+        break
+      end
+    end
+  end
 end
 
 ---Deck-opted scenes only, keyed by workspace name — `deck.applies` is the
@@ -151,6 +208,7 @@ function M.place(scene, scene_name, ctx)
 
     local gaps_in, gaps_out = gaps(scene_name)
     local tiles = member_tiles(scene)
+    scroll_to_arrivals(scene, scene_name, tiles)
     local boxes, hold = deck.boxes(scene, tiles, ctx.area, {
       gaps_in = gaps_in,
       gaps_out = gaps_out,
