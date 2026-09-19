@@ -216,37 +216,72 @@ function M.register(scenes)
   })
 end
 
----Every monitor whose active workspace runs this layout, briefly focused so
----`hyprctl dispatch layoutmsg` (which always targets the focused workspace)
----reaches it, then focus is restored. This is the engine-side fix for "a
----reload does not redraw the scenes themselves" (LEO-397): Hyprland's own
----`config.reloaded` event triggers no relayout for a custom Lua layout --
----confirmed by reading the compositor's source, where only the built-in
----scrolling layout listens for it. Also usable any time a declaration change
----needs to reach already-placed windows without waiting for the next window
----event.
-function M.recalculate_all()
-  local monitors = hl.get_monitors() or {}
-  local focused = hl.get_active_monitor()
-  for _, m in ipairs(monitors) do
-    local ws = m.activeWorkspace
-    if ws and layout_lib.bare_layout(ws.tiled_layout) == NAME then
-      hl.dispatch(hl.dsp.focus({ monitor = m.name }))
-      hl.dispatch(hl.dsp.layout("recalc"))
-    end
+---Force the currently-focused workspace's scene layout to redraw, with NO
+---focus dispatched at all -- not even to the workspace already focused.
+---
+---LEO-403: the previous version of this function focus-danced across every
+---monitor (`hl.dsp.focus` to each in turn, then back) to reach each one's
+---`layoutMsg`, fighting the "a reload keeps your focus" rule this repo
+---enforces elsewhere (`hypr/hyprfocus/focus_history.lua`). Read from the
+---compositor's own source (`hyprland-git` at the commit `docs/live-config.md`
+---names) before removing it: `LayoutManager::layoutMsg`
+---(`src/layout/LayoutManager.cpp`) hardcodes its target to
+---`Desktop::focusState()->monitor()`'s active workspace -- there is no
+---workspace- or monitor-scoped variant, and nothing else reaches a custom Lua
+---layout's `recalculate` without a real window event
+---(`CLuaTiledAlgorithm::newTarget/removeTarget/resizeTarget/
+---moveTargetInDirection`, `src/config/lua/layout/LuaLayoutProvider.cpp`, all
+---of which either fire from window lifecycle events or require the target to
+---be floating). The one C++-internal primitive that recalculates a specific,
+---possibly-unfocused monitor, `CLayoutManager::recalculateMonitor`
+---(`src/layout/LayoutManager.cpp`), is never exposed to a dispatch or Lua
+---binding (grepped `src/config/lua/bindings/` -- absent), so Lua has no way to
+---reach it either.
+---
+---Net: a scene workspace that is not the one currently focused cannot be
+---forced to redraw without moving focus there. Every other scene workspace is
+---corrected lazily instead -- by `M.recalculate_focused` below, wired to
+---`workspace.active`, so it redraws the instant it next becomes the focused
+---one (a real focus change the user or another part of the desk already
+---made, never one this function causes), and by the ordinary window
+---open/close/move/resize events every workspace's own layout algorithm
+---already reacts to.
+function M.recalculate_focused()
+  hl.dispatch(hl.dsp.layout("recalc"))
+end
+
+---Lazy correction for every OTHER scene workspace (LEO-403): wired to
+---`workspace.active`, which fires whenever the focused workspace changes for
+---any reason this code did not initiate, so calling `recalculate_focused`
+---here never dispatches a focus change of its own -- it only reacts to one
+---that already happened. `layoutMsg` targets whichever monitor is now
+---focused (see `M.recalculate_focused`'s doc), so this redraws exactly the
+---workspace that just became visible, picking up any declaration/gaps edit
+---that landed while it was off-screen.
+local function recalculate_on_arrival()
+  local ws = hl.get_active_workspace()
+  local f = io.open("/tmp/qf-debug-arrival.log", "a")
+  if f then
+    f:write(("ws=%s tiled_layout=%s bare=%s\n"):format(
+      tostring(ws and ws.name), tostring(ws and ws.tiled_layout), tostring(ws and layout_lib.bare_layout(ws.tiled_layout))
+    ))
+    f:close()
   end
-  if focused and focused.name then
-    hl.dispatch(hl.dsp.focus({ monitor = focused.name }))
+  if ws and layout_lib.bare_layout(ws.tiled_layout) == NAME then
+    require("hypr.lib.hypr").oneshot(1, M.recalculate_focused)
   end
 end
 
 ---Register with whatever the host declares, read live on every recalculate
----(LEO-397), and force every scene workspace to redraw once whenever the
+---(LEO-397), and force the focused scene to redraw once whenever the
 ---compositor reloads its config -- Hyprland's reload re-executes this whole
----module but calls no layout's recalculate on its own.
+---module but calls no layout's recalculate on its own. Every other scene
+---workspace corrects itself lazily (LEO-403; see `recalculate_focused`'s doc
+---for why no focus-free mechanism reaches it any sooner).
 function M.attach()
   M.register(spec_lib.load)
-  hl.on("config.reloaded", M.recalculate_all)
+  hl.on("config.reloaded", M.recalculate_focused)
+  hl.on("workspace.active", recalculate_on_arrival)
 end
 
 return M

@@ -126,6 +126,33 @@ local function window_fields(w, scene_name, extra)
   return fields
 end
 
+---Run one pipeline step in isolation. `window.open`/`window.move_to_workspace`
+---chain several independent steps (identify, re-home, group, stray-float,
+---undeclared/ignored placement) in one `hl.on` callback; Hyprland's own
+---per-callback pcall (`LuaEventHandler.cpp`) only guards the callback as a
+---whole and, on failure, pops a 5-second notification the compositor never
+---writes to its log (`ConfigManager::addError` only logs while parsing/
+---evaluating config, confirmed from source) -- so a throwing step used to both
+---abort every later step for that window AND leave no queryable trace of why.
+---Each step now runs isolated: a failure is caught, recorded as its own
+---decision (queryable the same way every other stage is, via `trace`'s
+---window-address key), and the steps after it for this window still run.
+---@param step string
+---@param w HL.Window?
+---@param fn fun()
+local function guarded(step, w, fn)
+  local ok, err = pcall(fn)
+  if not ok then
+    trace.emit(window_fields(w, nil, {
+      stage = "error",
+      event = "handler_step_failed",
+      decision = "skip",
+      reason = tostring(err),
+      step = step,
+    }))
+  end
+end
+
 ---Run the companion lifecycle for the named scene against live windows.
 ---Presence is derived, so this is safe at any time from any caller.
 ---@param name string?
@@ -434,25 +461,35 @@ end
 hl.on("window.open", function(w)
   -- A companion mapping settles its own in-flight spawn before the engine
   -- pass runs, so the lifecycle the pass sees is derived, not assumed.
-  if w and w.workspace then
-    local spec = specs[w.workspace.name]
-    if spec then
-      for _, block in ipairs(spec.blocks) do
-        if block.spawn and spec_lib.class_matches(w.class, { block.spawn.class }) then
-          pending[companion.key(w.workspace.name, block.spawn.class)] = nil
+  guarded("settle_companion_spawn", w, function()
+    if w and w.workspace then
+      local spec = specs[w.workspace.name]
+      if spec then
+        for _, block in ipairs(spec.blocks) do
+          if block.spawn and spec_lib.class_matches(w.class, { block.spawn.class }) then
+            pending[companion.key(w.workspace.name, block.spawn.class)] = nil
+          end
         end
       end
     end
-  end
+  end)
   -- Stamp identity before routing: `scene_for` and the arrange decisions
   -- below all read `w.tags`, so a slot block can only be matched if the tag
   -- lands first in this same pass.
-  stamp_identity(w)
+  guarded("stamp_identity", w, function()
+    stamp_identity(w)
+  end)
   -- A window claimed by another active scene is on the wrong workspace by
   -- construction (it opened while nothing here claimed it): send it home
   -- before anything else acts on it standing where it is. The move lands as
   -- its own `window.move_to_workspace` event, which arranges the destination.
-  if apply_home_decision(w) then
+  -- `moved` stays false (rest of the pipeline still runs) if this step itself
+  -- throws -- a home-decision failure must not also swallow every step below.
+  local moved = false
+  guarded("apply_home_decision", w, function()
+    moved = apply_home_decision(w)
+  end)
+  if moved then
     return
   end
   local scene_name = scene_for(w)
@@ -464,11 +501,21 @@ hl.on("window.open", function(w)
   fields.decision = scene_name and "route" or "none"
   fields.reason = scene_name and ("matched scene " .. scene_name) or "no scene claims this class"
   trace.emit(fields)
-  converge_companions(scene_name)
-  apply_group_decision(w)
-  apply_stray_decision(w)
-  keep_off_undeclared(w)
-  keep_off_ignored(w)
+  guarded("converge_companions", w, function()
+    converge_companions(scene_name)
+  end)
+  guarded("apply_group_decision", w, function()
+    apply_group_decision(w)
+  end)
+  guarded("apply_stray_decision", w, function()
+    apply_stray_decision(w)
+  end)
+  guarded("keep_off_undeclared", w, function()
+    keep_off_undeclared(w)
+  end)
+  guarded("keep_off_ignored", w, function()
+    keep_off_ignored(w)
+  end)
 end)
 
 hl.on("window.close", function(w)
@@ -506,7 +553,9 @@ hl.on("window.move_to_workspace", function(w)
   -- A move into a slot scene is a map into it in law (see comment below):
   -- stamp identity here too, so a window moved in by hand still gets told
   -- apart from its same-class siblings.
-  stamp_identity(w)
+  guarded("stamp_identity", w, function()
+    stamp_identity(w)
+  end)
   local scene_name = scene_for(w)
   local fields = window_fields(w, scene_name)
   fields.stage = "leave"
@@ -517,19 +566,31 @@ hl.on("window.move_to_workspace", function(w)
   -- A move flies two scenes: the destination gains a member and the origin
   -- may have lost its last, and the event's payload cannot say where from.
   -- The lifecycle re-derives from live windows like everything else here.
-  converge_companions(scene_name)
-  apply_group_decision(w)
-  apply_stray_decision(w)
-  for other_scene, spec in pairs(specs) do
-    for _, block in ipairs(spec.blocks) do
-      if block.spawn then
-        converge_companions(other_scene)
-        break
+  guarded("converge_companions", w, function()
+    converge_companions(scene_name)
+  end)
+  guarded("apply_group_decision", w, function()
+    apply_group_decision(w)
+  end)
+  guarded("apply_stray_decision", w, function()
+    apply_stray_decision(w)
+  end)
+  guarded("converge_other_companions", w, function()
+    for other_scene, spec in pairs(specs) do
+      for _, block in ipairs(spec.blocks) do
+        if block.spawn then
+          converge_companions(other_scene)
+          break
+        end
       end
     end
-  end
-  keep_off_undeclared(w)
-  keep_off_ignored(w)
+  end)
+  guarded("keep_off_undeclared", w, function()
+    keep_off_undeclared(w)
+  end)
+  guarded("keep_off_ignored", w, function()
+    keep_off_ignored(w)
+  end)
 end)
 
 -- A group member gaining focus (tab cycle, `mod+j/k`, a click on the
