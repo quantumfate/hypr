@@ -292,14 +292,35 @@ function M.reconcile(scene_name)
     gaps_out = gaps_out,
     scroll = deck_scroll.get_all(scene_name),
   })
+  -- Whether anything the deck wants shown is currently focused. Read BEFORE
+  -- the moves below, because a window arriving does not change focus
+  -- (`follow = false`) and so cannot answer this afterwards.
+  local active = hl.get_active_window()
+  local focus_held = false
+  local first_home
   for _, box in ipairs(boxes) do
     if workspace_of[box.address] ~= scene_name then
+      first_home = first_home or box.address
       hl.dispatch(hl.dsp.window.move({
         window = "address:" .. box.address,
         workspace = "name:" .. scene_name,
         follow = false,
       }))
+    elseif active and active.address == box.address then
+      focus_held = true
     end
+  end
+  -- Closing the focused window leaves focus on nothing, and the member the
+  -- deck brings home to replace it arrives unfocused -- `follow = false`, so
+  -- that the ordinary swap does not yank focus. The result was a visible
+  -- window the keyboard could not reach at all: not focusable, not closable.
+  -- So when the deck had to bring something home AND nothing it shows is
+  -- focused, focus what arrived. Guarded both ways, this never steals focus
+  -- during a normal scroll -- there the replaced member is still focused.
+  if first_home and not focus_held then
+    require("hypr.lib.hypr").oneshot(1, function()
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. first_home }))
+    end)
   end
   for _, address in ipairs(hold) do
     local at = workspace_of[address]
