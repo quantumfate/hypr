@@ -1,0 +1,11 @@
+# Project metadata, read by `,proj.sh sync` (see bin/,proj.sh "scopes").
+# Each scope is a named terminal running this project's own command, spawned
+# on demand with the role tag `slot:<name>` -- reachable via SUPER+Space p o
+# (picker) or `,proj.sh scope <name>`.
+
+[scopes]
+check = "just check"
+test = "just test"
+fmt = "just fmt"
+lint = "just lint"
+e2e = "just e2e"
