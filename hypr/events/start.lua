@@ -57,7 +57,17 @@ hl.on("hyprland.start", function()
   -- by default and the scenario that overrides the fixture is what actually
   -- exercises this decision — skipping it under QF_E2E would leave the boot
   -- rule untested by the harness built to verify it live.
-  hyprfocus.boot()
+  -- Non-fatal: an error here used to abort the whole `hyprland.start`
+  -- handler, and everything below it -- the keymap, the shell, the whichkey
+  -- reset -- simply never ran. A live monitor/workspace race inside `place()`
+  -- ("No monitor, can't find ws to target") was enough to leave the desk with
+  -- no bar at all after a reboot, which reads as "the bar crashed" when in
+  -- fact it was never launched. Boot placement is best-effort; the rest of
+  -- the session is not.
+  local booted, boot_err = pcall(hyprfocus.boot)
+  if not booted then
+    print("hyprfocus.boot failed, continuing session start: " .. tostring(boot_err))
+  end
 
   -- The nested e2e compositor (tests/e2e/) starts nothing outside itself: no
   -- keymap, no shell, no project. The mode watcher is internal, so it stays.
