@@ -120,53 +120,72 @@ function M.register(scenes)
       if not scene_name then
         return
       end
-      local scene = decks[scene_name]
-
-      local by_address = {}
-      for _, target in ipairs(targets) do
-        if target.window and target.window.address then
-          by_address[target.window.address] = target
-        end
-      end
-
-      local gaps_in, gaps_out = gaps(scene_name)
-      local tiles = member_tiles(scene)
-      local boxes, hold = deck.boxes(scene, tiles, ctx.area, {
-        gaps_in = gaps_in,
-        gaps_out = gaps_out,
-        scroll = deck_scroll.get_all(scene_name),
-      })
-
-      for _, box in ipairs(boxes) do
-        local target = by_address[box.address]
-        if target then
-          target:place({ x = box.x, y = box.y, w = box.w, h = box.h })
-        else
-          -- Not tiled here yet (freshly scrolled to, or freshly held
-          -- elsewhere): ask it home. The move triggers another
-          -- `recalculate`, which is the pass that actually places it — this
-          -- one only reports the need, same as `deck.lua`'s own contract.
-          hl.dispatch(hl.dsp.window.move({
-            window = "address:" .. box.address,
-            workspace = "name:" .. scene_name,
-            follow = false,
-          }))
-        end
-      end
-
-      for _, address in ipairs(hold) do
-        -- Only park what is actually still tiled here; a member already in
-        -- HOLD (or not yet arrived) needs no move.
-        if by_address[address] then
-          hl.dispatch(hl.dsp.window.move({
-            window = "address:" .. address,
-            workspace = HOLD,
-            follow = false,
-          }))
-        end
-      end
+      M.place(decks[scene_name], scene_name, ctx)
     end,
   })
+end
+
+---Place one deck scene's windows into `ctx`.
+---
+---Exposed rather than kept inside the registered layout because a deck
+---workspace cannot actually select this layout on this build: a workspace
+---rule's `layout` resolves BUILTIN layouts only (verified live -- `master`
+---and `dwindle` take, while `scene`, `deck`, `lua:scene` and `lua:deck` all
+---fall through), and only `general:layout` accepts a custom Lua one. So the
+---deck runs inside the `scene` layout, which is the one every workspace
+---already has, and `hypr/scene/provider.lua` delegates here for a scene
+---declaring `layout = "deck"`. The registration above stays for a host that
+---can select it directly.
+---@param scene Scene.Spec
+---@param scene_name string
+---@param ctx HL.LayoutContext
+function M.place(scene, scene_name, ctx)
+  do
+    local targets = ctx.targets or {}
+    local by_address = {}
+    for _, target in ipairs(targets) do
+      if target.window and target.window.address then
+        by_address[target.window.address] = target
+      end
+    end
+
+    local gaps_in, gaps_out = gaps(scene_name)
+    local tiles = member_tiles(scene)
+    local boxes, hold = deck.boxes(scene, tiles, ctx.area, {
+      gaps_in = gaps_in,
+      gaps_out = gaps_out,
+      scroll = deck_scroll.get_all(scene_name),
+    })
+
+    for _, box in ipairs(boxes) do
+      local target = by_address[box.address]
+      if target then
+        target:place({ x = box.x, y = box.y, w = box.w, h = box.h })
+      else
+        -- Not tiled here yet (freshly scrolled to, or freshly held
+        -- elsewhere): ask it home. The move triggers another
+        -- `recalculate`, which is the pass that actually places it — this
+        -- one only reports the need, same as `deck.lua`'s own contract.
+        hl.dispatch(hl.dsp.window.move({
+          window = "address:" .. box.address,
+          workspace = "name:" .. scene_name,
+          follow = false,
+        }))
+      end
+    end
+
+    for _, address in ipairs(hold) do
+      -- Only park what is actually still tiled here; a member already in
+      -- HOLD (or not yet arrived) needs no move.
+      if by_address[address] then
+        hl.dispatch(hl.dsp.window.move({
+          window = "address:" .. address,
+          workspace = HOLD,
+          follow = false,
+        }))
+      end
+    end
+  end
 end
 
 ---Register with whatever the host declares. Separate from `register` so

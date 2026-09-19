@@ -154,7 +154,23 @@ local function place(get_scenes, ctx)
     return
   end
 
+  -- A scene declaring the deck runs its placement here, inside the layout
+  -- every workspace already has. On this build a workspace rule's `layout`
+  -- resolves builtin layouts only (`master`/`dwindle` take; `scene`, `deck`,
+  -- `lua:scene`, `lua:deck` all fall through), so `deck` cannot be selected
+  -- per-workspace as its own registered layout -- which is how the engine
+  -- ended up computing deck geometry while this layout drew the workspace.
+  -- Skipped when the workspace really is on the deck layout already, so a
+  -- host that CAN select it is placed once, by the deck provider itself.
   local scene = scene_for(targets, get_scenes())
+  if scene and require("hypr.scene.deck").applies(scene) then
+    local ws = targets[1] and targets[1].window and targets[1].window.workspace
+    local on_deck = ws and layout_lib.bare_layout(ws.tiled_layout) == "deck"
+    if ws and ws.name and not on_deck then
+      require("hypr.scene.deck_provider").place(scene, ws.name, ctx)
+      return
+    end
+  end
   if not scene then
     -- A workspace set to this layout with no scene declared: lay the windows
     -- out evenly rather than leaving them stacked at the origin. Doing
@@ -262,9 +278,13 @@ local function recalculate_on_arrival()
   local ws = hl.get_active_workspace()
   local f = io.open("/tmp/qf-debug-arrival.log", "a")
   if f then
-    f:write(("ws=%s tiled_layout=%s bare=%s\n"):format(
-      tostring(ws and ws.name), tostring(ws and ws.tiled_layout), tostring(ws and layout_lib.bare_layout(ws.tiled_layout))
-    ))
+    f:write(
+      ("ws=%s tiled_layout=%s bare=%s\n"):format(
+        tostring(ws and ws.name),
+        tostring(ws and ws.tiled_layout),
+        tostring(ws and layout_lib.bare_layout(ws.tiled_layout))
+      )
+    )
     f:close()
   end
   if ws and layout_lib.bare_layout(ws.tiled_layout) == NAME then
