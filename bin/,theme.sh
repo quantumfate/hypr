@@ -337,6 +337,37 @@ apply_kitty() {
     record_applied kitty immediate
 }
 
+# Every running nvim, through the control sockets it already listens on:
+# `bin/,proj.sh` gives each project's nvim slot a `--listen` socket under
+# `$XDG_RUNTIME_DIR/proj-nvim`, and a plain `nvim` writes its own under
+# `$XDG_RUNTIME_DIR`. There is no config file to swap here -- catppuccin.nvim
+# registers one colorscheme per flavour, so switching is a command, and a
+# `--remote-expr` runs it without touching the editor's current mode (a
+# `--remote-send` would type into whatever buffer was open).
+#
+# A socket whose nvim has since exited is a dead file: the send fails, which
+# is why each is tried independently and a failure is not the surface's.
+apply_nvim() {
+    local palette=$1 theme sock sent=0
+    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" nvim "catppuccin-$palette")
+    if ! have nvim; then
+        return
+    fi
+    if sandboxed; then
+        echo "nvim: $theme"
+        record_applied nvim immediate
+        return
+    fi
+    for sock in "${XDG_RUNTIME_DIR:-/tmp}"/proj-nvim/*.sock "${XDG_RUNTIME_DIR:-/tmp}"/nvim.*; do
+        [ -S "$sock" ] || continue
+        if nvim --server "$sock" --remote-expr "execute('colorscheme $theme')" >/dev/null 2>&1; then
+            sent=$((sent + 1))
+        fi
+    done
+    echo "nvim: $theme ($sent live)"
+    record_applied nvim immediate
+}
+
 apply_gtk() {
     local palette=$1 theme scheme
     theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" gtk "catppuccin-$palette-$ACCENT-standard+default")
@@ -1171,6 +1202,7 @@ cmd_apply() {
     put "$(jq -n --arg p "$baseline" '{palette: $p}')"
 
     apply_kitty "$palette"
+    apply_nvim "$palette"
     apply_gtk "$palette"
     apply_qt "$palette"
     apply_hyprland "$palette"
