@@ -22,7 +22,7 @@
 -- monitor with no `gaps_by_monitor` entry -- and the compositor's own boot-time
 -- gaps, before any host resolves -- gets.
 ---@type { gaps_in: number, gaps_out: { top: number, right: number, bottom: number, left: number } }
-local default_gaps = { gaps_in = 48, gaps_out = { top = 12, right = 56, bottom = 56, left = 56 } }
+local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 56, bottom = 56, left = 56 } }
 
 ---The desk's geometry half, keyed by hypr.lib.profile's fingerprint of
 ---hl.get_monitors(), not by hostname. desk-dual's numbers are the former

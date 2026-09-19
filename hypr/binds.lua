@@ -67,14 +67,15 @@ hyprfocus_binds.bind(
   { description = "Toggle floating", submap_universal = true }
 )
 
--- Closing a project terminal leaves its server running with nothing on screen
--- pointing at it, so `,proj.sh close-window` offers to take the project down
--- with the window (picker prompt; declining just closes the window). Any other
--- window closes straight away, exactly as `closewindow` did.
+-- A project used to be a tmux session that outlived its window, so closing one
+-- asked whether to take the project down too. A project is now its windows:
+-- the last one closing ends it, and nothing survives to ask about. So this is
+-- the plain compositor close again — which is also what lets an editor with
+-- unsaved work put its own prompt on screen instead of losing it.
 hyprfocus_binds.bind(
   config.main_mod .. " + semicolon",
-  hl.dsp.exec_cmd(",proj.sh close-window"),
-  { description = "Close focused window (offers to kill its project)", submap_universal = true }
+  hl.dsp.window.close(),
+  { description = "Close focused window", submap_universal = true }
 )
 
 -- === The short path ===
