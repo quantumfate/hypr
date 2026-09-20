@@ -129,6 +129,46 @@ scene means visiting each monitor's active workspace.
   scene path) reads the **same** ladder — scene-declared gaps previously fell
   through to the host spec on deck scenes, silently ignoring a store edit.
 
+## 6. The wallpaper side: what was reloading, and why it stopped
+
+A separate report: the desk visibly disturbed itself — on a `deck` scene the
+relayout after a reload brought the wrong member to the front (§2's forced
+`recalculate()` runs, but it lays out from scratch; it does not know which
+member the user had scrolled to) — and the user traced it to wallpaper
+rotation. Traced from `bin/,theme.sh` rather than inferred:
+
+- **Cycling a wallpaper never was the trigger.** `wallpaper next|prev|random`
+  (`cmd_wallpaper_cycle`) calls `apply_wallpaper` directly and never calls
+  `apply_hyprland`; it only writes `theme.json` via `put()`, a plain
+  `io.open`/`jq`-edited file that is never `require()`'d by `hyprland.lua`
+  and therefore never in the compositor's inotify watch list (§1). This path
+  was already reload-free before this change — verified in
+  `tests/theme_test.sh` ("a wallpaper-only rotation never touches hyprctl").
+- **The actual trigger: `apply_hyprland` (`bin/,theme.sh`), called
+  unconditionally from every `cmd_apply`.** `session/systemd/theme-auto.timer`
+  fires `,theme.sh apply` hourly (`theme-auto.service`), and `cmd_apply` calls
+  `apply_hyprland` before it calls `apply_wallpaper` — so every hourly tick
+  ran `hyprctl reload` and then repainted the wallpaper in the same breath,
+  regardless of whether the resolved palette had actually moved (most ticks
+  land inside the same day/night half). The reload and the wallpaper repaint
+  landing together is what made the wallpaper look like the cause.
+- **The fix** (`bin/,theme.sh`'s `apply_hyprland`): stamp the palette last
+  reloaded for (`$XDG_CACHE_HOME/quantumfate/hyprland.applied`), the same
+  pattern `apply_transparency` already used for its own dial, and skip
+  `hyprctl dispatch 'hl.dsp.submap("reset")'` + `hyprctl reload` when the
+  resolved palette matches the stamp. `apply_transparency` still runs
+  unconditionally afterward (its own stamp governs its own reload), and
+  `apply_wallpaper` is untouched — a wallpaper still repaints on every apply,
+  including across a real palette switch, which still reloads (Hyprland's
+  colours only come from re-running its Lua config, per `apply_hyprland`'s
+  own comment). `hyprctl` itself is now injectable (`THEME_HYPRCTL`, same
+  shape as `THEME_AWWW`) so `tests/theme_test.sh` can assert the suppression
+  without a live compositor.
+- **Deliberately not touched**: the deck-relayout-picks-the-wrong-member
+  symptom itself is a `hypr/scene/*` concern (§2's forced `recalculate()`
+  landing without knowing the scrolled-to member) — out of scope here, and
+  those files were being edited concurrently by another change.
+
 ## What still requires an explicit action, and why
 
 - **A store-only edit still needs _some_ live recalculate trigger** (a window

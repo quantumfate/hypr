@@ -316,6 +316,11 @@ MAGICK=${THEME_MAGICK:-magick}
 AWWW=${THEME_AWWW:-awww}
 AWWW_DAEMON=${THEME_AWWW_DAEMON:-awww-daemon}
 
+# Injectable for the same reason as AWWW: a test must be able to record
+# `hyprctl` invocations (the reload-suppression assertion below) without
+# touching a live compositor.
+HYPRCTL=${THEME_HYPRCTL:-hyprctl}
+
 # The nvim poke goes straight to a binary that is never on the sandbox path, so
 # it is injectable like gsettings: a recorder answers in its place, and the
 # sandbox holds it back unless THEME_NVIM names one.
@@ -715,12 +720,15 @@ apply_cursor() {
 }
 
 apply_hyprland() {
-    local palette=$1
-    sandboxed && {
+    local palette=$1 stamp previous
+    # AWWW's sandboxed-but-injected exception (see apply_wallpaper_output):
+    # a test pointing THEME_HYPRCTL at its own recorder wants the real code
+    # path, not the sandbox short-circuit.
+    if sandboxed && [ -z "${THEME_HYPRCTL-}" ]; then
         echo "hyprland: skipped (sandboxed)"
         return
-    }
-    have hyprctl || {
+    fi
+    have "$HYPRCTL" || {
         echo "hyprland: not running"
         record_failed hyprland "not running"
         return
@@ -730,15 +738,32 @@ apply_hyprland() {
     # request" on a Lua-configured Hyprland — and exits 0, so a script cannot
     # even tell it failed. Reloading re-runs that file against the new palette.
     #
-    # Leave any submap FIRST. A reload re-executes the Lua config, which resets
-    # the submap stack in hypr/lib/submap.lua while Hyprland is still runtime-in
-    # a submap — so escape pops an empty stack and the keyboard is stuck in a
-    # menu with no way out. Cycling the theme from the shell submap did exactly
-    # that. hyprctl's dispatch argument is evaluated as Lua on this config.
-    hyprctl dispatch 'hl.dsp.submap("reset")' >/dev/null 2>&1 || true
-    hyprctl reload >/dev/null 2>&1 || true
-    echo "hyprland: reloaded for $palette"
-    record_applied hyprland immediate
+    # Same bluntness apply_transparency already guards against: theme-auto.timer
+    # calls `apply` hourly, and cmd_apply/set/toggle/auto route through here
+    # even when the resolved palette hasn't moved (most sun-check ticks land in
+    # the same day/night half). An unconditional reload re-runs every Lua
+    # module and wipes registered layout providers with nothing to redraw the
+    # scene afterward (docs/live-config.md §1-2) — a real, visible disturbance
+    # for zero colour change. Skip it when the palette is the one already live.
+    stamp="${XDG_CACHE_HOME:-$HOME/.cache}/quantumfate/hyprland.applied"
+    previous=$([ -f "$stamp" ] && cat "$stamp" || echo "")
+
+    if [ "$palette" = "$previous" ]; then
+        echo "hyprland: $palette (unchanged, no reload)"
+    else
+        mkdir -p "$(dirname "$stamp")"
+        printf '%s' "$palette" >"$stamp"
+        # Leave any submap FIRST. A reload re-executes the Lua config, which
+        # resets the submap stack in hypr/lib/submap.lua while Hyprland is
+        # still runtime-in a submap — so escape pops an empty stack and the
+        # keyboard is stuck in a menu with no way out. Cycling the theme from
+        # the shell submap did exactly that. hyprctl's dispatch argument is
+        # evaluated as Lua on this config.
+        "$HYPRCTL" dispatch 'hl.dsp.submap("reset")' >/dev/null 2>&1 || true
+        "$HYPRCTL" reload >/dev/null 2>&1 || true
+        echo "hyprland: reloaded for $palette"
+        record_applied hyprland immediate
+    fi
 
     apply_transparency
 }
@@ -764,7 +789,7 @@ apply_transparency() {
 
     mkdir -p "$(dirname "$stamp")"
     printf '%s' "$dial" >"$stamp"
-    hyprctl reload >/dev/null 2>&1 || true
+    "$HYPRCTL" reload >/dev/null 2>&1 || true
     echo "transparency: $dial (reloaded)"
     record_applied transparency immediate
 }

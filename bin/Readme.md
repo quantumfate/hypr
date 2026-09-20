@@ -74,6 +74,22 @@ integrate with the shared state / UI:
   Quickshell store's older writes are not stranded. `bin/,wallpaper.sh` is now
   a thin wrapper over `,theme.sh wallpaper` for keybinds.
 
+  Cycling a wallpaper (`wallpaper next|prev|random`, and `,wallpaper.sh`)
+  calls `apply_wallpaper` directly and never touches `apply_hyprland` — it
+  pokes `awww` and writes only `theme.json` (never `require()`'d by
+  `hyprland.lua`, so the compositor's inotify watcher never sees it, per
+  `docs/live-config.md` §1). A wallpaper rotation therefore reloads nothing
+  and re-lays-out nothing on its own. `apply_hyprland` itself also no longer
+  reloads on every `apply`: it stamps the palette it last reloaded for
+  (`$XDG_CACHE_HOME/quantumfate/hyprland.applied`, the same pattern
+  `apply_transparency` already used for its own dial) and skips `hyprctl
+  reload` when the resolved palette hasn't moved — closing the one way a
+  same-palette `apply` (chiefly `theme-auto.timer`'s hourly tick, which calls
+  `apply` — and therefore `apply_wallpaper` — unconditionally) could still
+  reload purely because it ran, with no colour change to show for it. A real
+  palette switch still reloads, since Hyprland's own colours only come from
+  re-running its Lua config (see `apply_hyprland`'s own comment).
+
   Every apply also writes `$XDG_CONFIG_HOME/zsh/theme.zsh` — `BAT_THEME` and
   `FZF_DEFAULT_OPTS` for the resolved palette, since zsh/fzf read no store and
   get no live D-Bus poke of their own. The zsh role's rc file must `source

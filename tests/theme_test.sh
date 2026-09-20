@@ -956,5 +956,73 @@ check "shell theme: automatic matches manual" "$manual_bat" "$automatic_bat"
 check "gsettings: automatic matches manual" "$manual_gsettings" "$automatic_gsettings"
 teardown
 
+# A recorder standing in for hyprctl, the same trick awww_stub uses. Pointing
+# THEME_HYPRCTL at it is what tells apply_hyprland this run may call through —
+# a bare sandboxed run, with the variable unset, still gets held back.
+hyprctl_stub() {
+    HYPRCTL_LOG="$ROOT/hyprctl.log"
+    : >"$HYPRCTL_LOG"
+    cat >"$ROOT/hyprctl" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$HYPRCTL_LOG"
+exit 0
+STUB
+    chmod +x "$ROOT/hyprctl"
+    export THEME_HYPRCTL="$ROOT/hyprctl" HYPRCTL_LOG
+}
+
+echo "reload suppression: a wallpaper-only rotation never touches hyprctl (LEO: deck relayout)"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/a.png"
+printf 'b' >"$XDG_CONFIG_HOME/hypr/wallpapers/b.png"
+export THEME_MAGICK="$ROOT/no-such-magick-binary"
+awww_stub
+hyprctl_stub
+"$THEME" set mocha >/dev/null # establish a palette to cycle wallpapers under
+: >"$HYPRCTL_LOG"             # the set above legitimately reloads once; isolate the cycle itself
+"$THEME" wallpaper next >/dev/null
+"$THEME" wallpaper prev >/dev/null
+"$THEME" wallpaper random >/dev/null
+check "cycling next/prev/random issued zero hyprctl calls" "0" "$(wc -l <"$HYPRCTL_LOG" | tr -d ' ')"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_HYPRCTL HYPRCTL_LOG
+teardown
+
+echo "reload suppression: an hourly re-apply of the same palette skips hyprctl reload"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'source' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha.png"
+export THEME_MAGICK="$ROOT/no-such-magick-binary"
+awww_stub
+hyprctl_stub
+"$THEME" set mocha >/dev/null
+reload_calls_first=$(grep -c '^reload$' "$HYPRCTL_LOG")
+: >"$HYPRCTL_LOG"
+# theme-auto.timer's hourly tick: the same palette applies again with no
+# palette change — this must not reload (the first apply legitimately may,
+# once for the new palette and once for transparency's first-ever stamp).
+"$THEME" apply >"$ROOT/second-apply.out" 2>&1
+check "the first apply did reload" "1" "$([ "$reload_calls_first" -gt 0 ] && echo 1 || echo 0)"
+check "the repeat apply issued no reload" "0" "$(grep -c '^reload$' "$HYPRCTL_LOG")"
+contains "the repeat apply says so" "unchanged, no reload" "$(cat "$ROOT/second-apply.out")"
+contains "wallpaper still re-applies on the unchanged apply" "wallpaper: mocha.png" "$(cat "$ROOT/second-apply.out")"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_HYPRCTL HYPRCTL_LOG
+teardown
+
+echo "reload suppression: an actual palette switch still reloads"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+printf 'source' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha.png"
+printf 'source' >"$XDG_CONFIG_HOME/hypr/wallpapers/latte.png"
+export THEME_MAGICK="$ROOT/no-such-magick-binary"
+awww_stub
+hyprctl_stub
+"$THEME" set mocha >/dev/null
+: >"$HYPRCTL_LOG"
+"$THEME" set latte >/dev/null
+check "switching palette still reloads" "1" "$(grep -c '^reload$' "$HYPRCTL_LOG")"
+unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_HYPRCTL HYPRCTL_LOG
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
