@@ -82,6 +82,17 @@ integrate with the shared state / UI:
   next time something re-sources rc (a new prompt does not re-source on its
   own — same "next launch" tier as Zen/Obsidian below).
 
+  nvim needs no restart at all: `apply_nvim` pokes every running editor's
+  control socket, and every editor also watches the store itself, so a flip
+  lands immediately on socketed and socketless instances alike. The poke is
+  reported honestly — `immediate` only when a socket actually swapped the
+  scheme (a lazy catppuccin that answers `E185` counts as pending, not
+  applied), and a socketless desk is pending with a reason, since the editor
+  still converges through its own watcher. Editors follow the store's
+  `resolved` palette — the lease-aware value `apply` writes beside the
+  baseline `palette` — so the poke and the watcher always agree on one
+  palette, and a mode's lease reaches nvim through both paths.
+
   A palette's folder is one pool; each monitor draws from it at random, but
   only from the images that actually fit that monitor's live pixel size read
   from `hyprctl monitors -j` (aspect and scale, never a hardcoded output

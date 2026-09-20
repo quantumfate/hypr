@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # ,theme.sh — one palette, every surface.
 #
-# Quickshell and Hyprland watch $XDG_STATE_HOME/theme.json directly and react on
-# their own. Everything else — kitty, GTK, Qt, Kvantum, the wallpaper — needs a
+# Quickshell, Hyprland and nvim watch $XDG_STATE_HOME/theme.json directly and
+# react on their own (nvim follows the store's `resolved` palette — the value
+# in effect under a mode lease, written beside the baseline `palette` on every
+# apply). Everything else — kitty, GTK, Qt, Kvantum, the wallpaper — needs a
 # process to poke it, and that is all this script is: the fan-out for the
 # surfaces that cannot read a JSON file for themselves.
 #
@@ -314,6 +316,11 @@ MAGICK=${THEME_MAGICK:-magick}
 AWWW=${THEME_AWWW:-awww}
 AWWW_DAEMON=${THEME_AWWW_DAEMON:-awww-daemon}
 
+# The nvim poke goes straight to a binary that is never on the sandbox path, so
+# it is injectable like gsettings: a recorder answers in its place, and the
+# sandbox holds it back unless THEME_NVIM names one.
+NVIM=${THEME_NVIM:-nvim}
+
 # The same hazard, three more times: hyprctl, pkill and awww all address the
 # live session by name and ignore $XDG_CONFIG_HOME entirely. Setting
 # THEME_GSETTINGS at all means "this is a test run" and holds every one of them
@@ -337,8 +344,11 @@ apply_kitty() {
     record_applied kitty immediate
 }
 
-# Every running nvim, through the control sockets it already listens on:
-# `bin/,proj.sh` gives each project's nvim slot a `--listen` socket under
+# Every configured nvim follows the store itself (nvim/lua/theme/store.lua
+# watches theme.json, so a socketless editor still switches from the same write
+# this fan-out triggered). The poke below is the *synchronous* half: it talks
+# to the control sockets a live editor already listens on -- `bin/,proj.sh`
+# gives each project's nvim slot a `--listen` socket under
 # `$XDG_RUNTIME_DIR/proj-nvim`, and a plain `nvim` writes its own under
 # `$XDG_RUNTIME_DIR`. There is no config file to swap here -- catppuccin.nvim
 # registers one colorscheme per flavour, so switching is a command, and a
@@ -347,25 +357,46 @@ apply_kitty() {
 #
 # A socket whose nvim has since exited is a dead file: the send fails, which
 # is why each is tried independently and a failure is not the surface's.
+# `immediate` is claimed only when a socket actually switched; otherwise the
+# editor still catches the same write through its own watcher, so the run
+# reports it as pending, never as applied-by-us.
 apply_nvim() {
-    local palette=$1 theme sock sent=0
+    local palette=$1 theme sock sent=0 miss=""
     theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" nvim "catppuccin-$palette")
-    if ! have nvim; then
+    if ! have "$NVIM"; then
         return
     fi
-    if sandboxed; then
-        echo "nvim: $theme"
-        record_applied nvim immediate
+    if sandboxed && [ -z "${THEME_NVIM-}" ]; then
+        echo "nvim: skipped (sandboxed)"
+        record_pending nvim next-launch "no nvim poke in a sandboxed run"
         return
     fi
     for sock in "${XDG_RUNTIME_DIR:-/tmp}"/proj-nvim/*.sock "${XDG_RUNTIME_DIR:-/tmp}"/nvim.*; do
         [ -S "$sock" ] || continue
-        if nvim --server "$sock" --remote-expr "execute('colorscheme $theme')" >/dev/null 2>&1; then
+        # --remote-expr prints the expression's result: `execute()` returns an
+        # empty string for a real switch, and the "E185: Cannot find color
+        # scheme '…'" text for a lazy unloaded catppuccin — while the remote
+        # call itself exits 0 either way. Judge by what came back, not the
+        # status: a swallowed E185 must not count as a switch. Anything that is
+        # not an empty answer, including a connector that cannot reach the
+        # editor behind a socket file, lands in `miss` and is surfaced.
+        answer=$("$NVIM" --server "$sock" --remote-expr "execute('colorscheme $theme')" 2>&1)
+        if [ -z "$(printf '%s' "$answer" | tr -d '[:space:]')" ]; then
             sent=$((sent + 1))
+        else
+            [ -n "$miss" ] || miss=$(printf '%s' "$answer" | head -1)
         fi
     done
-    echo "nvim: $theme ($sent live)"
-    record_applied nvim immediate
+    if [ "$sent" -gt 0 ]; then
+        echo "nvim: $theme ($sent live)"
+        record_applied nvim immediate
+    elif [ -n "$miss" ]; then
+        echo "nvim: $theme (no socket switched: $miss)"
+        record_pending nvim next-launch "no socket switched: $miss"
+    else
+        echo "nvim: $theme (no sockets; the editor follows the store itself)"
+        record_pending nvim next-launch "no control socket; the editor follows theme.json itself"
+    fi
 }
 
 apply_gtk() {
@@ -1199,7 +1230,11 @@ cmd_apply() {
     # mode. A lease is never written here: a mode holds a palette the way it
     # holds a window, and when the mode ends the store still points at what
     # the sun (or the user) chose — a mode must not bury the baseline.
-    put "$(jq -n --arg p "$baseline" '{palette: $p}')"
+    # `resolved` carries the palette in effect right now — the lease's when a
+    # mode holds one, the baseline otherwise — for readers that cannot run the
+    # lease resolver themselves (nvim follows the store directly); the socket
+    # pokes below use this same value, so every editor switches to one palette.
+    put "$(jq -n --arg p "$baseline" --arg r "$palette" '{palette: $p, resolved: $r}')"
 
     apply_kitty "$palette"
     apply_nvim "$palette"

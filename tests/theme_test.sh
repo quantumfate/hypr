@@ -452,6 +452,78 @@ rm -f "$XDG_STATE_HOME/quantum-store/hyprfocus.json" "$XDG_STATE_HOME/quantum-st
 unset OBSIDIAN_VAULT
 teardown
 
+echo "nvim: a live control socket is poked and reported as switched"
+setup
+# The recorder stands in for nvim: it answers the --remote-expr by printing
+# nothing, exactly what execute('colorscheme …') returns on a real switch.
+NVIM_LOG="$ROOT/nvim.log"
+printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "%s"\n' "$NVIM_LOG" >"$ROOT/nvim"
+chmod +x "$ROOT/nvim"
+export THEME_NVIM="$ROOT/nvim"
+# A real unix socket, so the [ -S ] guard passes: python holds it open for the
+# length of the apply, then the test tears it down.
+mkdir -p "$ROOT/runtime/proj-nvim"
+python3 - "$ROOT/runtime/proj-nvim/spike.sock" <<'PY' &
+import socket
+import sys
+import time
+s = socket.socket(socket.AF_UNIX)
+s.bind(sys.argv[1])
+time.sleep(30)
+PY
+NVIM_PID=$!
+sleep 0.3
+export XDG_RUNTIME_DIR="$ROOT/runtime"
+
+"$THEME" set mocha >"$ROOT/out" 2>&1
+contains "the poke addressed the live socket" "--server $ROOT/runtime/proj-nvim/spike.sock" "$(cat "$NVIM_LOG")"
+contains "the poke requested the catppuccin colourscheme" "catppuccin-mocha" "$(cat "$NVIM_LOG")"
+contains "a switched editor is reported immediate" "nvim: catppuccin-mocha (1 live)" "$(cat "$ROOT/out")"
+check "the store records the resolved palette" "mocha" "$(field resolved)"
+kill "$NVIM_PID" 2>/dev/null || true
+wait "$NVIM_PID" 2>/dev/null || true
+unset THEME_NVIM XDG_RUNTIME_DIR
+teardown
+
+echo "nvim: an editor that answers with an E185 error is a miss, not a switch"
+setup
+printf '#!/usr/bin/env bash\nprintf "E185: Cannot find color scheme %%s\\n" "${@: -1}"\n' >"$ROOT/nvim-e185"
+chmod +x "$ROOT/nvim-e185"
+export THEME_NVIM="$ROOT/nvim-e185"
+mkdir -p "$ROOT/runtime"
+python3 - "$ROOT/runtime/nvim.9999.0" <<'PY' &
+import socket
+import sys
+import time
+s = socket.socket(socket.AF_UNIX)
+s.bind(sys.argv[1])
+time.sleep(30)
+PY
+NVIM_PID=$!
+sleep 0.3
+export XDG_RUNTIME_DIR="$ROOT/runtime"
+
+"$THEME" set mocha >"$ROOT/out" 2>&1
+contains "an E185 answer is surfaced, not swallowed" "E185" "$(cat "$ROOT/out")"
+contains "a missed editor is not reported immediate" "no socket switched" "$(cat "$ROOT/out")"
+kill "$NVIM_PID" 2>/dev/null || true
+wait "$NVIM_PID" 2>/dev/null || true
+unset THEME_NVIM XDG_RUNTIME_DIR
+teardown
+
+echo "nvim: no sockets at all is pending, not immediate"
+setup
+printf '#!/usr/bin/env bash\nexit 0\n' >"$ROOT/nvim"
+chmod +x "$ROOT/nvim"
+export THEME_NVIM="$ROOT/nvim"
+export XDG_RUNTIME_DIR="$ROOT/empty-runtime"
+mkdir -p "$XDG_RUNTIME_DIR"
+
+"$THEME" set mocha >"$ROOT/out" 2>&1
+contains "a socketless desk reports pending, not immediate" "no sockets; the editor follows the store itself" "$(cat "$ROOT/out")"
+unset THEME_NVIM XDG_RUNTIME_DIR
+teardown
+
 echo "crossfade: awww is asked for a transition, not a hard cut"
 setup
 export THEME_MAGICK="$ROOT/no-such-magick-binary"
