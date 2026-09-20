@@ -98,6 +98,30 @@ end
 ---@type table<string, table<string, true>>
 local seen = {}
 
+---Put the hold workspace away if moving a member there pulled it into view.
+---
+---Moving a window to a special workspace makes the compositor show that
+---special on the monitor, so a held member -- a window the deck means to be
+---invisible -- ends up drawn over whatever workspace is active, including one
+---belonging to another scene entirely. Deferred by a tick: a dispatch from
+---inside the layout pass re-enters `recalculate`.
+local function hide_hold_if_shown()
+  local shown = false
+  for _, monitor in ipairs(hl.get_monitors() or {}) do
+    local special = monitor.specialWorkspace or monitor.special_workspace
+    local name = special and (special.name or special)
+    if name == HOLD then
+      shown = true
+    end
+  end
+  if not shown then
+    return
+  end
+  require("hypr.lib.hypr").oneshot(1, function()
+    hl.dispatch(hl.dsp.workspace.toggle_special(HOLD:gsub("^special:", "")))
+  end)
+end
+
 ---Drop a closed window from the membership record.
 ---
 ---`seen` is what makes "new" mean "this scene has never placed this window";
@@ -318,6 +342,8 @@ function M.place(scene, scene_name, ctx)
         }))
       end
     end
+
+    hide_hold_if_shown()
 
     -- Read-only tail, the same one the scene provider runs: a scene's isles
     -- hang off the boxes just placed. It writes to the `geometry` store and

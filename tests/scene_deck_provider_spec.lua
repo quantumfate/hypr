@@ -160,6 +160,44 @@ t.describe("gap precedence", function()
   end)
 end)
 
+t.describe("the hold workspace stays out of sight", function()
+  t.it("puts the hold special away when a move pulled it into view", function()
+    -- Moving a window to a special makes the compositor SHOW that special, so
+    -- a held member -- one the deck means to be invisible -- ends up drawn
+    -- over whatever workspace is active, even one of another scene.
+    local windows = {
+      { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } },
+      { address = "0x2", class = "Kitty-Main", workspace = { name = "code" } },
+    }
+    local stub, provider = fresh({ CODE }, windows)
+    stub.monitors = {
+      {
+        name = "DP-1",
+        x = 0,
+        y = 0,
+        width = AREA.w,
+        height = AREA.h,
+        specialWorkspace = { name = "special:deck-hold" },
+      },
+    }
+    provider.recalculate({
+      area = AREA,
+      targets = { target("0x1", "Kitty-Main", "code"), target("0x2", "Kitty-Main", "code") },
+    })
+    for _, timer in ipairs(stub.timers or {}) do
+      timer.cb()
+    end
+
+    local hidden = false
+    for _, action in ipairs(stub.dispatched) do
+      if action.name == "dsp.workspace.toggle_special" then
+        hidden = true
+      end
+    end
+    t.ok(hidden, "the hold special is put away again")
+  end)
+end)
+
 t.describe("holding the non-visible members", function()
   t.it("dispatches a still-tiled non-visible member to the hold workspace", function()
     local windows = {
