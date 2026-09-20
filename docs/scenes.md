@@ -348,7 +348,7 @@ the contract below is the schema it edits against.
 | `blocks`                 | Block[]               | the ordered tiles of the scene                                                                      |
 | `barred`                 | string[]              | classes that may land here but must never join a group                                              |
 | `strays`                 | `"slot"` \| `"float"` | how unmatched tiled windows are treated                                                             |
-| `solo_frame`             | boolean?              | opt-out of the lone-tile decorative frame                                                           |
+| `solo_frame`             | boolean?              | opt-out of centring a lone tile at its paired width (LEO-421; default on)                           |
 | `bindings`               | string[]?             | binding trees this scene admits while active                                                        |
 | `moods`                  | string[]?             | mood tags that select this scene when the mode does not                                             |
 | `machines`               | table?                | machine-specific geometry overrides                                                                 |
@@ -376,6 +376,21 @@ the contract below is the schema it edits against.
 |           |                                                            | `class` the engine keeps alive while members stand — the engine never                                    |
 |           |                                                            | creates more than n, it never closes what it did not spawn                                               |
 | `slot`    | string?                                                    | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
+
+### Solo centring (LEO-421)
+
+A scene whose only present tile is one of several declared blocks (its
+partner has not spawned, or has closed) is centred at the width it would
+have held with that partner present — `hypr/scene/layout.lua`'s
+`paired_fraction` runs the same share arithmetic as a full house, over the
+scene's whole `blocks` declaration, and takes the lone tile's share of it.
+Half the shortfall between that width and the full work area becomes an
+equal outer gap on the left and right; vertical gaps are untouched. A scene
+with only one declared block has no partner to centre against, so its lone
+tile simply fills the panel, same as before. This never applies on a
+secondary monitor (`is_primary` in `Scene.LayoutOpts`, read off
+`config.host`) — there is no ultrawide width there to compensate for — and
+`solo_frame = false` opts a scene out of it entirely, same as always.
 
 ### Strays: `"slot"` executes, `"float"` floats for real (LEO-367)
 

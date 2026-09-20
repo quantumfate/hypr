@@ -15,15 +15,6 @@ local spec_lib = require("hypr.scene.spec")
 
 local M = {}
 
--- Extra outer gap for a workspace holding a single tile, on top of whatever the
--- monitor profile gives it. Enough to read as deliberate on a 5120px panel
--- without stranding the window.
---
--- This is the whole of what an event layer used to do by rewriting a workspace
--- rule's `gaps_out` and restoring it later. Here it is a branch in the function
--- that already decides every box, so there is nothing to race.
-local SOLO_EXTRA = 180
-
 ---The work area the compositor offered: the runtime's own HL.Box (the stub's
 ---LayoutContext.area type), so provider code needs no second geometry table.
 ---@alias Scene.Area HL.Box
@@ -214,8 +205,9 @@ end
 ---@field gaps_out Scene.CssGap gap between the tiles and the screen edge; a
 ---table lets the top differ from the sides (the bar reserves its own height
 ---via layer-shell exclusive zone, so top must not also carry a full outer gap)
----@field solo_extra number? extra outer gap for a lone tile (default SOLO_EXTRA)
 ---@field solo_frame boolean? whether a lone tile is framed at all (default true)
+---@field is_primary boolean? whether this is the scene's primary monitor
+---(default true); the lone-tile centring never applies on a secondary one
 ---@field override string[]? desired left-to-right entry-key order
 ---(see `M.entry_key`, `M.reorder`); nil keeps the declared order
 
@@ -230,6 +222,32 @@ local function sides(gaps)
   return n, n, n, n
 end
 M.sides = sides
+
+---The width fraction a lone slot would hold if every block the scene
+---declares were on screen beside it — its "paired" width (LEO-421). Built
+---from the scene's declaration alone, never the tiles actually present, so a
+---companion that has not spawned yet still centres its sibling at the width
+---they will eventually share.
+---@param scene Scene.Spec
+---@param slot { block: Scene.Block? }
+---@return number
+local function paired_fraction(scene, slot)
+  local hypothetical, target_i = {}, nil
+  for _, block in ipairs(scene.blocks) do
+    hypothetical[#hypothetical + 1] = { block = block }
+    if block == slot.block then
+      target_i = #hypothetical
+    end
+  end
+  -- A stray has no declared block of its own; give it one more slot beside
+  -- the declared set, the same way `fractions` splits leftover share among
+  -- strays already present.
+  if not target_i then
+    hypothetical[#hypothetical + 1] = {}
+    target_i = #hypothetical
+  end
+  return fractions(hypothetical)[target_i] or 1
+end
 
 ---Place every tile.
 ---
@@ -257,12 +275,17 @@ function M.boxes(scene, tiles, area, opts)
     return {}
   end
 
-  -- A lone tile is framed rather than filling the panel. A group counts as one
-  -- tile here, so the Dofus group alone on its workspace frames like a single
-  -- window — which is the behaviour an event layer used to approximate.
-  if #slots == 1 and opts.solo_frame ~= false then
-    local extra = opts.solo_extra or SOLO_EXTRA
-    top, right, bottom, left = top + extra, right + extra, bottom + extra, left + extra
+  -- A lone tile is centred at the width it would have held with its
+  -- declared partner present, rather than stretched to fill the panel. A
+  -- group counts as one tile here, so the Dofus group alone on its
+  -- workspace frames the same way. Never on a secondary monitor (LEO-421):
+  -- there the scene has no ultrawide panel to compensate for, so a lone
+  -- tile just takes the ordinary gaps.
+  if #slots == 1 and opts.solo_frame ~= false and opts.is_primary ~= false then
+    local base_w = area.w - left - right
+    local paired_w = base_w * paired_fraction(scene, slots[1])
+    local extra = math.max((base_w - paired_w) / 2, 0)
+    left, right = left + extra, right + extra
   end
 
   local inner_x = area.x + left

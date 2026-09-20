@@ -40,6 +40,7 @@ local M = {}
 ---@field gaps_in number? scene-declared inner gap (LEO-397); wins over the host
 ---workspace-spec and the global `general:gaps_in` where set
 ---@field gaps_out Scene.CssGap|number? scene-declared outer gap; same precedence
+---@field docks table<string, Dock.Spec|false>? isle id -> where it docks (docs/scenes.md "Docks")
 
 ---Also carries a host map field except the name to fill: the document is
 ---keyed by workspace `default_name`, so the caller passes the key rather
@@ -89,6 +90,64 @@ local function normalize_max_spawns(value)
   return 1
 end
 
+---Log one dropped dock entry — same shape as a half-declared `spawn` (the
+---scene survives), but a dock also names what it dropped and why, since
+---there is no companion window to notice the gap by its absence.
+---@param scene string
+---@param isle string
+---@param reason string
+local function report_dock_dropped(scene, isle, reason)
+  require("hypr.lib.trace").emit({
+    stage = "admit",
+    event = "dock_dropped",
+    decision = "drop",
+    scene = scene,
+    isle = isle,
+    reason = reason,
+  })
+end
+
+---Validate one dock entry and its `fallback` chain, recursively. A bad
+---level is dropped from the chain (its own `fallback`, if any, is not
+---consulted either — a broken link never smuggles a later one through)
+---rather than refusing the isle's whole declaration.
+---@param scene string
+---@param isle string
+---@param entry unknown
+---@return Dock.Spec|false|nil
+local function normalize_dock_entry(scene, isle, entry)
+  if entry == false then
+    return false
+  end
+  local dock = require("hypr.lib.dock")
+  if not dock.valid_entry(entry) then
+    report_dock_dropped(scene, isle, "bad at/of/orientation")
+    return nil
+  end
+  local out = { at = entry.at, of = entry.of, orientation = entry.orientation }
+  if entry.fallback ~= nil then
+    out.fallback = normalize_dock_entry(scene, isle, entry.fallback)
+  end
+  return out
+end
+
+---Every isle the scene declares a dock for, dropping bad entries in place
+---(docs/scenes.md "Docks"). Additive: a scene that never declares `docks`
+---(every scene today) gets an empty table, same as `columns`.
+---@param name string
+---@param raw table<string, unknown>?
+---@return table<string, Dock.Spec|false>
+local function normalize_docks(name, raw)
+  local out = {}
+  for isle, entry in pairs(raw or {}) do
+    local normalized = normalize_dock_entry(name, isle, entry)
+    if normalized ~= nil then
+      out[isle] = normalized
+    end
+  end
+  return out
+end
+
 local function normalize(name, raw)
   local blocks = {}
   for i, block in ipairs(raw.blocks or {}) do
@@ -135,6 +194,7 @@ local function normalize(name, raw)
     columns = normalize_columns(raw.columns),
     gaps_in = tonumber(raw.gaps_in),
     gaps_out = raw.gaps_out,
+    docks = normalize_docks(name, raw.docks),
   }
 end
 

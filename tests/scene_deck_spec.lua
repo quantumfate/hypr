@@ -12,6 +12,23 @@ local function tile(address, class, tags, group)
   return { address = address, class = class, tags = tags, group = group }
 end
 
+---The boxes that landed inside the work area, and the ones parked off it.
+---A hidden member is placed a full column height beyond an edge (LEO-402),
+---so "visible" is simply "its box overlaps the area vertically".
+---@param boxes Scene.Box[]
+---@return Scene.Box[] visible, string[] offscreen addresses
+local function split(boxes)
+  local visible, offscreen = {}, {}
+  for _, box in ipairs(boxes) do
+    if box.y >= AREA.y and box.y + box.h <= AREA.y + AREA.h then
+      visible[#visible + 1] = box
+    else
+      offscreen[#offscreen + 1] = box.address
+    end
+  end
+  return visible, offscreen
+end
+
 t.describe("applies", function()
   t.it("opts in only with layout = deck", function()
     t.eq(true, deck.applies({ layout = "deck" }))
@@ -85,23 +102,35 @@ t.describe("boxes: which window shows", function()
   local spec = { columns = { { order = 1, share = 1, classes = { "Kitty%-Main" } } } }
 
   t.it("shows the first window by default (no scroll opt)", function()
-    local boxes, hold = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
-    t.eq(1, #boxes)
-    t.eq("a", boxes[1].address)
-    t.eq(1, #hold)
-    t.eq("b", hold[1])
+    local boxes = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
+    local visible, offscreen = split(boxes)
+    t.eq(2, #boxes, "every member is placed; none leaves the workspace")
+    t.eq("a", visible[1].address)
+    t.eq("b", offscreen[1])
   end)
 
-  t.it("shows the scrolled-to window and holds the rest", function()
+  t.it("shows the scrolled-to window and parks the rest off-screen", function()
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 2 } }
-    local boxes, hold = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, opts)
-    t.eq("b", boxes[1].address)
-    t.eq("a", hold[1])
+    local boxes = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, opts)
+    local visible, offscreen = split(boxes)
+    t.eq("b", visible[1].address)
+    t.eq("a", offscreen[1])
+  end)
+
+  t.it("a member before the scroll index parks above, one after it below", function()
+    local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 2 } }
+    local tiles = { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main"), tile("c", "Kitty%-Main") }
+    local by = {}
+    for _, box in ipairs(deck.boxes(spec, tiles, AREA, opts)) do
+      by[box.address] = box
+    end
+    t.ok(by.a.y + by.a.h <= AREA.y, "the member before the visible one sits above the screen")
+    t.ok(by.c.y >= AREA.y + AREA.h, "the member after it sits below the screen")
   end)
 
   t.it("fills the whole column height, never a partial split", function()
     local boxes = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
-    t.eq(600, boxes[1].h)
+    t.eq(600, split(boxes)[1].h)
   end)
 end)
 
@@ -111,19 +140,17 @@ t.describe("boxes: scroll clamping", function()
   t.it("clamps past the end to the last window", function()
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 99 } }
     local boxes = deck.boxes(spec, { tile("a", "A"), tile("b", "A") }, AREA, opts)
-    t.eq("b", boxes[1].address)
+    t.eq("b", split(boxes)[1].address)
   end)
 
   t.it("clamps below 1 to the first window", function()
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 0 } }
     local boxes = deck.boxes(spec, { tile("a", "A"), tile("b", "A") }, AREA, opts)
-    t.eq("a", boxes[1].address)
+    t.eq("a", split(boxes)[1].address)
   end)
 
   t.it("clamps to nothing for an empty column", function()
-    local boxes, hold = deck.boxes(spec, {}, AREA, NO_GAPS)
-    t.eq(0, #boxes)
-    t.eq(0, #hold)
+    t.eq(0, #deck.boxes(spec, {}, AREA, NO_GAPS))
   end)
 
   t.it("clamp_scroll is a direct pure decision", function()
@@ -141,10 +168,10 @@ t.describe("boxes: group collapse", function()
       tile("a", "Kitty%-Main", nil, "grp1"),
       tile("b", "Kitty%-Main", nil, "grp1"),
     }
-    local boxes = deck.boxes(spec, tiles, AREA, NO_GAPS)
-    t.eq(2, #boxes)
-    t.eq(boxes[1].x, boxes[2].x)
-    t.eq(boxes[1].w, boxes[2].w)
+    local visible = split(deck.boxes(spec, tiles, AREA, NO_GAPS))
+    t.eq(2, #visible)
+    t.eq(visible[1].x, visible[2].x)
+    t.eq(visible[1].w, visible[2].w)
   end)
 
   t.it("a group counts as one deck entry for scrolling", function()
@@ -155,13 +182,12 @@ t.describe("boxes: group collapse", function()
       tile("c", "zen"),
     }
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 2 } }
-    local boxes, hold = deck.boxes(spec, tiles, AREA, opts)
-    t.eq(1, #boxes)
-    t.eq("c", boxes[1].address)
-    local held = { hold[1], hold[2] }
-    table.sort(held)
-    t.eq("a", held[1])
-    t.eq("b", held[2])
+    local visible, offscreen = split(deck.boxes(spec, tiles, AREA, opts))
+    t.eq(1, #visible)
+    t.eq("c", visible[1].address)
+    table.sort(offscreen)
+    t.eq("a", offscreen[1])
+    t.eq("b", offscreen[2])
   end)
 end)
 
@@ -186,9 +212,7 @@ t.describe("boxes: 1-3 column bound", function()
   end)
 
   t.it("no columns places nothing", function()
-    local boxes, hold = deck.boxes({ columns = {} }, { tile("a", "A") }, AREA, NO_GAPS)
-    t.eq(0, #boxes)
-    t.eq(0, #hold)
+    t.eq(0, #deck.boxes({ columns = {} }, { tile("a", "A") }, AREA, NO_GAPS))
   end)
 end)
 

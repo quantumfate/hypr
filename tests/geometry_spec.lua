@@ -77,64 +77,66 @@ t.describe("geometry.resolved_gaps", function()
     local scenes = { code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } }
     local specs = { { workspace = "1", default_name = "code", monitor = "DP-1", gaps_out = 30 } }
     local out = geometry.resolved_gaps(scenes, specs, 40)
-    t.eq({ left = 55, right = 90 }, out["code"])
+    t.eq({ top = 30, right = 90, bottom = 55, left = 55 }, out["code"])
   end)
 
   t.it("adds the rule's gaps_in and the border to an inset side, never a flush one", function()
     local scenes = { code = { gaps_out = { left = 25 } } }
     local specs = { { default_name = "code", gaps_out = { left = 30, right = 0 }, gaps_in = 20 } }
     local out = geometry.resolved_gaps(scenes, specs, 40, { gaps_in = 24, border = 1 })
-    t.eq({ left = 76, right = 1 }, out["code"])
+    t.eq({ top = 1, right = 1, bottom = 1, left = 76 }, out["code"])
   end)
 
   t.it("a scene layout's unnamed side is a real 0, never a fall-through", function()
     local scenes = { media = { gaps_out = { left = 91 } } }
     local specs = { { default_name = "media", gaps_out = { left = 5, right = 7 }, gaps_in = 3 } }
     local out = geometry.resolved_gaps(scenes, specs, 40, { gaps_in = 24, border = 1 })
-    t.eq({ left = 100, right = 8 }, out["media"])
+    t.eq({ top = 1, right = 8, bottom = 1, left = 100 }, out["media"])
   end)
 
-  t.it("a numeric scene gap applies to both sides", function()
+  t.it("a numeric scene gap applies to every side", function()
     local scenes = { code = { gaps_out = 55 } }
     local out = geometry.resolved_gaps(scenes, {}, 0)
-    t.eq({ left = 55, right = 55 }, out["code"])
+    t.eq({ top = 55, right = 55, bottom = 55, left = 55 }, out["code"])
   end)
 
-  t.it("a deck scene collapses its sided gaps_out to one number on every side", function()
+  t.it("a deck scene honours its sided gaps_out, per layout.sides, same as a scene layout", function()
+    -- LEO-421: deck no longer collapses gaps_out to one symmetric number, so
+    -- top (0) reads distinctly from left/right here.
     local scenes = { code = { layout = "deck", gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } }
     local out = geometry.resolved_gaps(scenes, {}, 0)
-    t.eq({ left = 25, right = 25 }, out["code"])
+    t.eq({ top = 0, right = 60, bottom = 25, left = 25 }, out["code"])
   end)
 
-  t.it("a deck's zero gap is flush on both sides, so no gaps_in lands", function()
+  t.it("a deck's zero gap is flush on every side, so no gaps_in lands", function()
     local scenes = { code = { layout = "deck", gaps_out = 0 } }
     local specs = { { default_name = "code", gaps_out = { left = 30, right = 0 }, gaps_in = 20 } }
     local out = geometry.resolved_gaps(scenes, specs, 40, { gaps_in = 24, border = 1 })
-    t.eq({ left = 31, right = 1 }, out["code"])
+    t.eq({ top = 1, right = 1, bottom = 1, left = 31 }, out["code"])
   end)
 
-  t.it("a deck scene without .left falls through the whole rung, like deck scalar", function()
+  t.it("a deck scene's unnamed side is a real 0 too, like a scene layout's", function()
     local scenes = { code = { layout = "deck", gaps_out = { top = 0, right = 60 } } }
     local specs = { { default_name = "code", gaps_out = 30 } }
     local out = geometry.resolved_gaps(scenes, specs, 40)
-    t.eq({ left = 60, right = 60 }, out["code"])
+    t.eq({ top = 30, right = 90, bottom = 30, left = 30 }, out["code"])
   end)
 
   t.it("no scene gap falls to the host workspace-spec, keyed by default_name", function()
     local scenes = { code = {} }
     local specs = { { default_name = "code", gaps_out = 30 } }
     local out = geometry.resolved_gaps(scenes, specs, 40)
-    t.eq({ left = 60, right = 60 }, out["code"])
+    t.eq({ top = 60, right = 60, bottom = 60, left = 60 }, out["code"])
   end)
 
   t.it("no scene or host gap falls to the global, folded per side", function()
     local scenes = { logs = {} }
     local out = geometry.resolved_gaps(scenes, {}, { top = 4, right = 56, bottom = 4, left = 8 })
-    t.eq({ left = 16, right = 112 }, out["logs"])
+    t.eq({ top = 8, right = 112, bottom = 8, left = 16 }, out["logs"])
   end)
 
-  t.it("a bare-number global applies to both sides", function()
+  t.it("a bare-number global applies to every side", function()
     local scenes = { logs = {} }
-    t.eq({ left = 80, right = 80 }, geometry.resolved_gaps(scenes, {}, 40)["logs"])
+    t.eq({ top = 80, right = 80, bottom = 80, left = 80 }, geometry.resolved_gaps(scenes, {}, 40)["logs"])
   end)
 end)

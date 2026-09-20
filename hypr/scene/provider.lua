@@ -69,6 +69,32 @@ local function gaps(scene)
   return gaps_in, gaps_out
 end
 
+---Whether a scene's workspace sits on the host's primary monitor (LEO-421):
+---the lone-tile centring in `layout.lua` only makes sense there, since a
+---secondary panel has no ultrawide width to compensate for. Read straight off
+---`config.host`, already resolved to real output names by `geometry.resolve`
+---at load — no live monitor query needed, unlike `conf/host.lua`'s own
+---`monitor_roles`, which exists to publish the map, not to answer one lookup.
+---A host with no `primary_monitor`, or a workspace with no spec, or one whose
+---spec never set `monitor`, reads as primary: never withholding centring on a
+---plain declaration.
+---@param scene_name string
+---@return boolean
+local function is_primary_monitor(scene_name)
+  local host = config and config.host
+  local primary = host and host.primary_monitor
+  if not primary then
+    return true
+  end
+  local specs = host.workspaces and host.workspaces.workspace_specs
+  for _, spec in ipairs(specs or {}) do
+    if spec.default_name == scene_name then
+      return spec.monitor == nil or spec.monitor == primary
+    end
+  end
+  return true
+end
+
 ---The scene a set of targets belongs to, or nil when the workspace has none.
 ---Taken from the windows rather than from an active-workspace lookup: a layout
 ---may be asked to recalculate a workspace the user is not looking at, and
@@ -197,6 +223,7 @@ local function place(get_scenes, ctx)
     gaps_in = gaps_in,
     gaps_out = gaps_out,
     solo_frame = scene.solo_frame ~= false,
+    is_primary = is_primary_monitor(scene.name),
     override = order.get(scene.name),
   })
 
@@ -313,20 +340,14 @@ function M.attach()
   M.register(spec_lib.load)
   hl.on("config.reloaded", M.recalculate_focused)
   hl.on("workspace.active", recalculate_on_arrival)
-  -- A closing window frees the slot its column was showing, and on a deck
-  -- scene the member that should take that slot is parked on another
-  -- workspace -- so nothing left on this one changes, and the compositor
-  -- calls no recalculate at all. The column simply stayed empty until a
-  -- workspace switch happened to trigger `recalculate_on_arrival`. One
-  -- deferred redraw closes that gap; the tick lets the compositor finish
-  -- removing the window first, so the pass sees the stack it actually left.
+  -- A closing window frees the slot its column was showing; `recalculate`
+  -- places whatever falls into it (every deck member already lives on this
+  -- workspace, LEO-402), but Hyprland's own close-focus handling can leave
+  -- the keyboard on nothing or on a member about to go off-screen. One
+  -- deferred pass repairs focus (`deck_provider.reconcile`) and then
+  -- redraws; the tick lets the compositor finish removing the window first,
+  -- so the pass sees the stack it actually left.
   hl.on("window.close", function()
-    -- `recalculate_focused` is not enough on a deck scene: it redraws, but a
-    -- window move dispatched from inside that pass does not land (see
-    -- `deck_provider.reconcile`), so the column the closed window occupied
-    -- stayed empty while its replacement sat parked. Reconcile the moves from
-    -- out here, then redraw. The tick lets the compositor finish removing the
-    -- window first, so the pass sees the stack it actually left.
     require("hypr.lib.hypr").oneshot(1, function()
       local ws = hl.get_active_workspace()
       if ws and ws.name then

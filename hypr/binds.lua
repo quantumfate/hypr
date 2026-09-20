@@ -520,14 +520,14 @@ do
       end
     end
     deck_scroll.set(scene.name, tile.column, new_index)
-    -- The target may still be held off the workspace; bring it home and
-    -- focus it. The provider's next `recalculate` sees the new scroll index
-    -- and parks the window this replaces (deck_provider.lua).
-    hl.dispatch(hl.dsp.window.move({
-      window = "address:" .. target,
-      workspace = "name:" .. scene.name,
-      follow = false,
-    }))
+    -- Every deck member already lives on this workspace (LEO-402: hidden
+    -- ones sit off-screen, not elsewhere), so nothing needs to be moved
+    -- home. Focusing the target both gives the user the window they asked
+    -- for and gives the compositor a change to react to, so the provider's
+    -- next `recalculate` actually places the new scroll index -- the same
+    -- "re-assert focus" trick `swap_tile` above uses, not a focus-dance
+    -- (the target is exactly what ought to end up focused, not a
+    -- steal-and-restore around some other action).
     hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
   end
 

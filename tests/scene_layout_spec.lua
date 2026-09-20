@@ -213,44 +213,68 @@ t.describe("gaps", function()
     t.eq(12, boxes[2].x - (boxes[1].x + boxes[1].w))
   end)
 
-  t.it("frames a lone tile more widely", function()
-    -- What an event layer used to do by rewriting a workspace rule's gaps and
-    -- restoring them later, which is why they flipped as the tile count changed.
-    local spec, layout = scene({ TERMINALS })
-    local boxes = layout.boxes(spec, { tile("0x1", "Kitty-Main") }, AREA, {
-      gaps_in = 0,
-      gaps_out = 20,
-      solo_extra = 100,
-    })
-    t.eq(120, boxes[1].x)
-    t.eq(760, boxes[1].w)
+  -- Round shares (unlike TERMINALS/BROWSER's .67/.33) so the centred width
+  -- lands on whole pixels.
+  local WIDE = { classes = { "Kitty-Main" }, order = 1, share = 0.75 }
+  local SIDE = { classes = { "zen-twilight" }, order = 2, share = 0.25 }
+
+  t.it("centres a lone tile at the width its declared partner would leave it", function()
+    -- The partner (SIDE) has not spawned, or has closed; WIDE still centres
+    -- at the 0.75 share it would hold with SIDE present, not the full panel.
+    local spec, layout = scene({ WIDE, SIDE })
+    local boxes = layout.boxes(spec, { tile("0x1", "Kitty-Main") }, AREA, { gaps_in = 0, gaps_out = 20 })
+    -- base usable width 960 (1000 - 20*2); paired width 720 (0.75 of 960);
+    -- half the 240px shortfall, 120, lands on each side atop the base gap.
+    t.eq(140, boxes[1].x)
+    t.eq(720, boxes[1].w)
   end)
 
-  t.it("frames a lone group like a lone window", function()
-    -- A group is one node in the layout, so a workspace holding only the group
-    -- deserves the same framing as one holding a single window.
-    local spec, layout = scene({ TERMINALS })
+  t.it("centres a lone group the same way", function()
+    -- A group is one node in the layout, so a workspace holding only the
+    -- group centres exactly like a single window would.
+    local spec, layout = scene({ WIDE, SIDE })
     local tiles = { tile("0x1", "Kitty-Main", "g"), tile("0x2", "Kitty-Main", "g") }
-    local boxes = layout.boxes(spec, tiles, AREA, { gaps_in = 0, gaps_out = 20, solo_extra = 100 })
-    t.eq(120, boxes[1].x)
-    t.eq(120, boxes[2].x)
+    local boxes = layout.boxes(spec, tiles, AREA, { gaps_in = 0, gaps_out = 20 })
+    t.eq(140, boxes[1].x)
+    t.eq(140, boxes[2].x)
   end)
 
-  t.it("stops framing as soon as a second tile arrives", function()
-    local spec, layout = scene({ TERMINALS, BROWSER })
+  t.it("stops centring as soon as a second tile arrives", function()
+    local spec, layout = scene({ WIDE, SIDE })
     local tiles = { tile("0x1", "Kitty-Main"), tile("0x9", "zen-twilight") }
-    local boxes = layout.boxes(spec, tiles, AREA, { gaps_in = 0, gaps_out = 20, solo_extra = 100 })
+    local boxes = layout.boxes(spec, tiles, AREA, { gaps_in = 0, gaps_out = 20 })
     t.eq(20, boxes[1].x)
   end)
 
-  t.it("honours a scene that opts out of solo framing", function()
+  t.it("does not centre a lone tile with no declared partner", function()
+    -- A scene of one declared block has nothing to centre against: the tile
+    -- fills the panel, same as it always did.
     local spec, layout = scene({ TERMINALS })
-    local boxes = layout.boxes(spec, { tile("0x1", "Kitty-Main") }, AREA, {
-      gaps_in = 0,
-      gaps_out = 20,
-      solo_extra = 100,
-      solo_frame = false,
-    })
+    local boxes = layout.boxes(spec, { tile("0x1", "Kitty-Main") }, AREA, { gaps_in = 0, gaps_out = 20 })
+    t.eq(20, boxes[1].x)
+    t.eq(960, boxes[1].w)
+  end)
+
+  t.it("never centres on a secondary monitor", function()
+    local spec, layout = scene({ WIDE, SIDE })
+    local boxes = layout.boxes(
+      spec,
+      { tile("0x1", "Kitty-Main") },
+      AREA,
+      { gaps_in = 0, gaps_out = 20, is_primary = false }
+    )
+    t.eq(20, boxes[1].x)
+    t.eq(960, boxes[1].w)
+  end)
+
+  t.it("honours a scene that opts out of solo framing", function()
+    local spec, layout = scene({ WIDE, SIDE })
+    local boxes = layout.boxes(
+      spec,
+      { tile("0x1", "Kitty-Main") },
+      AREA,
+      { gaps_in = 0, gaps_out = 20, solo_frame = false }
+    )
     t.eq(20, boxes[1].x)
   end)
 end)

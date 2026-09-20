@@ -93,13 +93,13 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
     -- The visible edge adds what the layout's own gap misses: the rule's
     -- gaps_out (DP-1 { left = 30, right = 30 } in the desk-dual primary profile)
     -- plus the rule's gaps_in (20) and the 1px border on each inset side.
-    t.eq({ left = 76, right = 111 }, workspaces["code"])
+    t.eq({ top = 13, right = 111, bottom = 61, left = 76 }, workspaces["code"])
   end)
 
-  t.it("a deck scene collapses its sided gaps_out to one number on every side", function()
+  t.it("a deck scene honours its sided gaps_out, per layout.sides, same as a scene layout", function()
     seed_scenes({ code = { layout = "deck", gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
     local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 76, right = 76 }, workspaces["code"])
+    t.eq({ top = 13, right = 111, bottom = 61, left = 76 }, workspaces["code"])
   end)
 
   t.it("a scene with no gaps_out resolves the host workspace-spec, keyed by default_name", function()
@@ -110,7 +110,7 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
     -- like the monitor map above.
     seed_scenes({ code = {} })
     local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 81, right = 81 }, workspaces["code"])
+    t.eq({ top = 45, right = 81, bottom = 51, left = 81 }, workspaces["code"])
   end)
 
   t.it("a workspace with no declared scene is absent: nothing to subscribe to", function()
@@ -121,7 +121,7 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
   t.it("a runtime scene edit re-publishes on the engine's first re-read, no reload", function()
     seed_scenes({ code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
     t.eq(
-      { left = 76, right = 111 },
+      { top = 13, right = 111, bottom = 61, left = 76 },
       published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })["code"]
     )
     -- Edit the declaration: the next load (fresh engine state per published())
@@ -129,7 +129,7 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
     -- map into the same store — the bar's watchChanges re-emits on its own.
     seed_scenes({ code = { gaps_out = 12 } })
     t.eq(
-      { left = 63, right = 63 },
+      { top = 45, right = 63, bottom = 48, left = 63 },
       published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })["code"]
     )
   end)

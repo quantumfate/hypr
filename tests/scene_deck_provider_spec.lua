@@ -158,10 +158,32 @@ t.describe("gap precedence", function()
     t.eq(1000, placed(a).w)
     t.eq(1000, placed(a).h)
   end)
+
+  t.it("honours a sided gaps_out instead of collapsing it to one number (LEO-421)", function()
+    local scene = {
+      default_name = "code",
+      layout = "deck",
+      gaps_in = 0,
+      gaps_out = { top = 10, right = 20, bottom = 30, left = 40 },
+      columns = { { order = 1, share = 1, classes = { "Kitty-Main" } } },
+    }
+    local windows = { { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } } }
+    local _, provider = fresh({ scene }, windows)
+    local a = target("0x1", "Kitty-Main", "code")
+    provider.recalculate({ area = AREA, targets = { a } })
+    t.eq(40, placed(a).x)
+    t.eq(10, placed(a).y)
+    t.eq(940, placed(a).w, "1000 - left(40) - right(20)")
+    t.eq(960, placed(a).h, "1000 - top(10) - bottom(30)")
+  end)
 end)
 
-t.describe("holding the non-visible members", function()
-  t.it("dispatches a still-tiled non-visible member to the hold workspace", function()
+t.describe("parking the non-visible members off-screen", function()
+  t.it("places a non-visible member beyond the viewport, on the same workspace", function()
+    -- LEO-402: a hidden member stays tiled where the compositor animates it.
+    -- It travels off the monitor along the scroll axis rather than stacking
+    -- behind the visible member, and it never leaves the workspace -- moving
+    -- it to a special workspace is what made the scroll read as a cut.
     local windows = {
       { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } },
       { address = "0x2", class = "Kitty-Main", workspace = { name = "code" } },
@@ -171,15 +193,16 @@ t.describe("holding the non-visible members", function()
     local b = target("0x2", "Kitty-Main", "code")
     provider.recalculate({ area = AREA, targets = { a, b } })
     t.ok(placed(a), "the first arrival is shown by default")
-    t.eq(nil, placed(b))
-    local held = false
+    local hidden = placed(b)
+    t.ok(hidden, "the hidden member is placed, not moved away")
+    t.ok(hidden.y >= AREA.y + AREA.h or hidden.y + hidden.h <= AREA.y, "it sits outside the viewport")
+    t.ok(hidden.y ~= placed(a).y, "it is not stacked behind the visible member")
     for _, action in ipairs(stub.dispatched) do
-      if action.name == "dsp.window.move" and action.args[1].window == "address:0x2" then
-        t.eq("special:deck-hold", action.args[1].workspace)
-        held = true
-      end
+      t.ok(
+        not (action.name == "dsp.window.move" and action.args[1].window == "address:0x2"),
+        "a hidden member is never dispatched off the workspace"
+      )
     end
-    t.ok(held, "the second member was dispatched to hold")
   end)
 
   t.it("asks a held member matching the scroll index to come home", function()
