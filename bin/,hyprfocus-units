@@ -23,11 +23,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
+# The repo this CLI speaks for. `QF_UNITS_REPO` overrides it so a test can
+# point the whole gate at a scratch copy: resolving the script's own path is
+# not isolation on its own, since a copied script under a path that leads back
+# here still writes the real contract.
+REPO = Path(os.environ.get("QF_UNITS_REPO") or Path(__file__).resolve().parent.parent)
 CONTRACT = REPO / "etc" / "scene-managed.json"
 OUT_DIR = REPO / "etc" / "systemd" / "user"
 PROGRAMME = REPO.parent

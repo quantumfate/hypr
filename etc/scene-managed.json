@@ -44,9 +44,6 @@
     "linear-sync": [
       "obsidian-linear-sync.service",
       "obsidian-linear-sync.timer"
-    ],
-    "unowned": [
-      "nothing-installs-this.service"
     ]
   }
 }

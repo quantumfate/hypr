@@ -40,8 +40,14 @@ check "every declared unit has exactly one owner" 0 "$(status "$cli" verify --pr
 # the thing under test.
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-cp -r "$repo" "$scratch/scripts"
+# -L, because `$repo` reaches this checkout through ~/.config/hypr: copying a
+# symlinked source without dereferencing it makes the "copy" a symlink back to
+# the real repo, and the drift fixture below then edits the committed contract.
+cp -rL "$repo" "$scratch/scripts"
 drifted="$scratch/scripts/bin/,hyprfocus-units"
+# The scratch copy is only isolation if the CLI reads ITS contract, not the
+# one next to the checkout it was copied from.
+export QF_UNITS_REPO="$scratch/scripts"
 
 python3 - "$scratch/scripts/etc/scene-managed.json" <<'PY'
 import json, sys
@@ -54,6 +60,7 @@ PY
 check "a unit no repo installs fails verify" 1 \
     "$(status "$drifted" verify --programme "$repo/..")"
 check "a contract edited without regenerating fails check" 1 "$(status "$drifted" check)"
+unset QF_UNITS_REPO
 
 # installed: the running user manager must hold every declared unit (LEO-290).
 # The desk under test currently carries theme-auto/state-backup declared but
