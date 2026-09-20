@@ -10,6 +10,7 @@ local spec_lib = require("hypr.scene.spec")
 local deck = require("hypr.scene.deck")
 local deck_scroll = require("hypr.scene.deck_scroll")
 local scene_provider = require("hypr.scene.provider")
+local dock_publish = require("hypr.scene.dock_publish")
 
 local M = {}
 
@@ -93,6 +94,22 @@ end
 ---view.
 ---@type table<string, table<string, true>>
 local seen = {}
+
+---Drop a closed window from the membership record.
+---
+---`seen` is what makes "new" mean "this scene has never placed this window";
+---an address the compositor later hands to a different window would otherwise
+---read as already-seen and its column would not scroll to it. Called from the
+---`window.close` hook, which is the only event that can retire an address.
+---@param address string?
+function M.forget(address)
+  if not address then
+    return
+  end
+  for _, members in pairs(seen) do
+    members[address] = nil
+  end
+end
 
 ---Point a column at a window that has just arrived in it.
 ---
@@ -255,6 +272,35 @@ function M.place(scene, scene_name, ctx)
       }))
     end
   end
+
+  -- Read-only tail, the same one the scene provider runs: the isles a deck
+  -- scene docks hang off the boxes just placed, and nothing here writes
+  -- anywhere but the `geometry` store.
+  if scene.docks then
+    local top, right, bottom, left = require("hypr.scene.layout").sides(gaps_out)
+    dock_publish.publish({
+      scene = scene,
+      monitor = M.monitor_of(scene_name),
+      tiles = tiles,
+      boxes = boxes,
+      gaps_in = gaps_in or 0,
+      gaps_out = { top = top, right = right, bottom = bottom, left = left },
+      spec_lib = spec_lib,
+    })
+  end
+end
+
+---The live monitor a deck scene's workspace stands on, for the dock publish.
+---@param scene_name string
+---@return table?
+function M.monitor_of(scene_name)
+  for _, monitor in ipairs(hl.monitors or {}) do
+    local ws = monitor.activeWorkspace
+    if ws and ws.name == scene_name then
+      return monitor
+    end
+  end
+  return (hl.monitors or {})[1]
 end
 
 ---Refocus a deck column after its visible member closes and another one

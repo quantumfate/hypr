@@ -13,6 +13,7 @@ local spec_lib = require("hypr.scene.spec")
 local layout = require("hypr.scene.layout")
 local order = require("hypr.scene.order")
 local layout_lib = require("hypr.lib.layout")
+local dock_publish = require("hypr.scene.dock_publish")
 
 local M = {}
 
@@ -168,6 +169,48 @@ local function tiles_of(targets)
   return tiles, by_address
 end
 
+---The monitor a scene's targets stand on, as live geometry. Read from the
+---compositor rather than the host data, since a dock is positioned inside its
+---own output and needs that output's real size.
+---@param targets table[]
+---@return table?
+local function monitor_of(targets)
+  local ws = targets[1] and targets[1].window and targets[1].window.workspace
+  local want = ws and ws.monitor and ws.monitor.name
+  for _, monitor in ipairs(hl.monitors or {}) do
+    if monitor.name == want then
+      return monitor
+    end
+  end
+  return (hl.monitors or {})[1]
+end
+
+---Publish the scene's resolved docks for the monitor it was just placed on.
+---@param scene Scene.Spec
+---@param tiles Scene.Tile[]
+---@param boxes Scene.Box[]
+---@param targets table[]
+local function publish_docks(scene, tiles, boxes, targets)
+  if not scene.docks then
+    return
+  end
+  local monitor = monitor_of(targets)
+  if not monitor then
+    return
+  end
+  local gaps_in, gaps_out = gaps(scene)
+  local top, right, bottom, left = layout.sides(gaps_out)
+  dock_publish.publish({
+    scene = scene,
+    monitor = monitor,
+    tiles = tiles,
+    boxes = boxes,
+    gaps_in = gaps_in or 0,
+    gaps_out = { top = top, right = right, bottom = bottom, left = left },
+    spec_lib = spec_lib,
+  })
+end
+
 ---Place `targets` per one recalculate call, against whatever `get_scenes()`
 ---answers right now -- called fresh every time (window events, and the
 ---`layout_msg`-forced recalc below), so a declaration edit lands on the next
@@ -233,6 +276,12 @@ local function place(get_scenes, ctx)
       target:place({ x = box.x, y = box.y, w = box.w, h = box.h })
     end
   end
+
+  -- Read-only tail: the scene's isles hang off the boxes just placed, so this
+  -- is the one pass that knows where they go. It writes to the `geometry`
+  -- store and nowhere else -- never a place, never a dispatch, never a
+  -- recalculate -- so a dock can't move the tile it docks to.
+  publish_docks(scene, tiles, boxes, targets)
 end
 
 ---@param scenes table<string, Scene.Spec>|fun(): table<string, Scene.Spec>
@@ -347,7 +396,10 @@ function M.attach()
   -- deferred pass repairs focus (`deck_provider.reconcile`) and then
   -- redraws; the tick lets the compositor finish removing the window first,
   -- so the pass sees the stack it actually left.
-  hl.on("window.close", function()
+  hl.on("window.close", function(w)
+    -- Retire the address first, synchronously: the deferred pass below must
+    -- not see a closed window still counted as a member this scene placed.
+    require("hypr.scene.deck_provider").forget(w and w.address)
     require("hypr.lib.hypr").oneshot(1, function()
       local ws = hl.get_active_workspace()
       if ws and ws.name then

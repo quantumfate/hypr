@@ -313,6 +313,63 @@ its scene — so a pin rule such as `+media-browser` never strands a claimed
 window, while a window with no armed intent is claimed by nothing and keeps
 whatever open/home logic decides for it.
 
+## Docks
+
+A scene says where each quickshell isle sits. `docks` is a map keyed by isle
+id — quickshell's registry, documented in that repo's `modules/bar/Readme.md`,
+so the ids are a contract between the two:
+
+```lua
+docks = {
+  ["bar.workspaces"] = { at = "top-left", of = "block:1",
+                         fallback = { at = "top-left", of = "screen" } },
+  ["bar.center"]     = { at = "top-center", of = "screen" },
+  ["dofus.roster"]   = { at = "bottom-left", of = "block:1" },
+  ["bar.clock"]      = false,
+}
+```
+
+- `at` — the nine-grid: `top-left` `top-center` `top-right` `middle-left`
+  `center` `middle-right` `bottom-left` `bottom-center` `bottom-right`.
+- `of` — `screen`, `block:<order>`, `slot:<slot>` or `class:<class>`. Block,
+  slot and class name a tile the layout placed this pass; a block with no live
+  window names nothing, which is what makes its dock collapse.
+- `orientation` — `horizontal` or `vertical`; defaults from the edge (a side
+  gutter stacks its content, a top or bottom gutter lays it in a row).
+- `fallback` — a dock spec of the same shape, chainable.
+- `false` — this scene withholds the isle; it publishes `hidden`, which is not
+  the same as resting.
+
+A dock sits **outside** its target, in the gutter between that edge and the
+screen's, never between two windows. The dominant axis is the anchor's first
+word, switched to the other one when the named gutter faces another window and
+the other faces the screen. The second word aligns the isle along the edge.
+The corner touching the window is its growth corner: an isle grows away from
+the window, never into it. Standoff from the window is the scene's `gaps_in`;
+the gutter's thickness is the resolved `gaps_out` for that side, less that
+standoff.
+
+When a dock cannot be honoured — the target is absent, or both candidate
+gutters face another window — it steps down: the declared `fallback` chain,
+then the same anchor on `screen`, then `resting` (the isle's own default
+position). Two isles claiming one region resolve by isle id: the first keeps
+it, the second walks its own ladder. So a second window opening beside the
+first never inherits the first's dock, and the association stays legible.
+
+`hypr/lib/dock.lua` decides all of this as arithmetic over the boxes the
+layout just placed. `hypr/scene/dock_publish.lua` writes the result to the
+`geometry` store (`docks.<monitor>.<isle id>` = `{ region, anchor, grow,
+orientation, state }`, monitor-local) from the tail of a layout pass — both
+the scene and deck providers — and only when the resolved map changed. That
+tail is read-only by construction: it places nothing and dispatches nothing,
+so a dock can never move the tile it hangs off. A scene edit drops the
+write-suppressor (`dock_publish.invalidate()`, from `hypr/scene/spec.lua`'s
+re-read), so an edited declaration re-publishes without a reload.
+
+Quickshell sizes each isle, aligns its growth corner to the published anchor,
+clamps it inside the published region, and warns once if it does not fit.
+Nothing is ever drawn off screen.
+
 ## Bindings
 
 Scene and member `bindings` tags are buffer-local. Which-key already filters `workspace › class › group › layout`. The groupbar is the active-member strip; the persistent bar is status, not a taskbar.

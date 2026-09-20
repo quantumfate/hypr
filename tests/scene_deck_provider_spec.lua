@@ -178,6 +178,30 @@ t.describe("gap precedence", function()
   end)
 end)
 
+t.describe("membership survives exactly as long as the window", function()
+  t.it("a closed address stops counting as a member this scene has placed", function()
+    -- `seen` is what makes an arrival an arrival. An address the compositor
+    -- reuses for a later window must read as new, or its column never
+    -- scrolls to it and it opens straight into the off-screen park.
+    local windows = {
+      { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } },
+      { address = "0x2", class = "Kitty-Main", workspace = { name = "code" } },
+    }
+    local _, provider = fresh({ CODE }, windows)
+    local a = target("0x1", "Kitty-Main", "code")
+    local b = target("0x2", "Kitty-Main", "code")
+    provider.recalculate({ area = AREA, targets = { a, b } })
+
+    local deck_provider = require("hypr.scene.deck_provider")
+    deck_provider.forget("0x2")
+    -- The same address arriving again is an arrival: its column scrolls to
+    -- it, so it is the member inside the viewport.
+    provider.recalculate({ area = AREA, targets = { a, b } })
+    local shown = placed(b)
+    t.ok(shown.y >= AREA.y and shown.y < AREA.y + AREA.h, "the re-arrival is the visible member")
+  end)
+end)
+
 t.describe("parking the non-visible members off-screen", function()
   t.it("places a non-visible member beyond the viewport, on the same workspace", function()
     -- LEO-402: a hidden member stays tiled where the compositor animates it.
