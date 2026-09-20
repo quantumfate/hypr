@@ -22,7 +22,7 @@
 -- monitor with no `gaps_by_monitor` entry -- and the compositor's own boot-time
 -- gaps, before any host resolves -- gets.
 ---@type { gaps_in: number, gaps_out: { top: number, right: number, bottom: number, left: number } }
-local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 56, bottom = 56, left = 56 } }
+local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 0, bottom = 56, left = 56 } }
 
 ---The desk's geometry half, keyed by hypr.lib.profile's fingerprint of
 ---hl.get_monitors(), not by hostname. desk-dual's numbers are the former
@@ -37,18 +37,19 @@ local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 56, bottom =
 ---`workspace_specs` at load time), so per-monitor gaps finally apply.
 ---
 ---Numbers are roughly 5x the pre-fix live values (gaps_in 12, gaps_out top 8 /
----sides+bottom 40) per the user's ask, scaled a little by panel size: the
----5120x1440 ultrawide gets the widest sides, everything else lands around
----48-64 inner / 48-80 outer. top is 12 wherever the bar shows (every output
----except a laptop's external secondary, which quickshell/modules/bar/Bar.qml
----excludes from the bar the same way it excludes the desktop's case panel) --
----see the module comment above for why top stays small rather than doubling
----the bar's own reservation.
+---sides+bottom 40) per the user's ask, scaled by panel size. The desk-dual
+---pair is deliberately asymmetric: the 5120x1440 ultrawide (primary) takes a
+---tight left and a flush right, the normal-aspect secondary 64 on both sides.
+---top is 12 wherever the bar shows (every output except a laptop's external
+---secondary, which quickshell/modules/bar/Bar.qml excludes from the bar the
+---same way it excludes the desktop's case panel) -- see the module comment
+---above for why top stays small rather than doubling the bar's own
+---reservation.
 ---@type table<string, { gaps_by_monitor?: table<string, table<string, any>> }>
 local geometry_profiles = {
   [require("hypr.lib.profile").DESK_DUAL] = {
     gaps_by_monitor = {
-      primary = { gaps_in = 60, gaps_out = { top = 12, right = 80, bottom = 72, left = 80 } },
+      primary = { gaps_in = 20, gaps_out = { top = 12, right = 0, bottom = 15, left = 30 } },
       secondary = { gaps_in = 48, gaps_out = { top = 12, right = 64, bottom = 64, left = 64 } },
     },
   },

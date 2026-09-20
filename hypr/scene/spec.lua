@@ -191,6 +191,48 @@ end
 ---@type string?
 local cached_mtime
 
+---Re-publish the resolved per-workspace gap the aligned bar subscribes to
+---(quickshell `bar_follows_scene_gaps`) the moment this table is rebuilt — a
+---scene/gaps edit bumped the store mtime, and this first pass that notices it
+---is also the pass whose gaps the compositor tiles at next. conf/host.lua
+---publishes the same map at config load; this keeps a runtime edit from
+---drifting stale on the bar side until a reload. Quickshell only reads; it
+---never derives, so the exposed value is always exactly what hyprland resolved.
+---Guarded: a build that has not finalized host specs yet, or a test fixture
+---with neither `config` nor a live compositor, has nothing to fold.
+---@param scenes table<string, Scene.Spec>
+local function publish_resolved(scenes)
+  pcall(function()
+    -- Only the desktop runtime publishes (it is the one that exports QF_STORE);
+    -- a bare unit-test run must never write the real geometry store.
+    if not os.getenv("QF_STORE") then
+      return
+    end
+    local config = rawget(_G, "config")
+    local specs = config and config.host and config.host.workspaces and config.host.workspaces.workspace_specs
+    if not specs then
+      return
+    end
+    local function live(key)
+      local ok, value = pcall(hl.get_config, key)
+      return ok and value or nil
+    end
+    local defaults = config.default_gaps or {}
+    local default_gaps_out = live("general.gaps_out") or defaults.gaps_out
+    -- The bar's inset is the distance to the visible window, which the
+    -- compositor builds from the workspace rule's gaps_in and the border on top
+    -- of the layout's box (hypr/lib/geometry.lua's `resolved_gaps`); read them
+    -- live so a config edit never drifts from what is actually tiled.
+    local inner = {
+      gaps_in = live("general.gaps_in") or defaults.gaps_in,
+      border = live("general.border_size") or 0,
+    }
+    require("hypr.lib.store").define("geometry"):set({
+      workspaces = require("hypr.lib.geometry").resolved_gaps(scenes, specs, default_gaps_out, inner),
+    })
+  end)
+end
+
 ---Every declared scene, keyed by name. Memoized against the store's mtime: the
 ---compiler and the event layer both want the scenes, and normalizing twice
 ---would hand them tables that compare unequal — `block_for` results are used
@@ -218,6 +260,7 @@ function M.load()
   end
   cache = out
   cached_mtime = mtime
+  publish_resolved(out)
   return out
 end
 

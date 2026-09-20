@@ -5,7 +5,7 @@
 --- and that a non-visible one is dispatched to hold.
 local t = require("tests.harness")
 
-local function fresh(scenes, windows)
+local function fresh(scenes, windows, specs)
   local stub = require("tests.hl_stub").new()
   _G.hl = stub
   local keyed = {}
@@ -22,7 +22,7 @@ local function fresh(scenes, windows)
       }
     end,
   }
-  _G.config = { host = { workspaces = { workspace_specs = {} } } }
+  _G.config = { host = { workspaces = { workspace_specs = specs or {} } } }
   for _, mod in ipairs({
     "hypr.scene.spec",
     "hypr.scene.layout",
@@ -92,6 +92,71 @@ t.describe("placing the visible member", function()
     local a = target("0x1", "mpv", "misc")
     provider.recalculate({ area = AREA, targets = { a } })
     t.eq(nil, placed(a))
+  end)
+end)
+
+local TWO_COLUMNS = {
+  default_name = "code",
+  layout = "deck",
+  gaps_in = 120,
+  gaps_out = 50,
+  columns = {
+    { order = 1, share = 0.5, classes = { "Kitty-Main" } },
+    { order = 2, share = 0.5, classes = { "Kitty-Panel" } },
+  },
+}
+
+t.describe("gap precedence", function()
+  t.it("a scene-declared gap wins over the host workspace-spec and the global", function()
+    local specs = { { default_name = "code", gaps_in = 80, gaps_out = 40 } }
+    local windows = {
+      { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } },
+      { address = "0x2", class = "Kitty-Panel", workspace = { name = "code" } },
+    }
+    local _, provider = fresh({ TWO_COLUMNS }, windows, specs)
+    local a = target("0x1", "Kitty-Main", "code")
+    local b = target("0x2", "Kitty-Panel", "code")
+    provider.recalculate({ area = AREA, targets = { a, b } })
+    -- gaps_out 50 (scene, not spec's 40): row inset 50. gaps_in 120 (scene,
+    -- not spec's 80): usable = 1000 - 100 - 120 = 780, first of two 0.5 shares
+    -- = 390. The scene's declaration, not the host spec's, shapes both.
+    t.eq(50, placed(a).x)
+    t.eq(50, placed(a).y)
+    t.eq(390, placed(a).w)
+    t.eq(900, placed(a).h)
+    t.eq(50, placed(b).y)
+    t.eq(900, placed(b).h)
+  end)
+
+  t.it("falls back to the host workspace-spec gaps when the scene declares none", function()
+    local specs = { { default_name = "code", gaps_in = 80, gaps_out = 40 } }
+    local windows = { { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } } }
+    local _, provider = fresh({ CODE }, windows, specs)
+    local a = target("0x1", "Kitty-Main", "code")
+    provider.recalculate({ area = AREA, targets = { a } })
+    t.eq(40, placed(a).x)
+    t.eq(40, placed(a).y)
+    t.eq(920, placed(a).w)
+    t.eq(920, placed(a).h)
+  end)
+
+  t.it("honours an explicit scene zero rather than treating it as undeclared", function()
+    local scene = {
+      default_name = "code",
+      layout = "deck",
+      gaps_in = 0,
+      gaps_out = 0,
+      columns = { { order = 1, share = 1, classes = { "Kitty-Main" } } },
+    }
+    local specs = { { default_name = "code", gaps_in = 80, gaps_out = 40 } }
+    local windows = { { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } } }
+    local _, provider = fresh({ scene }, windows, specs)
+    local a = target("0x1", "Kitty-Main", "code")
+    provider.recalculate({ area = AREA, targets = { a } })
+    t.eq(0, placed(a).x)
+    t.eq(0, placed(a).y)
+    t.eq(1000, placed(a).w)
+    t.eq(1000, placed(a).h)
   end)
 end)
 

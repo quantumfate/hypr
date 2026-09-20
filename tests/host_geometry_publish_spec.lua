@@ -21,11 +21,12 @@ os.getenv = function(k)
 end
 
 ---Runs conf/host.lua's build() for one host/monitor fingerprint, through the
----stub, and returns the published `geometry` store's `monitors` table.
+---stub, and returns one published `geometry` store section.
+---@param key "monitors"|"workspaces"|"global"|"roles"
 ---@param hostname string
 ---@param monitors HL.Monitor[]
----@return table<string, {left: integer, right: integer}>
-local function published_monitors(hostname, monitors)
+---@return table
+local function published(key, hostname, monitors)
   for name in pairs(package.loaded) do
     if name == "hypr" or name:match("^hypr%.") or name:match("^conf%.") then
       package.loaded[name] = nil
@@ -35,6 +36,8 @@ local function published_monitors(hostname, monitors)
   _G.hl = require("tests.hl_stub").new()
   hl.monitors = monitors
   hl.config_values["general.gaps_out"] = { top = 8, right = 40, bottom = 40, left = 40 }
+  hl.config_values["general.gaps_in"] = 24
+  hl.config_values["general.border_size"] = 1
 
   local util = require("hypr.lib.util")
   local real_hostname = util.hostname
@@ -46,13 +49,17 @@ local function published_monitors(hostname, monitors)
   util.hostname = real_hostname
 
   local Store = require("hypr.lib.store")
-  return Store.define("geometry"):get("monitors")
+  return Store.define("geometry"):get(key)
+end
+
+local function published_monitors(hostname, monitors)
+  return published("monitors", hostname, monitors)
 end
 
 t.describe("conf.host.build publishes per-monitor gaps -- LEO-340", function()
-  t.it("desk-dual: primary takes the profile's 80px gap, secondary the profile's 64px", function()
+  t.it("desk-dual: each monitor publishes its profile's own sides", function()
     local monitors = published_monitors("quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 80, right = 80 }, monitors["DP-1"])
+    t.eq({ left = 30, right = 0 }, monitors["DP-1"])
     t.eq({ left = 64, right = 64 }, monitors["DP-2"])
   end)
 
@@ -65,5 +72,65 @@ t.describe("conf.host.build publishes per-monitor gaps -- LEO-340", function()
   t.it("never publishes the solo widen: the store holds only the base gap", function()
     local monitors = published_monitors("quantum-desktop", { { width = 5120 }, { width = 1920 } })
     t.ok(monitors["DP-1"].left < 180, "published gap looks widened by SOLO_EXTRA")
+  end)
+end)
+
+t.describe("conf.host.build publishes resolved per-workspace gaps", function()
+  ---Seed a hyprfocus declaration in the sandboxed store so `resolved_gaps`
+  ---has scenes to fold; build() reads it through the store handle like the
+  ---engine does.
+  ---@param scenes table
+  local function seed_scenes(scenes)
+    local json = require("hypr.lib.json")
+    local f = assert(io.open(dir .. "/hyprfocus.json", "w"))
+    f:write(json.encode({ base = { scenes = scenes } }))
+    f:close()
+  end
+
+  t.it("a declared scene publishes its own gaps_out over the host spec, per layout.sides", function()
+    seed_scenes({ code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
+    local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
+    -- The visible edge adds what the layout's own gap misses: the rule's
+    -- gaps_out (DP-1 { left = 30, right = 0 } in the desk-dual primary profile)
+    -- plus the rule's gaps_in (20) and the 1px border on each inset side.
+    t.eq({ left = 76, right = 81 }, workspaces["code"])
+  end)
+
+  t.it("a deck scene collapses its sided gaps_out to one number on every side", function()
+    seed_scenes({ code = { layout = "deck", gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
+    local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
+    t.eq({ left = 76, right = 46 }, workspaces["code"])
+  end)
+
+  t.it("a scene with no gaps_out resolves the host workspace-spec, keyed by default_name", function()
+    -- The workspace inset re-adds the rule's gaps_out (the number the monitor
+    -- map publishes) and, on an inset side, the rule's gaps_in (20 in the
+    -- desk-dual primary profile) and the 1px border; the right side is flush,
+    -- so only the border lands. Tracks base.lua's desk-dual primary profile,
+    -- like the monitor map above.
+    seed_scenes({ code = {} })
+    local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
+    t.eq({ left = 81, right = 1 }, workspaces["code"])
+  end)
+
+  t.it("a workspace with no declared scene is absent: nothing to subscribe to", function()
+    local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
+    t.eq(nil, workspaces["media"])
+  end)
+
+  t.it("a runtime scene edit re-publishes on the engine's first re-read, no reload", function()
+    seed_scenes({ code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
+    t.eq(
+      { left = 76, right = 81 },
+      published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })["code"]
+    )
+    -- Edit the declaration: the next load (fresh engine state per published())
+    -- sees the bumped mtime, and hypr/scene/spec.lua re-publishes the resolved
+    -- map into the same store — the bar's watchChanges re-emits on its own.
+    seed_scenes({ code = { gaps_out = 12 } })
+    t.eq(
+      { left = 63, right = 33 },
+      published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })["code"]
+    )
   end)
 end)

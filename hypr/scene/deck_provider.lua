@@ -35,12 +35,18 @@ local function scalar(value, fallback)
   return tonumber(value) or fallback
 end
 
----Same fallback-ladder gap read as hypr/scene/provider.lua's private
----`gaps`/`spec_gaps` — duplicated rather than exported, since neither module
----should reach into the other's internals for two lines of arithmetic.
----@param scene_name string
+---Gap precedence for a deck scene, the same ladder hypr/scene/provider.lua's
+---private `gaps` reads (duplicated rather than exported, since neither module
+---should reach into the other's internals for two lines of arithmetic): the
+---scene's own declared `gaps_in`/`gaps_out` (LEO-397) win, then the host
+---workspace-spec gaps (`conf/host.lua` resolves those from the monitor
+---profile at load), then the compositor's global config, read live. Every
+---rung collapses to one symmetric number via `scalar` — `deck.lua`'s
+---`opts.gaps_out` is one number on every side, unlike `layout.lua`'s `sides`
+---(see `deck.lua`'s module comment).
+---@param scene Scene.Spec
 ---@return number gaps_in, number gaps_out
-local function gaps(scene_name)
+local function gaps(scene)
   local function raw(key, fallback)
     local ok, value = pcall(hl.get_config, key)
     if not ok or value == nil then
@@ -51,12 +57,14 @@ local function gaps(scene_name)
   local spec_in, spec_out
   local specs = config and config.host and config.host.workspaces and config.host.workspaces.workspace_specs
   for _, spec in ipairs(specs or {}) do
-    if spec.default_name == scene_name then
+    if spec.default_name == scene.name then
       spec_in, spec_out = spec.gaps_in, spec.gaps_out
     end
   end
-  local gaps_in = scalar(spec_in, scalar(raw("general:gaps_in", 0), 0))
-  local gaps_out = scalar(spec_out, scalar(raw("general:gaps_out", 0), 0))
+  local global_in = scalar(raw("general:gaps_in", 0), 0)
+  local global_out = scalar(raw("general:gaps_out", 0), 0)
+  local gaps_in = scalar(scene.gaps_in, scalar(spec_in, global_in))
+  local gaps_out = scalar(scene.gaps_out, scalar(spec_out, global_out))
   return gaps_in, gaps_out
 end
 
@@ -211,7 +219,7 @@ function M.place(scene, scene_name, ctx)
       end
     end
 
-    local gaps_in, gaps_out = gaps(scene_name)
+    local gaps_in, gaps_out = gaps(scene)
     local tiles, workspace_of = member_tiles(scene)
     scroll_to_arrivals(scene, scene_name, tiles)
     local boxes, hold = deck.boxes(scene, tiles, ctx.area, {
@@ -219,7 +227,6 @@ function M.place(scene, scene_name, ctx)
       gaps_out = gaps_out,
       scroll = deck_scroll.get_all(scene_name),
     })
-
     for _, box in ipairs(boxes) do
       local target = by_address[box.address]
       if target then
@@ -286,7 +293,7 @@ function M.reconcile(scene_name)
     return
   end
   local tiles, workspace_of = member_tiles(scene)
-  local gaps_in, gaps_out = gaps(scene_name)
+  local gaps_in, gaps_out = gaps(scene)
   local boxes, hold = deck.boxes(scene, tiles, area, {
     gaps_in = gaps_in,
     gaps_out = gaps_out,

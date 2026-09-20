@@ -17,12 +17,18 @@ local geometry = require("hypr.lib.geometry")
 local profile = require("hypr.lib.profile")
 local Store = require("hypr.lib.store")
 local nav = require("hypr.lib.nav")
+local spec_lib = require("hypr.scene.spec")
 
 local M = {}
 
 -- The bar's side insets follow each monitor's tiled outer gap, base gap only
 -- (never the scene layout's own solo widen). Quickshell reads this store and
--- falls back to Theme.barInset*2 when a monitor has no entry.
+-- falls back to Theme.barInset*2 when a monitor has no entry. Also published:
+-- `workspaces`, the FINAL per-workspace gaps hyprland resolves (scene
+-- `gaps_out` → host workspace-spec → live global, folded per scene layout) —
+-- the value a scene that opts into `bar_follows_scene_gaps` subscribes to.
+-- The engine re-publishes that map on a runtime scene edit (spec.lua), so
+-- what hyprland exposes and what it tiles at can never disagree.
 local geometry_store = Store.define("geometry")
 
 ---@param hostname string
@@ -117,6 +123,9 @@ function M.build()
     (config.geometry_profiles[config.profile] or {}).gaps_by_monitor
   )
 
+  local default_gaps_out = hl.get_config("general.gaps_out") or config.default_gaps.gaps_out
+  local default_gaps_in = hl.get_config("general.gaps_in") or config.default_gaps.gaps_in
+  local border = hl.get_config("general.border_size") or 0
   geometry_store:put({
     monitors = geometry.monitor_gaps(
       config.host.workspaces.workspace_specs,
@@ -124,7 +133,22 @@ function M.build()
       -- `default_gaps` can't silently drift from what the compositor
       -- actually has loaded; the literal only backs a cold start with
       -- nothing loaded yet.
-      hl.get_config("general.gaps_out") or config.default_gaps.gaps_out
+      default_gaps_out
+    ),
+    -- The scene-aligned bar (`bar_follows_scene_gaps`) subscribes to the value
+    -- hyprland actually tiles at: the engine's ladder (scene gaps_out, then the
+    -- workspace-spec keyed by default_name, then the live global) PLUS what the
+    -- compositor stacks on top of the layout's box -- the workspace rule's own
+    -- gaps_out (already subtracted from ctx.area) and, on any side the layout
+    -- left inset, its gaps_in and the border (`hypr/lib/geometry.lua`'s
+    -- `resolved_gaps`). A runtime scene edit re-publishes it from
+    -- hypr/scene/spec.lua the first time the engine re-reads the declaration,
+    -- so the store stays current between reloads.
+    workspaces = geometry.resolved_gaps(
+      spec_lib.load(),
+      config.host.workspaces.workspace_specs,
+      default_gaps_out,
+      { gaps_in = default_gaps_in, border = border }
     ),
     roles = monitor_roles(config.host),
   })

@@ -125,7 +125,9 @@ scene means visiting each monitor's active workspace.
   every visible scene.
 - `Scene.Spec` gained `gaps_in`/`gaps_out`; `provider.lua`'s `gaps()`
   precedence is now scene → host workspace-spec → global, matching the
-  user's compromise from the issue.
+  user's compromise from the issue. `deck_provider.lua`'s `gaps()` (the code
+  scene path) reads the **same** ladder — scene-declared gaps previously fell
+  through to the host spec on deck scenes, silently ignoring a store edit.
 
 ## What still requires an explicit action, and why
 
