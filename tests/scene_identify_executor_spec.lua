@@ -10,8 +10,8 @@ local hl_stub = require("tests.hl_stub")
 local POKEMON = {
   blocks = {
     { classes = { "com.libretro.RetroArch" }, order = 1 },
-    { classes = { "zen-gaming-media" }, order = 2, slot = "pokemon/chat" },
-    { classes = { "zen-gaming-media" }, order = 3, slot = "pokemon/stream" },
+    { classes = { "zen-twilight-media" }, order = 2, slot = "pokemon/chat" },
+    { classes = { "zen-twilight-media" }, order = 3, slot = "pokemon/stream" },
   },
 }
 
@@ -95,7 +95,7 @@ end
 t.describe("identity executor", function()
   t.it("stamps the first free slot tag on the first same-class window", function()
     local calls, stub, windows = fresh_scene()
-    local a = win(windows, { address = "0x1", class = "zen-gaming-media" })
+    local a = win(windows, { address = "0x1", class = "zen-twilight-media" })
     open(stub, a)
 
     t.eq({ "slot:pokemon/chat" }, a.tags, "window ends up carrying the slot tag")
@@ -113,9 +113,9 @@ t.describe("identity executor", function()
 
   t.it("stamps the next free slot on a second live sibling, and both route to their own block", function()
     local calls, stub, windows = fresh_scene()
-    local a = win(windows, { address = "0x1", class = "zen-gaming-media" })
+    local a = win(windows, { address = "0x1", class = "zen-twilight-media" })
     open(stub, a)
-    local b = win(windows, { address = "0x2", class = "zen-gaming-media" })
+    local b = win(windows, { address = "0x2", class = "zen-twilight-media" })
     open(stub, b)
 
     t.eq({ "slot:pokemon/chat" }, a.tags)
@@ -135,7 +135,7 @@ t.describe("identity executor", function()
 
   t.it("does not restamp a window that already carries its slot", function()
     local calls, stub, windows = fresh_scene()
-    local a = win(windows, { address = "0x1", class = "zen-gaming-media", tags = { "slot:pokemon/chat" } })
+    local a = win(windows, { address = "0x1", class = "zen-twilight-media", tags = { "slot:pokemon/chat" } })
     open(stub, a)
 
     t.eq({ "slot:pokemon/chat" }, a.tags, "no second tag appended")

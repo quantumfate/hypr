@@ -10,6 +10,9 @@ local M = {}
 ---@class Scene.Companion
 ---@field class string the companion window's identity class
 ---@field command string what opens it, run the first time in
+---@field max_spawns number how many of `class` the engine keeps alive while
+---the block has members (never fewer than 1; a cap only constrains what the
+---engine itself opens, not what already exists)
 
 ---@class Scene.Block
 ---@field classes string[] literal class or Lua pattern, as windowrules.lua matches
@@ -72,6 +75,20 @@ local function normalize_columns(raw)
   return columns
 end
 
+---The declared spawn cap, normalized: a positive whole number as-is, anything
+---else — missing, 0, negative, fractional — falls back to 1, today's
+---behaviour. Same shape as a half-declared spawn being dropped: a bad value
+---must not refuse the whole scene declaration.
+---@param value unknown
+---@return number
+local function normalize_max_spawns(value)
+  local n = tonumber(value)
+  if type(n) == "number" and n >= 1 and n == math.floor(n) and n < math.huge then
+    return n
+  end
+  return 1
+end
+
 local function normalize(name, raw)
   local blocks = {}
   for i, block in ipairs(raw.blocks or {}) do
@@ -86,9 +103,13 @@ local function normalize(name, raw)
       guard = block.guard == "deny" and "deny" or "barred",
       -- A companion is declared whole or not at all: a block naming the
       -- window it opens by humming is worse than one the user opens by hand.
-      spawn = (type(block.spawn) == "table" and block.spawn.class and block.spawn.command)
-          and { class = block.spawn.class, command = block.spawn.command }
-        or nil,
+      -- The cap defaults to 1 (today's behaviour) and normalizes like every
+      -- other numeric: out-of-range values fall back, never refuse the scene.
+      spawn = (type(block.spawn) == "table" and block.spawn.class and block.spawn.command) and {
+        class = block.spawn.class,
+        command = block.spawn.command,
+        max_spawns = normalize_max_spawns(block.spawn.max_spawns),
+      } or nil,
       slot = type(block.slot) == "string" and block.slot or nil,
     }
   end

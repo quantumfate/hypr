@@ -16,7 +16,7 @@ binds — so most of this is wiring, not new machinery.
   Projects come from `sync`, which folds each repo's `.proj.toml` into the
   store. There is no `create`: a project exists because a `.proj.toml` does.
 - The store (`$QF_STORE/projects.json`): `name -> { kind, study, priority,
-  path, windows[], workspace, scopes{} }`. `windows` is an ordered list of
+path, windows[], workspace, scopes{} }`. `windows` is an ordered list of
   role NAMES only.
 - `window_command()` in `,proj.sh` hardcodes the mapping: `nvim` gets
   `nvim --listen <sock> .`, every other role gets a bare shell. A project
@@ -110,7 +110,7 @@ small and centred. Choosing instantiates the group; the picker closes itself.
 The existing `reassert_focus_after_picker_closes` already handles focus after
 that close.
 
-A second entry — `pick --window` — lists the *open* windows of the focused
+A second entry — `pick --window` — lists the _open_ windows of the focused
 project and jumps to one. This is the "temporarily pin and jump" idea: it is a
 floating fzf over `kitty @ ls` output across the group's sockets, and jumping
 is a plain focus dispatch. Nothing needs pinning in the compositor.

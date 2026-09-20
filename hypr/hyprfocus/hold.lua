@@ -263,6 +263,27 @@ function M.record()
   return origins()
 end
 
+---Give a held window an origin it lost.
+---
+---A window in the holding place with no record is one no mode can restore
+---(`unreachable`'s `no_origin`): the record write that should have named its
+---origin never landed, or a reload started a fresh state before it did. The
+---window is alive and where it belongs — only the note saying where it came
+---from is missing — so writing that note is the repair, and the next mode
+---admitting `workspace` gives it back. Adopting is preferred over evicting it
+---to whatever the primary happens to show: a class its scene claims has a
+---home, and the holding place is the right place to wait for it.
+---@param address string
+---@param workspace string the workspace it should be given back to
+function M.adopt(address, workspace)
+  if not address or not workspace then
+    return
+  end
+  local recorded = origins()
+  recorded[address] = workspace
+  remember(recorded)
+end
+
 ---Drop every record without moving anything. For tests, and for recovering
 ---from a record that no longer describes reality.
 function M.forget()

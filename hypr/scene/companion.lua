@@ -3,13 +3,14 @@
 --
 -- A companion is declared on the spawn-carrying block itself:
 --
---   spawn = { class = "zen-gaming-media", command = "zen-twilight ..." }
+--   spawn = { class = "zen-twilight-media", command = "zen-twilight -P Media ..." }
 --
 -- `class` is the companion's identity (presence is derived from live windows,
--- never remembered); `command` is what runs the first time in. This file
--- decides only; carrying a decision out goes through Hyprland events, which
--- is also where the one piece of remembered state lives: a spawn in flight,
--- which a scan cannot yet see.
+-- never remembered); `command` is what runs the first time in; `max_spawns`
+-- caps how many of `class` the engine keeps alive while the block has members
+-- (default 1). This file decides only; carrying a decision out goes through
+-- Hyprland events, which is also where the one piece of remembered state
+-- lives: a spawn in flight, which a scan cannot yet see.
 local spec_lib = require("hypr.scene.spec")
 
 -- Between dispatching a spawn and the companion's own open event there is a
@@ -34,6 +35,10 @@ local M = {}
 ---companion already on the desk satisfies the scan and no spawn re-issues,
 ---however often the config re-evaluates. The decision is per spawn-carrying
 ---block, keyed for the caller's pending marker by workspace+companion class.
+---While members stand, a spawn is asked for only while the live count is
+---below the block's `max_spawns`; the last member leaving closes every
+---companion whatever the cap, and a count at or above the cap never asks for
+---another — the cap constrains what the engine opens, not what exists.
 ---@param spec Scene.Spec
 ---@param ws_name string
 ---@param windows HL.Window[] every live window on the desk
@@ -60,7 +65,12 @@ function M.decisions(spec, ws_name, windows)
           addresses[#addresses + 1] = companion.address
         end
         out[#out + 1] = { action = "close", addresses = addresses, pending_key = M.key(ws_name, spawn.class) }
-      elseif members > 0 and #companions == 0 then
+      elseif members > 0 and #companions < spawn.max_spawns then
+        -- The cap fills one per convergence, never in a burst: the caller's
+        -- in-flight marker admits a single spawn at a time, and each spawned
+        -- window's own open event re-converges the next. The count is derived
+        -- from live windows, so a companion already on the desk — the user's,
+        -- not the engine's — counts toward the cap and no extra spawn issues.
         out[#out + 1] = { action = "spawn", command = spawn.command, pending_key = M.key(ws_name, spawn.class) }
       end
     end

@@ -263,7 +263,30 @@ end
 ---open/close/move/resize events every workspace's own layout algorithm
 ---already reacts to.
 function M.recalculate_focused()
+  -- Only when the focused workspace is actually on this layout.
+  --
+  -- `layoutmsg` is delivered to whichever layout owns the focused monitor's
+  -- active workspace (`LayoutManager::layoutMsg` hardcodes that target — see
+  -- the doc above), NOT to the layout that sent it. Every workspace without a
+  -- rule of its own runs `dwindle`: the shelves, `special:hyprfocus-held`,
+  -- and any bare numbered workspace (verified live — `hyprctl workspaces`
+  -- reports `tiledLayout: dwindle` for all of them, while the scene ones
+  -- report `lua:scene`). So an unguarded `recalc` sent while one of those is
+  -- focused — during a mode swap, which shows and hides the holding place,
+  -- or right after a window closes on a shelf — lands on `dwindle`, which
+  -- implements no such message. Nothing is redrawn and the compositor logs
+  -- the miss.
+  if not M.focused_is_scene() then
+    return
+  end
   hl.dispatch(hl.dsp.layout("recalc"))
+end
+
+---Whether the focused workspace is laid out by this provider.
+---@return boolean
+function M.focused_is_scene()
+  local ws = hl.get_active_special_workspace() or hl.get_active_workspace()
+  return ws ~= nil and layout_lib.bare_layout(ws.tiled_layout) == NAME
 end
 
 ---Lazy correction for every OTHER scene workspace (LEO-403): wired to
@@ -275,19 +298,7 @@ end
 ---workspace that just became visible, picking up any declaration/gaps edit
 ---that landed while it was off-screen.
 local function recalculate_on_arrival()
-  local ws = hl.get_active_workspace()
-  local f = io.open("/tmp/qf-debug-arrival.log", "a")
-  if f then
-    f:write(
-      ("ws=%s tiled_layout=%s bare=%s\n"):format(
-        tostring(ws and ws.name),
-        tostring(ws and ws.tiled_layout),
-        tostring(ws and layout_lib.bare_layout(ws.tiled_layout))
-      )
-    )
-    f:close()
-  end
-  if ws and layout_lib.bare_layout(ws.tiled_layout) == NAME then
+  if M.focused_is_scene() then
     require("hypr.lib.hypr").oneshot(1, M.recalculate_focused)
   end
 end

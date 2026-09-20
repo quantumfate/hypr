@@ -54,6 +54,33 @@
         "strays": "float",
         "bindings": []
       },
+      "spawner": {
+        "blocks": [
+          {
+            "classes": [
+              "e2e-member"
+            ],
+            "group": true,
+            "order": 1,
+            "share": 0.67,
+            "spawn": {
+              "class": "e2e-companion",
+              "command": "foot --app-id e2e-companion sh -c \"sleep 600\"",
+              "max_spawns": 3
+            }
+          },
+          {
+            "classes": [
+              "e2e-companion"
+            ],
+            "order": 2,
+            "share": 0.33
+          }
+        ],
+        "barred": [],
+        "strays": "float",
+        "bindings": []
+      },
       "arena": {
         "blocks": [
           {
@@ -83,6 +110,47 @@
         ],
         "barred": [],
         "strays": "slot",
+        "bindings": []
+      },
+      "claim-browser": {
+        "blocks": [
+          {
+            "classes": [
+              "e2e-shared"
+            ],
+            "order": 1,
+            "share": 1
+          }
+        ],
+        "barred": [],
+        "strays": "slot",
+        "bindings": []
+      },
+      "claim-dofus": {
+        "blocks": [
+          {
+            "classes": [
+              "e2e-claim-member"
+            ],
+            "group": true,
+            "order": 1,
+            "share": 0.67,
+            "spawn": {
+              "class": "e2e-shared",
+              "command": "foot --app-id e2e-shared sh -c \"sleep 600\""
+            }
+          },
+          {
+            "classes": [
+              "e2e-shared"
+            ],
+            "order": 2,
+            "share": 0.33,
+            "slot": "claim-dofus/browser"
+          }
+        ],
+        "barred": [],
+        "strays": "float",
         "bindings": []
       },
       "deck-test": {
@@ -186,6 +254,10 @@
           "monitor": "primary"
         },
         {
+          "name": "spawner",
+          "monitor": "primary"
+        },
+        {
           "name": "aside",
           "monitor": "secondary"
         },
@@ -212,6 +284,10 @@
           "monitor": "primary"
         },
         {
+          "name": "spawner",
+          "monitor": "primary"
+        },
+        {
           "name": "aside",
           "monitor": "secondary"
         },
@@ -221,6 +297,14 @@
         },
         {
           "name": "code-deck",
+          "monitor": "primary"
+        },
+        {
+          "name": "claim-browser",
+          "monitor": "primary"
+        },
+        {
+          "name": "claim-dofus",
           "monitor": "primary"
         }
       ]

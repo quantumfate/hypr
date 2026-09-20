@@ -1,5 +1,5 @@
 {
-  "name": "a slot on one side lets two active scenes share a class (LEO-364, dofus/pokemon)",
+  "name": "slot-keyed blocks let dofus and pokemon share the media class (LEO-364, dofus/pokemon)",
   "declaration": {
     "base": {
       "bindings": [],
@@ -17,8 +17,9 @@
             },
             {
               "classes": [
-                "zen-gaming-media"
+                "zen-twilight-media"
               ],
+              "slot": "dofus/browser",
               "order": 2
             }
           ]
@@ -33,14 +34,14 @@
             },
             {
               "classes": [
-                "zen-gaming-media"
+                "zen-twilight-media"
               ],
               "slot": "pokemon/chat",
               "order": 2
             },
             {
               "classes": [
-                "zen-gaming-media"
+                "zen-twilight-media"
               ],
               "slot": "pokemon/stream",
               "order": 3
@@ -90,8 +91,9 @@
           },
           {
             "classes": [
-              "zen-gaming-media"
+              "zen-twilight-media"
             ],
+            "slot": "dofus/browser",
             "order": 2
           }
         ]
@@ -106,14 +108,14 @@
           },
           {
             "classes": [
-              "zen-gaming-media"
+              "zen-twilight-media"
             ],
             "slot": "pokemon/chat",
             "order": 2
           },
           {
             "classes": [
-              "zen-gaming-media"
+              "zen-twilight-media"
             ],
             "slot": "pokemon/stream",
             "order": 3

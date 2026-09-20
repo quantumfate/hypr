@@ -133,21 +133,18 @@ windowrule.tag_set_effects("media-browser", {
   static = { workspace = "name:media" },
 })
 
--- The dofus scene's own zen instance (apps.scene_browser, LEO-230): pinned
--- to name:dofus so it lands beside the Dofus group wherever it is spawned.
--- Its group guard is the scene block's (`guard = "deny"`), emitted by
--- hypr/scene/compile.lua — the scene decides grouping once, for every class it
--- names. The browser opens automatically with the first Dofus window and
--- closes with the last: the scene document's declared companion
--- (hypr/scene/companion.lua), which is why there is no bar-side browser or
--- bespoke spawn code for this scene.
-windowrule.tag_props({
-  { initial_class = "(" .. apps.scene_browser.class .. ")" },
-}, "+gaming-media")
-
-windowrule.tag_set_effects("gaming-media", {
-  static = { workspace = "name:dofus" },
-})
+-- The nested e2e host models the shared-profile desk (LEO-412): the fixture's
+-- "claim-browser" scene is the pin target for the shared e2e-shared class —
+-- the same arrangement as +media-browser pinning the zen profile to media —
+-- so a spawned companion opens on claim-browser and the engine's claim step
+-- stamps the claim-dofus slot, letting home route it back to its scene. A
+-- real host never names this class; the rule is inert everywhere else.
+if os.getenv("QF_HOST") == "e2e" then
+  windowrule.tag_props({ { initial_class = "(e2e%-shared)" } }, "+e2e-shared-pin")
+  windowrule.tag_set_effects("e2e-shared-pin", {
+    static = { workspace = "name:claim-browser" },
+  })
+end
 
 local not_eso_launcher = { class = "steam_app_default", title = "[^(Zenimax Online Studios Launcher)]" }
 local eso_launcher = { class = "steam_app_default", title = "Zenimax Online Studios Launcher" }

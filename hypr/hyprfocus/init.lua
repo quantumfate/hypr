@@ -438,17 +438,37 @@ end
 ---@return string?
 function M.primary_workspace()
   local host = (rawget(_G, "config") or {}).host or {}
-  for _, monitor in ipairs(hl.get_monitors() or {}) do
-    if monitor.name == host.primary_monitor and monitor.activeWorkspace then
-      return monitor.activeWorkspace.name
+  return require("hypr.lib.nav").workspace_on(hl.get_monitors() or {}, host.primary_monitor)
+end
+
+---The scene whose blocks claim `class`, or nil. The scene layer's own
+---declaration is the authority on what a window's home is; this only asks.
+---@param class string?
+---@return string?
+local function scene_claiming(class)
+  if not class then
+    return nil
+  end
+  local ok, spec_lib = pcall(require, "hypr.scene.spec")
+  if not ok then
+    return nil
+  end
+  for name, spec in pairs(spec_lib.load() or {}) do
+    if spec_lib.block_for(spec, class, nil) then
+      return name
     end
   end
   return nil
 end
 
----Log every reachability violation (`admit/unreachable`), and move a held
----window with no origin (which no mode could ever restore) to the primary
----monitor's active workspace.
+---Log every reachability violation (`admit/unreachable`), and repair a held
+---window with no origin — which no mode could ever restore.
+---
+---Repair, not eviction, where there is a home to name: a class some scene
+---claims is adopted back into the record for that scene, so the next mode
+---admitting it hands the window back where it belongs. Only a window no
+---scene claims is moved out to the primary monitor's active workspace, which
+---is the last resort that at least makes it reachable.
 ---@param mode string
 ---@param admitted table<string, true>
 ---@param moves table<string, string> address -> destination, dispatched by this apply
@@ -462,8 +482,11 @@ local function check_reachable(mode, admitted, moves)
   local violations = hold.unreachable(projected, admitted, known, hold.record())
   local rescue = M.primary_workspace()
   for _, v in ipairs(violations) do
-    local rescued = v.reason == "no_origin" and rescue ~= nil
-    if rescued then
+    local claimed_by = v.reason == "no_origin" and scene_claiming(v.class) or nil
+    local rescued = v.reason == "no_origin" and claimed_by == nil and rescue ~= nil
+    if claimed_by then
+      hold.adopt(v.address, claimed_by)
+    elseif rescued then
       hl.dispatch(
         hl.dsp.window.move({ window = "address:" .. v.address, workspace = "name:" .. rescue, follow = false })
       )
@@ -471,12 +494,12 @@ local function check_reachable(mode, admitted, moves)
     trace.emit({
       stage = "admit",
       event = "unreachable",
-      decision = rescued and "move" or "report",
+      decision = claimed_by and "adopt" or (rescued and "move" or "report"),
       reason = v.reason,
       mode = mode,
       window = v.address,
       class = v.class,
-      workspace = rescued and rescue or v.workspace,
+      workspace = claimed_by or (rescued and rescue) or v.workspace,
     })
   end
   return #violations

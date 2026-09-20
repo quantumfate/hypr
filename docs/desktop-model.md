@@ -94,7 +94,7 @@ A scene is a plug-in unit that maps to one workspace. It owns:
   app, with mode-admitted keys for Steam, Lutris and the Ankama Launcher.
 - **Window-state behaviour** — what happens when a window opens or closes:
   - a scene may **lock** its layout so no additional window may join (Dofus:
-    the Dofus group left, `zen-gaming-media` right, never disturbed);
+    the Dofus group left, `zen-twilight-media` right, never disturbed);
   - a scene may define a **variant** of itself for a new window state (same
     workspace, different layout), or hand the workspace to **another named
     scene**;

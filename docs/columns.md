@@ -365,7 +365,7 @@ to add where `share` used to be, chosen here to match each block's existing
 `share` weighting (or, for `dofus`, the width the user said they like
 today) and to exercise the ladder somewhere real, per §9.
 
-### `dofus` (roles: 1 Dofus group `fixed_width=3400`, `align=left`; 2 `zen-gaming-media` companion `min_width=480`)
+### `dofus` (roles: 1 Dofus group `fixed_width=3400`, `align=left`; 2 `zen-twilight-media` companion `min_width=480`)
 
 The user's decision: Dofus keeps its current wide first column at a fixed
 size, aligned left, because the user likes that width — not because

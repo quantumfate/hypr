@@ -34,6 +34,18 @@ return {
       -- concurrently open projects stay three separate groups) beside a
       -- stack-behaving browser column. See tests/e2e/scenarios/97_code_deck.sh.
       { workspace = "6", default_name = "code-deck", layout = "deck" },
+      -- LEO-411: the companion-cap fixture scene (tests/e2e/fixtures/
+      -- hyprfocus.json's "spawner"): a member block whose declared spawn
+      -- opens e2e-companion foot windows, mirroring the dofus scene's shape.
+      { workspace = "7", default_name = "spawner" },
+      -- LEO-412: the shared-profile desk, mirrored with e2e-safe classes —
+      -- "claim-dofus" spawns an e2e-shared companion (like dofus launching
+      -- the zen-twilight Media profile) and "claim-browser" is its pin target
+      -- (like the +media-browser workspace effect). The e2e host rule in
+      -- hypr/windowrules.lua pins e2e-shared windows to claim-browser, so the
+      -- engine's claim + home steps must route a spawned companion home.
+      { workspace = "8", default_name = "claim-browser" },
+      { workspace = "9", default_name = "claim-dofus" },
     },
     workspace_keys = { "plus", "bracketleft", "braceleft", "parenleft" },
   },

@@ -71,3 +71,51 @@ t.describe("scene.home", function()
     t.eq(nil, d.settle)
   end)
 end)
+
+t.describe("scene.home slot-tag ownership", function()
+  -- The shared-profile desk (LEO-412): dofus/pokemon declare slot blocks for
+  -- the profile class, media declares a bare block for it. `home.claim`
+  -- must route a slot-tagged window to its slot's scene, never to media's
+  -- bare block; a tagless window is media's by default.
+  local MEDIA = { name = "media", blocks = { { classes = { "zen-twilight-media" }, order = 1 } } }
+  local DOFUS = {
+    name = "dofus",
+    blocks = {
+      { classes = { "Dofus.x64" }, order = 1 },
+      { classes = { "zen-twilight-media" }, order = 2, slot = "dofus/browser" },
+    },
+  }
+  local SLOT_SPECS = { media = MEDIA, dofus = DOFUS }
+  local SLOT_ACTIVE = { media = true, dofus = true }
+
+  t.it("claims a slot-tagged window for the scene that declared the slot", function()
+    t.eq("dofus", home.claim(SLOT_SPECS, SLOT_ACTIVE, "zen-twilight-media", { "slot:dofus/browser" }))
+  end)
+
+  t.it("never lets a bare same-class block swallow another scene's slot claim", function()
+    local w = win({ class = "zen-twilight-media", tags = { "slot:dofus/browser" }, workspace = { name = "media" } })
+    local d = home.decide(SLOT_SPECS, SLOT_ACTIVE, w)
+    t.eq("move", d.action)
+    t.eq("dofus", d.workspace)
+  end)
+
+  t.it("leaves a tagless window for the bare-block scene", function()
+    t.eq("media", home.claim(SLOT_SPECS, SLOT_ACTIVE, "zen-twilight-media", nil))
+  end)
+
+  t.it("does not claim a slot whose scene is inactive (context survives a reload)", function()
+    local w = win({ class = "zen-twilight-media", tags = { "slot:dofus/browser" }, workspace = { name = "media" } })
+    t.eq("none", home.decide(SLOT_SPECS, { media = true }, w).action)
+  end)
+
+  t.it("treats a double slot stamp as corrupt and falls back to the class-wide search", function()
+    local claim = home.claim(SLOT_SPECS, SLOT_ACTIVE, "zen-twilight-media", {
+      "slot:dofus/browser",
+      "slot:pokemon/chat",
+    })
+    t.ok(
+      claim == "dofus" or claim == "media",
+      "either claiming scene may win for corrupted state, got " .. tostring(claim)
+    )
+  end)
+end)

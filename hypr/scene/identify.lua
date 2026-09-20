@@ -1,7 +1,7 @@
 -- Launch-time identity stamping for same-class windows (LEO-364).
 --
 -- Apps set their own class; the compositor cannot rewrite it, so two windows
--- of one class (pokemon's two media browsers, both `zen-gaming-media`) are
+-- of one class (pokemon's two media browsers, both `zen-twilight-media`) are
 -- otherwise indistinguishable to a scene's block match. A block that
 -- declares `slot` (hypr/scene/spec.lua) only claims a window already
 -- carrying the Hyprland tag `slot:<slot>`; this module is what stamps that
@@ -58,13 +58,17 @@ end
 ---names no slot block, `w` already carries one of its slots, or every slot
 ---for this class is already held by a live sibling (the class is
 ---over-subscribed; the extra window is left for `strays` to place, same as
----any other unclaimed window).
+---any other unclaimed window). Slot ownership is scoped to `workspace_name`,
+---not necessarily the workspace `w` stands on: a launch-claimed window can
+---map elsewhere first (LEO-412, the shared profile's pin), and the slots it
+---is competing for are its scene's, not its current workspace's.
 ---@param spec Scene.Spec
 ---@param w HL.Window
 ---@param live HL.Window[] `hl.get_windows()`, or a stub's stand-in
+---@param workspace_name string the workspace whose taken slots are consulted
 ---@return string? tag
-function M.assign(spec, w, live)
-  if not spec or not w or not w.workspace or not w.address then
+function M.assign_for(spec, w, live, workspace_name)
+  if not spec or not w or not w.workspace or not w.address or not workspace_name then
     return nil
   end
   local slots = spec_lib.slot_candidates(spec, w.class)
@@ -76,7 +80,7 @@ function M.assign(spec, w, live)
       return nil -- already stamped
     end
   end
-  local taken = taken_slots(w.workspace.name, w.address, live)
+  local taken = taken_slots(workspace_name, w.address, live)
   for _, block in ipairs(slots) do
     local tag = "slot:" .. block.slot
     if not taken[tag] then
@@ -84,6 +88,17 @@ function M.assign(spec, w, live)
     end
   end
   return nil -- every slot for this class is already held
+end
+
+---The `slot:<slot>` tag `w` should be stamped with for the scene its own
+---workspace picks (the arrival-order path: pokemon's chat/stream windows open
+---directly on the pokemon workspace and are told apart by identify alone).
+---@param spec Scene.Spec
+---@param w HL.Window
+---@param live HL.Window[] `hl.get_windows()`, or a stub's stand-in
+---@return string? tag
+function M.assign(spec, w, live)
+  return M.assign_for(spec, w, live, w and w.workspace and w.workspace.name)
 end
 
 return M

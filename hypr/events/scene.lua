@@ -156,12 +156,26 @@ end
 ---Run the companion lifecycle for the named scene against live windows.
 ---Presence is derived, so this is safe at any time from any caller.
 ---@param name string?
-local function converge_companions(name)
+---@param exclude string? address of a window that just left. A window is
+---still listed in `hl.get_windows()` while its own `window.close` event fires
+---(spiked live), so the close path passes the payload's address to keep the
+---member count honest for the scene it is leaving.
+local function converge_companions(name, exclude)
   local spec = name and specs[name]
   if not spec then
     return
   end
-  for _, decision in ipairs(companion.filter(companion.decisions(spec, name, hl.get_windows() or {}), pending)) do
+  local windows = hl.get_windows() or {}
+  if exclude then
+    local kept = {}
+    for _, w in ipairs(windows) do
+      if w.address ~= exclude then
+        kept[#kept + 1] = w
+      end
+    end
+    windows = kept
+  end
+  for _, decision in ipairs(companion.filter(companion.decisions(spec, name, windows), pending)) do
     if decision.action == "spawn" then
       companion.expire(decision.pending_key, pending)
       trace.emit({
@@ -186,6 +200,67 @@ local function converge_companions(name)
         hl.dispatch(hl.dsp.window.close({ window = "address:" .. address }))
       end
       pending[decision.pending_key] = nil
+    end
+  end
+end
+
+---The pending registry carries a count per key: the engine's spawn arms one
+---(companion.expire), a launch surface can arm several before they land
+---(`M.arm_launch`). A window's open consumes at most one matching intent, and
+---the key is dropped at zero so a consumed spawn is re-issued by the next
+---convergence (presence is derived) instead of stalling on a stale marker.
+---@param key string
+local function claim_consume(key)
+  local n = pending[key]
+  if n == nil then
+    return
+  end
+  n = type(n) == "number" and n or 1
+  if n <= 1 then
+    pending[key] = nil
+  else
+    pending[key] = n - 1
+  end
+end
+
+---Claim the window an armed launch intent opened for (LEO-412): a pending
+---key `workspace:class` is matched by class on ANY open, not only one on the
+---intent scene's own workspace — with the profile shared, `+media-browser`
+---pins the launched window to `name:media` before this pass sees it. The
+---first intent a class match settles stamps the scene's free slot through
+---`identify.assign_for` (scoped to the intent's workspace, so pokemon's two
+---slots count siblings that were already claimed and sent home), which is
+---what lets the block's slot claim and the home decision route the window to
+---its scene. One open settles at most one intent; hand-opened windows with no
+---intent armed are left untouched.
+---@param w HL.Window?
+local function claim_launched(w)
+  if not (w and w.class) then
+    return
+  end
+  local live = hl.get_windows() or {}
+  local keys = {}
+  for key in pairs(pending) do
+    local class = key:match("^.-:(.+)$")
+    if class and spec_lib.class_matches(w.class, { class }) then
+      keys[#keys + 1] = key
+    end
+  end
+  table.sort(keys)
+  for _, key in ipairs(keys) do
+    local ws_name = key:match("^(.-):")
+    local spec = ws_name and specs[ws_name]
+    local tag = spec and identify.assign_for(spec, w, live, ws_name)
+    claim_consume(key)
+    if tag then
+      hl.dispatch(hl.dsp.window.tag({ window = "address:" .. w.address, tag = "+" .. tag }))
+      trace.emit(window_fields(w, ws_name, {
+        stage = "identify",
+        event = "launch_claimed",
+        decision = "tag",
+        reason = ("claimed %s for %s"):format(tag, ws_name),
+      }))
+      return
     end
   end
 end
@@ -422,6 +497,21 @@ function M.active(ws)
   return name and specs[name] and name or nil
 end
 
+---Arm a launch intent: record that a window of `class` is about to be
+---launched for the named scene, so its open is claimed on arrival like an
+---engine spawn's (companion.expire arms the spawn's own key through this same
+---registry). A launch surface (the pokemon media-open bind) calls this right
+---before dispatching its exec — with the profile shared, the window maps
+---wherever the profile's rules pin it, and the claim's `assign_for` stamps
+---the scene's free slot so home routes it there instead. Counted: N rapid
+---arms are N intents, each settled by its own matching open.
+---@param name string scene name (the workspace `default_name` it owns)
+---@param class string
+function M.arm_launch(name, class)
+  local key = companion.key(name, class)
+  pending[key] = (type(pending[key]) == "number" and pending[key] or 0) + 1
+end
+
 ---Leftmost live tile of the block matching `match`, or nil.
 ---@param name string
 ---@param match string|{ class: string }
@@ -459,19 +549,12 @@ for scene_name, spec in pairs(specs) do
 end
 
 hl.on("window.open", function(w)
-  -- A companion mapping settles its own in-flight spawn before the engine
-  -- pass runs, so the lifecycle the pass sees is derived, not assumed.
-  guarded("settle_companion_spawn", w, function()
-    if w and w.workspace then
-      local spec = specs[w.workspace.name]
-      if spec then
-        for _, block in ipairs(spec.blocks) do
-          if block.spawn and spec_lib.class_matches(w.class, { block.spawn.class }) then
-            pending[companion.key(w.workspace.name, block.spawn.class)] = nil
-          end
-        end
-      end
-    end
+  -- A class matching an armed launch intent is that launch settling: stamp
+  -- its scene's free slot (LEO-412) before identity/home run, so the block's
+  -- slot claim and the home decision route a pinned-then-claimed window home
+  -- even though it mapped on another scene's workspace.
+  guarded("claim_launched", w, function()
+    claim_launched(w)
   end)
   -- Stamp identity before routing: `scene_for` and the arrange decisions
   -- below all read `w.tags`, so a slot block can only be matched if the tag
@@ -535,11 +618,15 @@ hl.on("window.close", function(w)
   end
   -- A close event's payload may not say where the window stood, but the
   -- lifecycle is derived from live windows, so every spawn-carrying scene
-  -- re-derives for free — there is no remembered book to consult.
+  -- re-derives for free — there is no remembered book to consult. The
+  -- closing window is still in the live list during its own close event
+  -- (spiked live), so it is excluded here: the scene it is leaving must see
+  -- its member really gone, or the last member leaving never closes the
+  -- block's companions.
   for scene_name, spec in pairs(specs) do
     for _, block in ipairs(spec.blocks) do
       if block.spawn then
-        converge_companions(scene_name)
+        converge_companions(scene_name, w and w.address)
         break
       end
     end

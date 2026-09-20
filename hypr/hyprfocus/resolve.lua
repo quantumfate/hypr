@@ -248,7 +248,7 @@ function M.validate(declaration, mode)
       for _, class in ipairs(block.classes or {}) do
         -- A slot-bearing block (LEO-364) claims the launch-identity tag, not
         -- the bare class, so it keys separately: two scenes sharing a class
-        -- (pokemon and dofus, both `zen-gaming-media`) stay unflagged once a
+        -- (dofus and pokemon, both `zen-twilight-media`) stay unflagged once a
         -- slot disambiguates one side.
         local key = block.slot and (class .. ":" .. block.slot) or class
         local owner = claimed_by[key]

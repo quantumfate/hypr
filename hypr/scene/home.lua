@@ -20,22 +20,67 @@ local M = {}
 ---@field workspace string? move: the scene workspace it belongs on
 ---@field settle boolean? move: also clear a float the window is carrying
 
+---The one `slot:<slot>` the tags carry, or nil when tagless or when two slots
+---sit on one window (a double stamp is corrupt state; fall back to the
+---class-wide search and let the declaration's own `ambiguous_classes` story
+---decide).
+---@param tags string[]?
+---@return string?
+local function carried_slot(tags)
+  local slot
+  for _, tag in ipairs(tags or {}) do
+    local s = tag:match("^slot:(.+)$")
+    if s then
+      if slot then
+        return nil
+      end
+      slot = s
+    end
+  end
+  return slot
+end
+
+---The first block declaring exactly `slot` for `class`, in declaration order.
+---@param spec Scene.Spec
+---@param class string?
+---@param slot string
+---@return Scene.Block?
+local function block_declaring(spec, class, slot)
+  for _, block in ipairs(spec.blocks) do
+    if block.slot == slot and spec_lib.class_matches(class, block.classes) then
+      return block
+    end
+  end
+  return nil
+end
+
 ---The name of the one active scene whose block claims `class`/`tags`, or nil.
 ---Only scenes active in the current mode are searched: a scene not admitted
 ---by the mode never claims a window away from wherever it stands
 ---(desktop-model.md "Mode-scoped"). Validation already refuses a mode where
 ---two active scenes claim the same class (`class_conflict`), so at most one
 ---match is ever possible here.
+---
+---A window carrying a `slot:<slot>` tag is claimed by the scene that declared
+---that slot, never by another active scene's bare same-class block (LEO-412,
+---the shared profile's desk: dofus, pokemon and media all name the profile
+---class, and media's bare block must not swallow a window claimed for dofus or
+---pokemon). The resolver keys a slot block as `class:slot`
+---(hypr/hyprfocus/resolve.lua); this is the runtime half of the same claim
+---discipline.
 ---@param spec_by_scene table<string, Scene.Spec>
 ---@param active table<string, true> scene names active in the current mode
 ---@param class string?
 ---@param tags string[]?
 ---@return string?
 function M.claim(spec_by_scene, active, class, tags)
+  local slot = carried_slot(tags)
   for name in pairs(active) do
     local spec = spec_by_scene[name]
-    if spec and spec_lib.block_for(spec, class, tags) then
-      return name
+    if spec then
+      if slot and block_declaring(spec, class, slot) or not slot and spec_lib.block_for(spec, class, tags) then
+        return name
+      end
     end
   end
   return nil

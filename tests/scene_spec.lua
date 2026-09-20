@@ -17,7 +17,7 @@ local t = require("tests.harness")
 local GAMING = {
   blocks = {
     { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67 },
-    { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
+    { classes = { "zen-twilight-media" }, order = 2, share = 0.33, slot = "dofus/browser", guard = "deny" },
   },
   barred = { "steam_app_default" },
 }
@@ -92,6 +92,48 @@ t.describe("public surface", function()
   end)
 end)
 
+t.describe("spawn normalization (LEO-411)", function()
+  ---@param spawn table|nil
+  ---@return table scene
+  local function store_with(spawn)
+    define_store({
+      gaming = {
+        name = "gaming",
+        blocks = {
+          { classes = { "Dofus.x64" }, group = true, order = 1, spawn = spawn },
+          { classes = { "zen-twilight-media" }, order = 2, guard = "deny" },
+        },
+        barred = {},
+      },
+    })
+    package.loaded["hypr.scene.spec"] = nil
+    local spec_lib = require("hypr.scene.spec")
+    return spec_lib.load().gaming
+  end
+
+  t.it("carries a declared max_spawns through", function()
+    local spec = store_with({ class = "zen-twilight-media", command = "zen-twilight ...", max_spawns = 3 })
+    t.eq(3, spec.blocks[1].spawn.max_spawns)
+  end)
+
+  t.it("defaults max_spawns to 1 when omitted", function()
+    local spec = store_with({ class = "zen-twilight-media", command = "zen-twilight ..." })
+    t.eq(1, spec.blocks[1].spawn.max_spawns)
+  end)
+
+  t.it("falls out-of-range max_spawns back to 1 rather than refusing the scene", function()
+    for _, bad in ipairs({ 0, -3, 2.5, "nope", nil }) do
+      local spec = store_with({ class = "zen-twilight-media", command = "zen-twilight ...", max_spawns = bad })
+      t.eq(1, spec.blocks[1].spawn.max_spawns, "max_spawns=" .. tostring(bad))
+    end
+  end)
+
+  t.it("a half-declared spawn is still dropped whole", function()
+    local spec = store_with({ class = "zen-twilight-media", max_spawns = 3 })
+    t.eq(nil, spec.blocks[1].spawn)
+  end)
+end)
+
 t.describe("compiled rules", function()
   local compile = require("hypr.scene.compile")
 
@@ -123,7 +165,7 @@ t.describe("compiled rules", function()
         name = "gaming",
         blocks = {
           { classes = { "Dofus.x64" }, group = true, order = 1 },
-          { classes = { "zen-gaming-media" }, order = 2, guard = "deny" },
+          { classes = { "zen-twilight-media" }, order = 2, guard = "deny" },
         },
         barred = { "steam_app_default" },
       },

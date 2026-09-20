@@ -147,15 +147,17 @@ applied and the pointer is not written.
 is explicit. `barred` and `spawn.class` are not claims. Overlapping regexes
 (`steam_app` vs `steam_app_\d+`) are not detected.
 
-`dofus` and `pokemon` both use `zen-gaming-media`; grouping and block matching
-are already scoped to a window's own workspace (`hypr/scene/grouping.lua`),
-so this alone is not a conflict. What pokemon's own two media-browser blocks
-need — telling its **left** `zen-gaming-media` window apart from its
-**right** one — is identity stamped at launch (LEO-364): each block declares
-`classes = { "zen-gaming-media" }` plus a distinct `slot` (`pokemon/chat`,
-`pokemon/stream`); `hypr/scene/identify.lua` stamps `slot:<slot>` on the
-first still-unslotted live window of that class on the workspace, in block
-declaration order, once per `window.open`/`window.move_to_workspace`.
+`dofus`, `pokemon` and `media` all use `zen-twilight-media` (the shared Media
+profile); grouping and block matching are already scoped to a window's own
+workspace (`hypr/scene/grouping.lua`), so this alone is not a conflict. What
+blinds a block to a _specific_ window of the class — pokemon's left/right
+media browsers, or dofus's claimed browser vs media's unpinned tile — is
+identity stamped at launch (LEO-364, LEO-412): each block declares `classes
+= { "zen-twilight-media" }` plus a distinct `slot` (`dofus/browser`,
+`pokemon/chat`, `pokemon/stream`); `hypr/scene/identify.lua` stamps
+`slot:<slot>` on the first still-unslotted live window of that class on the
+workspace, in block declaration order, once per
+`window.open`/`window.move_to_workspace`.
 
 ### Gaming
 
@@ -274,9 +276,42 @@ re-fire this decision — the same "arrival is never intent by itself" rule
 transitions already follow (see desktop-model.md) — so a window you moved
 away stays where you put it until the next open or mode apply.
 
+A slot-tagged window is claimed only by the scene that declares that exact
+slot (`home.claim` reads the tag, the same `class:slot` keying the resolver
+uses): a bare block never swallows another scene's claimed window — media's
+`zen-twilight-media` tile cannot take dofus's or pokemon's slotted ones, and
+a window whose slot scene is inactive stays put (context survives a reload).
+Tagless windows keep the ordinary class-wide search.
+
 ## Companions
 
-`spawn` on a member: open the companion when the first match maps; close it when the last leaves. Example: `zen-gaming-media` beside the Dofus group.
+`spawn` on a member: open the companion when the first match maps; close it when the last leaves. Example: `zen-twilight-media` (the shared Media profile) beside the Dofus group — the member's open spawns it, and a launch-intent claim sends it home to the `dofus/browser` slot even when a pin rule first lands it elsewhere. A hand-opened window of the class is never part of this: no armed intent, no claim.
+
+`max_spawns` (default 1) caps how many of the companion class the engine
+keeps alive while the block has members. The count is derived from live
+windows on the scene's workspace — never remembered — so a reload or a
+compositor restart changes nothing, and the cap fills one spawn per
+convergence: each spawned window's own open event re-converges the next, and
+the single in-flight pending marker admits one spawn at a time, so a burst of
+events converges to exactly `max_spawns` and never overshoots. The guarantee
+is "the engine never creates more than n", not "no more than n can exist": a
+window of the class opened by hand counts toward the cap but is never closed
+by it — the close branch belongs to member presence, and a derived count
+cannot tell the engine's spawns from the user's. Whatever the cap, the last
+member leaving closes every companion. An out-of-range `max_spawns` (0,
+negative, fractional) falls back to 1 in `hypr/scene/spec.lua`, the same
+shape as a half-declared spawn being dropped: a bad value never refuses the
+whole scene.
+
+Launch intent rides the same pending marker (LEO-412). The spawn executor
+arms one marker per decision — keyed `workspace:class`, one spawn in flight —
+and `arm_launch` (a scene binding like pokemon's media key) arms the same
+key for a user-initiated launch. Whoever answers the launch, the open step
+claims it (consuming the marker, stamping the launching scene's first free
+slot via `hypr/scene/identify.lua` `assign_for`) before `home` sends it to
+its scene — so a pin rule such as `+media-browser` never strands a claimed
+window, while a window with no armed intent is claimed by nothing and keeps
+whatever open/home logic decides for it.
 
 ## Bindings
 
@@ -291,7 +326,7 @@ Scene.tile(name, match)
 
 One engine for all scenes:
 
-- `dofus` — Dofus group + `zen-gaming-media` right
+- `dofus` — Dofus group + claimed `zen-twilight-media` right
 - `code` — `Kitty-Main` | `Proj-*` group + `zen-twilight` right
 - `pokemon` — RetroArch emulator + flanking streaming browsers
 - `obsidian-linear` — Obsidian + Linear side by side
@@ -330,15 +365,17 @@ the contract below is the schema it edits against.
 
 ### Block fields
 
-| Field     | Type                                  | Meaning                                                                                                  |
-| --------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `classes` | string[]                              | literal class or Lua pattern, in window-rule grammar                                                     |
-| `group`   | boolean                               | one Hyprland group containing only these classes                                                         |
-| `order`   | integer                               | left-to-right tile sequence                                                                              |
-| `share`   | number?                               | fraction of the tiled span this block holds                                                              |
-| `guard`   | `"barred"` \| `"deny"`                | how a non-group block resists grouping                                                                   |
-| `spawn`   | `{ class: string, command: string }`? | companion window lifecycle                                                                               |
-| `slot`    | string?                               | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
+| Field     | Type                                                       | Meaning                                                                                                  |
+| --------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `classes` | string[]                                                   | literal class or Lua pattern, in window-rule grammar                                                     |
+| `group`   | boolean                                                    | one Hyprland group containing only these classes                                                         |
+| `order`   | integer                                                    | left-to-right tile sequence                                                                              |
+| `share`   | number?                                                    | fraction of the tiled span this block holds                                                              |
+| `guard`   | `"barred"` \| `"deny"`                                     | how a non-group block resists grouping                                                                   |
+| `spawn`   | `{ class: string, command: string, max_spawns?: number }`? | companion window lifecycle; `max_spawns` (default 1) caps how many of                                    |
+|           |                                                            | `class` the engine keeps alive while members stand — the engine never                                    |
+|           |                                                            | creates more than n, it never closes what it did not spawn                                               |
+| `slot`    | string?                                                    | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
 
 ### Strays: `"slot"` executes, `"float"` floats for real (LEO-367)
 
@@ -389,7 +426,7 @@ ambiguity (the follow-up issue wires this to `identify.ambiguous`);
 itself, listing every class entry claimed by more than one block — this stays
 a class-only check, so it still flags a shared `classes` entry even when
 distinct `slot`s disambiguate it live. The shipped defaults have exactly one:
-`zen-gaming-media` in the `pokemon` scene's flanking media blocks (by design —
+`zen-twilight-media` in the `pokemon` scene's flanking media blocks (by design —
 the same class fills both the left and right slot). A block with `slot` set
 is excluded from `block_candidates`/`block_for` until the window carries the
 Hyprland tag `slot:<slot>` (`spec.slot_candidates(spec, class)` returns the
@@ -412,7 +449,9 @@ dofus workspace everywhere.
 ### Dofus is a workspace scene
 
 The `dofus` scene uses the same fields as every other scene. Its Dofus block
-has `group = true` and a `zen-gaming-media` companion with `guard = "deny"`;
+has `group = true` and a `zen-twilight-media` companion (the shared Media
+profile) with `guard = "deny"`, claimed by launch intent to the
+`dofus/browser` slot;
 `barred` lists Steam and Ankama launcher classes. Nothing in the schema is
 gaming-specific — the same contract serves `code`, `pokemon`, or any future
 workspace.
@@ -503,8 +542,8 @@ declared order.
 dofus = {
   blocks = {
     { classes = { "Dofus.x64" }, group = true, order = 1, share = 0.67,
-      spawn = { class = "zen-gaming-media", command = "zen-twilight -P GamingMedia --name zen-gaming-media" } },
-    { classes = { "zen-gaming-media" }, order = 2, share = 0.33, guard = "deny" },
+      spawn = { class = "zen-twilight-media", command = "zen-twilight -P Media --name zen-twilight-media --new-window" } },
+    { classes = { "zen-twilight-media" }, order = 2, share = 0.33, slot = "dofus/browser", guard = "deny" },
   },
   barred = { "steam_app_default", "steam_app_\\d+", "Ankama Launcher" },
   strays = "float",
