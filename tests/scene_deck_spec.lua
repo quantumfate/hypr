@@ -12,29 +12,6 @@ local function tile(address, class, tags, group)
   return { address = address, class = class, tags = tags, group = group }
 end
 
----Every member of a column shares one box now, so the boxes cannot say which
----one is showing -- `M.boxes`'s second return does. This keeps the old
----helper's shape: the showing member's box, and the addresses hidden behind
----it.
----@param boxes Scene.Box[]
----@param visible table<integer, string>
----@return Scene.Box[] shown, string[] hidden addresses
-local function split(boxes, visible)
-  local showing = {}
-  for _, address in pairs(visible or {}) do
-    showing[address] = true
-  end
-  local shown, hidden = {}, {}
-  for _, box in ipairs(boxes) do
-    if showing[box.address] then
-      shown[#shown + 1] = box
-    else
-      hidden[#hidden + 1] = box.address
-    end
-  end
-  return shown, hidden
-end
-
 t.describe("applies", function()
   t.it("opts in only with layout = deck", function()
     t.eq(true, deck.applies({ layout = "deck" }))
@@ -108,39 +85,23 @@ t.describe("boxes: which window shows", function()
   local spec = { columns = { { order = 1, share = 1, classes = { "Kitty%-Main" } } } }
 
   t.it("shows the first window by default (no scroll opt)", function()
-    local boxes, showing = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
-    local shown, hidden = split(boxes, showing)
-    t.eq(2, #boxes, "every member is placed; none leaves the workspace")
-    t.eq("a", shown[1].address)
-    t.eq("b", hidden[1])
+    local boxes, hold = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
+    t.eq(1, #boxes)
+    t.eq("a", boxes[1].address)
+    t.eq(1, #hold)
+    t.eq("b", hold[1])
   end)
 
-  t.it("shows the scrolled-to window and hides the rest behind it", function()
+  t.it("shows the scrolled-to window and holds the rest", function()
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 2 } }
-    local boxes, showing = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, opts)
-    local shown, hidden = split(boxes, showing)
-    t.eq("b", shown[1].address)
-    t.eq("a", hidden[1])
-  end)
-
-  t.it("every member of a column stands at the same box, whatever the scroll", function()
-    -- The whole point: scrolling must never resize a window or leave one
-    -- rendering shorter than its sibling. Hidden members sit exactly behind
-    -- the visible one.
-    local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 2 } }
-    local tiles = { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main"), tile("c", "Kitty%-Main") }
-    local boxes = deck.boxes(spec, tiles, AREA, opts)
-    for _, box in ipairs(boxes) do
-      t.eq(boxes[1].x, box.x)
-      t.eq(boxes[1].y, box.y)
-      t.eq(boxes[1].w, box.w)
-      t.eq(boxes[1].h, box.h)
-    end
+    local boxes, hold = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, opts)
+    t.eq("b", boxes[1].address)
+    t.eq("a", hold[1])
   end)
 
   t.it("fills the whole column height, never a partial split", function()
-    local boxes, showing = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
-    t.eq(600, split(boxes, showing)[1].h)
+    local boxes = deck.boxes(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") }, AREA, NO_GAPS)
+    t.eq(600, boxes[1].h)
   end)
 end)
 
@@ -149,18 +110,20 @@ t.describe("boxes: scroll clamping", function()
 
   t.it("clamps past the end to the last window", function()
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 99 } }
-    local boxes, showing = deck.boxes(spec, { tile("a", "A"), tile("b", "A") }, AREA, opts)
-    t.eq("b", split(boxes, showing)[1].address)
+    local boxes = deck.boxes(spec, { tile("a", "A"), tile("b", "A") }, AREA, opts)
+    t.eq("b", boxes[1].address)
   end)
 
   t.it("clamps below 1 to the first window", function()
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 0 } }
-    local boxes, showing = deck.boxes(spec, { tile("a", "A"), tile("b", "A") }, AREA, opts)
-    t.eq("a", split(boxes, showing)[1].address)
+    local boxes = deck.boxes(spec, { tile("a", "A"), tile("b", "A") }, AREA, opts)
+    t.eq("a", boxes[1].address)
   end)
 
   t.it("clamps to nothing for an empty column", function()
-    t.eq(0, #deck.boxes(spec, {}, AREA, NO_GAPS))
+    local boxes, hold = deck.boxes(spec, {}, AREA, NO_GAPS)
+    t.eq(0, #boxes)
+    t.eq(0, #hold)
   end)
 
   t.it("clamp_scroll is a direct pure decision", function()
@@ -178,8 +141,6 @@ t.describe("boxes: group collapse", function()
       tile("a", "Kitty%-Main", nil, "grp1"),
       tile("b", "Kitty%-Main", nil, "grp1"),
     }
-    -- Both members of the group get the group's own box; `showing` names the
-    -- representative, so this reads the boxes rather than the split.
     local boxes = deck.boxes(spec, tiles, AREA, NO_GAPS)
     t.eq(2, #boxes)
     t.eq(boxes[1].x, boxes[2].x)
@@ -194,13 +155,13 @@ t.describe("boxes: group collapse", function()
       tile("c", "zen"),
     }
     local opts = { gaps_in = 0, gaps_out = 0, scroll = { [1] = 2 } }
-    local boxes, showing = deck.boxes(spec, tiles, AREA, opts)
-    local shown, hidden = split(boxes, showing)
-    t.eq(1, #shown)
-    t.eq("c", shown[1].address)
-    table.sort(hidden)
-    t.eq("a", hidden[1])
-    t.eq("b", hidden[2])
+    local boxes, hold = deck.boxes(spec, tiles, AREA, opts)
+    t.eq(1, #boxes)
+    t.eq("c", boxes[1].address)
+    local held = { hold[1], hold[2] }
+    table.sort(held)
+    t.eq("a", held[1])
+    t.eq("b", held[2])
   end)
 end)
 
@@ -225,7 +186,9 @@ t.describe("boxes: 1-3 column bound", function()
   end)
 
   t.it("no columns places nothing", function()
-    t.eq(0, #deck.boxes({ columns = {} }, { tile("a", "A") }, AREA, NO_GAPS))
+    local boxes, hold = deck.boxes({ columns = {} }, { tile("a", "A") }, AREA, NO_GAPS)
+    t.eq(0, #boxes)
+    t.eq(0, #hold)
   end)
 end)
 
