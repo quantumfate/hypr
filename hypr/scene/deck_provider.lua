@@ -142,13 +142,13 @@ end
 ---@param scene_name string
 ---@return table?
 local function monitor_of(scene_name)
-  for _, monitor in ipairs(hl.monitors or {}) do
+  for _, monitor in ipairs(hl.get_monitors() or hl.monitors or {}) do
     local ws = monitor.activeWorkspace or monitor.active_workspace
     if ws and (ws.name or ws) == scene_name then
       return monitor
     end
   end
-  return (hl.monitors or {})[1]
+  return (hl.get_monitors() or hl.monitors or {})[1]
 end
 
 ---Publish where this scene's quickshell isles sit, off the boxes just placed.

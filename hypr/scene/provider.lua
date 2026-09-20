@@ -177,12 +177,15 @@ end
 local function monitor_of(targets)
   local ws = targets[1] and targets[1].window and targets[1].window.workspace
   local want = ws and ws.monitor and ws.monitor.name
-  for _, monitor in ipairs(hl.monitors or {}) do
+  -- `hl.get_monitors()` is the live API; `hl.monitors` is only the test
+  -- stub's field, and reading it first meant the publish found no monitor on
+  -- a real desk and quietly did nothing.
+  for _, monitor in ipairs(hl.get_monitors() or hl.monitors or {}) do
     if monitor.name == want then
       return monitor
     end
   end
-  return (hl.monitors or {})[1]
+  return (hl.get_monitors() or hl.monitors or {})[1]
 end
 
 ---Publish the scene's resolved docks for the monitor it was just placed on.

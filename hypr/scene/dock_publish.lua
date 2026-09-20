@@ -135,9 +135,11 @@ function M.publish(opts)
   end
   last[monitor.name] = resolved
 
+  -- `set` shallow-merges the top-level key. `put` would REPLACE the whole
+  -- document, taking `monitors`, `roles` and `workspaces` with it.
   local published = geometry_store:get("docks") or {}
   published[monitor.name] = resolved
-  geometry_store:put({ docks = published })
+  geometry_store:set({ docks = published })
 end
 
 ---Forget what was published, so the next pass writes again. The scene
