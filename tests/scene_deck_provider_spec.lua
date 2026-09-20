@@ -280,6 +280,17 @@ t.describe("hiding the non-visible members behind the visible one", function()
       )
     end
     t.ok(raised, "the member the column shows is raised above its siblings")
+
+    local props = {}
+    for _, action in ipairs(stub.dispatched) do
+      if action.name == "dsp.window.set_prop" then
+        props[action.args[1].window .. ":" .. action.args[1].prop] = action.args[1].value
+      end
+    end
+    t.eq(0, props["address:0x2:opacity"], "a hidden member is out of the composite")
+    t.eq(1, props["address:0x2:no_focus"], "and out of the input path -- an invisible window still takes clicks")
+    t.eq(1, props["address:0x1:opacity"])
+    t.eq(0, props["address:0x1:no_focus"])
   end)
 
   t.it("asks a held member matching the scroll index to come home", function()

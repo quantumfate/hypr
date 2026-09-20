@@ -240,17 +240,23 @@ end
 ---already has, and `hypr/scene/provider.lua` delegates here for a scene
 ---declaring `layout = "deck"`. The registration above stays for a host that
 ---can select it directly.
----Show exactly one member per column: raise it, and keep every member hidden
----behind it fully transparent.
+---Show exactly one member per column: raise it, keep the members behind it
+---transparent, and take them out of the input path.
 ---
----Z-order alone is not enough. The members share one box now, so a translucent
----window on top reads every window under it -- the column accumulated shade
----and tint with each hidden member. `opacity 0` takes the hidden ones out of
----the composite entirely.
+---Three things are needed, and the first two alone were not enough:
 ---
----Both dispatches are deferred by a tick and issued only on a change: raising
----and setting a property each re-enter `recalculate`, and doing either from
----inside the pass is an unbounded recursion, not a redraw.
+---  * z-order, so the shown member is the one you see and click;
+---  * `opacity 0` on the rest -- they share one box, so a translucent window
+---    on top otherwise reads every window under it and the column
+---    accumulated shade with each hidden member;
+---  * `no_focus` on the rest -- an invisible window still takes focus, which
+---    is what made a column with more than one member feel dead to click.
+---
+---Every dispatch is deferred by a tick and issued only on a change: raising
+---and setting a property each re-enter `recalculate`, so doing either from
+---inside the pass is an unbounded recursion, not a redraw. The shown member
+---is re-raised whenever focus has wandered onto a hidden one, which is the
+---one case where z-order moves without this module asking.
 ---@param boxes Scene.Box[]
 ---@param visible table<integer, string> column order -> address it shows
 local function reveal_visible(boxes, visible)
@@ -259,28 +265,48 @@ local function reveal_visible(boxes, visible)
     shown[address] = true
   end
 
-  local changed = {}
+  local changed, raise = {}, {}
   for _, box in ipairs(boxes) do
     local want = shown[box.address] and 1 or 0
     if opacity_state[box.address] ~= want then
       opacity_state[box.address] = want
-      changed[#changed + 1] = { address = box.address, opacity = want, raise = want == 1 }
+      changed[#changed + 1] = { address = box.address, opacity = want }
+      if want == 1 then
+        raise[#raise + 1] = box.address
+      end
     end
   end
-  if #changed == 0 then
+
+  -- Focus sitting on a member this pass hides means the stack moved under
+  -- us (a click elsewhere, a close). Raise the shown member again rather
+  -- than leaving an invisible window on top of it.
+  local active = hl.get_active_window()
+  if active and active.address and opacity_state[active.address] == 0 then
+    for _, address in pairs(visible) do
+      raise[#raise + 1] = address
+    end
+  end
+
+  if #changed == 0 and #raise == 0 then
     return
   end
 
   require("hypr.lib.hypr").oneshot(1, function()
     for _, item in ipairs(changed) do
+      local hidden = item.opacity == 0
       hl.dispatch(hl.dsp.window.set_prop({
         window = "address:" .. item.address,
         prop = "opacity",
         value = item.opacity,
       }))
-      if item.raise then
-        hl.dispatch(hl.dsp.window.bring_to_top({ window = "address:" .. item.address }))
-      end
+      hl.dispatch(hl.dsp.window.set_prop({
+        window = "address:" .. item.address,
+        prop = "no_focus",
+        value = hidden and 1 or 0,
+      }))
+    end
+    for _, address in ipairs(raise) do
+      hl.dispatch(hl.dsp.window.bring_to_top({ window = "address:" .. address }))
     end
   end)
 end
