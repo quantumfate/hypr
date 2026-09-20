@@ -177,15 +177,7 @@ end
 ---@param output string?
 ---@return string?
 local function active_workspace_on(monitors, output)
-  if not output then
-    return nil
-  end
-  for _, m in ipairs(monitors or {}) do
-    if m.name == output and m.activeWorkspace then
-      return m.activeWorkspace.name
-    end
-  end
-  return nil
+  return require("hypr.lib.nav").workspace_on(monitors, output)
 end
 
 ---The primary, when a drawer would otherwise open on an ignored focused
@@ -362,6 +354,55 @@ local function emit_drawer_event(drawer, decision, reason)
   })
 end
 
+---The drawer declared under `id`, or nil.
+---
+---Exposed so a submap outside the shelf tree can press the same drawer
+---rather than re-implementing half of it: the dofus tree's own launcher key
+---did exactly that, and so only ever launched.
+---@param id string
+---@return Drawer?
+function M.by_id(id)
+  for _, drawer in ipairs(M.load()) do
+    if drawer.id == id then
+      return drawer
+    end
+  end
+  return nil
+end
+
+---Press one drawer: the whole key-press behaviour (decide, focus, launch or
+---toggle, log), so every caller gets the same one. `M.entry` binds this to the
+---shelf tree's key; other trees call it directly.
+---@param drawer Drawer?
+function M.press(drawer)
+  if not drawer then
+    return
+  end
+  local ctx = live_ctx()
+  local d = M.decide(drawer, hl.get_windows(), ctx, pending[drawer.id] ~= nil)
+  if d.reason then
+    emit_drawer_event(drawer, "refuse", d.reason)
+  end
+  if d.monitor then
+    hl.dispatch(hl.dsp.focus({ monitor = d.monitor }))
+  end
+  if d.focus then
+    hl.dispatch(hl.dsp.focus({ workspace = d.focus }))
+  end
+  if d.launch then
+    M.mark_pending(drawer)
+    hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. d.launch))
+    if not d.reason then
+      emit_drawer_event(drawer, "launch", ("drawer %s launched"):format(drawer.id))
+    end
+  elseif d.toggle then
+    hl.dispatch(hl.dsp.workspace.toggle_special(d.toggle))
+    if not d.reason then
+      emit_drawer_event(drawer, "toggle", ("drawer %s toggled"):format(drawer.id))
+    end
+  end
+end
+
 ---The submap entry for one drawer.
 ---@param drawer Drawer
 ---@return SubmapEntry
@@ -371,29 +412,7 @@ function M.entry(drawer)
     desc = drawer.desc,
     tree = drawer.tree,
     action = function()
-      local ctx = live_ctx()
-      local d = M.decide(drawer, hl.get_windows(), ctx, pending[drawer.id] ~= nil)
-      if d.reason then
-        emit_drawer_event(drawer, "refuse", d.reason)
-      end
-      if d.monitor then
-        hl.dispatch(hl.dsp.focus({ monitor = d.monitor }))
-      end
-      if d.focus then
-        hl.dispatch(hl.dsp.focus({ workspace = d.focus }))
-      end
-      if d.launch then
-        M.mark_pending(drawer)
-        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. d.launch))
-        if not d.reason then
-          emit_drawer_event(drawer, "launch", ("drawer %s launched"):format(drawer.id))
-        end
-      else
-        hl.dispatch(hl.dsp.workspace.toggle_special(d.toggle))
-        if not d.reason then
-          emit_drawer_event(drawer, "toggle", ("drawer %s toggled"):format(drawer.id))
-        end
-      end
+      M.press(drawer)
     end,
   }
 end

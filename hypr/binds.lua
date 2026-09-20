@@ -340,7 +340,7 @@ do
   ---workspace from `hl.get_active_workspace()` rather than the active
   ---window's own workspace is what lets this run from an empty workspace,
   ---where there is no active window to read a workspace off at all
-  ---(`hl.get_active_monitor()`'s object never populates `activeWorkspace` —
+  ---(`hl.get_active_monitor()`'s object never populates its active workspace —
   ---unlike an entry from `hl.get_monitors()` — so that field is not a route
   ---to it either).
   ---@param dir "left"|"right"
@@ -385,8 +385,8 @@ do
     -- (decide's cue to focus the monitor itself, per the decision comment).
     local target
     if adjacent then
-      local active = adjacent.activeWorkspace
-      local other_scene = active and active.name and scene_spec.load()[active.name]
+      local active_name = nav.monitor_workspace(adjacent)
+      local other_scene = active_name and scene_spec.load()[active_name]
       local other_tiles = other_scene
         and (
           deck.applies(other_scene) and deck_tiles(other_scene)
@@ -756,6 +756,31 @@ submap.tree({
 local kb_layouts = { "Dvorak (custom)", "Programmer Dvorak" }
 local kb_idx = 1
 
+-- Pokemon (LEO-412): the launch surface for the chat/stream media windows,
+-- admitted only while the pokemon scene is active — the hyprfocus
+-- declaration lists this tree name in the pokemon scene's `bindings`, so
+-- scene admission (hypr/hyprfocus/init.lua) withholds it everywhere else,
+-- door included. The arm must precede the exec: the profile is now the shared
+-- Media one, and `+media-browser` (conf/base.lua) pins the launch to
+-- name:media — the armed intent is what the engine's claim step
+-- (hypr/events/scene.lua) stamps with a pokemon slot, so home routes the
+-- window to the pokemon scene instead of leaving it tiled in media.
+-- Hand-opened media windows arm nothing and stay on media.
+submap.tree({
+  name = "pokemon",
+  desc = "Pokemon",
+  entries = {
+    {
+      key = "m",
+      desc = "Open a Pokemon media window",
+      action = function()
+        require("hypr.events.scene").arm_launch("pokemon", config.apps.media_browser.class)
+        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. config.apps.media_browser.cmd .. " --new-window"))
+      end,
+    },
+  },
+})
+
 submap.tree({
   mods = { config.main_mod, "space" },
   name = "which",
@@ -839,6 +864,14 @@ submap.tree({
       opens = "dofus",
       action = function()
         submap.enter("dofus")
+      end,
+    },
+    {
+      key = "n",
+      desc = "Pokemon",
+      opens = "pokemon",
+      action = function()
+        submap.enter("pokemon")
       end,
     },
     {

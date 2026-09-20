@@ -16,6 +16,10 @@ read_globals = {
 -- of the calling convention, not a bug to flag.
 self = false
 
+-- The code agent's scratch worktrees live under .claude/ (untracked, transient);
+-- they are not part of this repo's code and carry their own older findings.
+exclude_files = { ".claude/" }
+
 files = {
   ["tests"] = {
     -- Specs deliberately mutate the `hl` stub's fields (stubbing a method per

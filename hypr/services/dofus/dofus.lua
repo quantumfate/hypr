@@ -5,6 +5,7 @@ local swap = require("hypr.services.dofus.swap")
 local ipc = require("hypr.services.dofus.ipc")
 local qs = require("hypr.lib.qs")
 local submap = require("hypr.lib.submap")
+local drawer = require("hypr.lib.drawer")
 
 local DOFUS_CLASS = "Dofus.x64"
 local OVERLAY_CLASS = "Ankama Launcher"
@@ -162,9 +163,21 @@ submap.tree({
     },
     {
       key = "a",
-      desc = "Launch Ankama launcher",
-      -- Focus mode blocks starting a game; a running one is never touched.
-      action = hl.dsp.exec_cmd("sh -c ',focus-guard.sh game && gamemoderun ankama-launcher'"),
+      desc = "Ankama launcher",
+      -- The same press the shelf tree's own `a` performs, not a second
+      -- behaviour: launch it when it is not running, slide its drawer in or
+      -- out when it is. This key used to be a bare `exec_cmd`, so pressing it
+      -- again with the launcher already parked on its shelf re-ran the launch
+      -- and nothing moved — the launcher stayed exactly where it was, out of
+      -- sight, with no way back to it from this tree.
+      --
+      -- The focus guard is not lost with the exec: it lives inside
+      -- `,ankama-launcher.sh` (the drawer's declared `launch`), which refuses
+      -- to start a session the active mode blocks and is only reached at all
+      -- when no launcher window exists.
+      action = function()
+        drawer.press(drawer.by_id("ankama"))
+      end,
     },
     {
       key = "t",

@@ -60,12 +60,7 @@ function M.bind_workspace_cycle()
       if not output then
         return
       end
-      local active
-      for _, monitor in ipairs(hl.get_monitors() or {}) do
-        if monitor.name == output and monitor.activeWorkspace then
-          active = monitor.activeWorkspace.name
-        end
-      end
+      local active = nav.workspace_on(hl.get_monitors() or {}, output)
       local name = nav.cycle_workspace(scenes_on_monitor(output), active, spec.dir)
       if name then
         M.focus_named(name)

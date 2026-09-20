@@ -10,6 +10,40 @@ local layout = require("hypr.scene.layout")
 
 local M = {}
 
+---The name of the workspace active on `monitor`, or nil.
+---
+---The live binding spells this field `active_workspace` (snake_case, an
+---`HL.Workspace` userdata) — `activeWorkspace` is `hyprctl`'s JSON spelling
+---and is `nil` on every monitor the Lua API hands out. Reading the camelCase
+---one compiled, tested (fixtures carried the JSON spelling) and silently
+---answered "unknown" forever: a drawer could not tell an already-focused
+---owner workspace from a cold one, cross-monitor tile navigation never saw
+---the adjacent monitor's scene, and a held window with no origin was never
+---rescued because the rescue target came back nil. Both spellings are read
+---here so a fixture written either way still means what it says.
+---@param monitor table?
+---@return string?
+function M.monitor_workspace(monitor)
+  local ws = monitor and (monitor.active_workspace or monitor.activeWorkspace)
+  return ws and ws.name or nil
+end
+
+---The name of the workspace active on the monitor called `name`, or nil.
+---@param monitors table[]?
+---@param name string?
+---@return string?
+function M.workspace_on(monitors, name)
+  if not name then
+    return nil
+  end
+  for _, m in ipairs(monitors or {}) do
+    if m.name == name then
+      return M.monitor_workspace(m)
+    end
+  end
+  return nil
+end
+
 -- The workspace-row keysyms read as symbols, never digits, in which-key text
 -- (LEO-344 decision comment + clarification): "plus" reads "+", and so on.
 M.KEY_SYMBOLS = {
@@ -394,12 +428,7 @@ function M.off_ignored(ignored, primary, monitors, w)
   if not primary or #(ignored or {}) == 0 then
     return actions
   end
-  local primary_workspace
-  for _, m in ipairs(monitors or {}) do
-    if m.name == primary and m.activeWorkspace then
-      primary_workspace = m.activeWorkspace.name
-    end
-  end
+  local primary_workspace = M.workspace_on(monitors, primary)
   for _, m in ipairs(monitors or {}) do
     local special = m.specialWorkspace and m.specialWorkspace.name
     if M.is_ignored(ignored, m.name) and special and special ~= "" then
