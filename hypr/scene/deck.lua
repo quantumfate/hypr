@@ -253,46 +253,6 @@ function M.boxes(spec, tiles, area, opts)
   return boxes, visible
 end
 
----Column order -> 1-based index of whichever representative is currently
----sitting at its column's visible geometry, derived from live window
----position rather than remembered scroll state (AGENTS.md "derive each
----pass"; docs/deck.md "Scroll survives a reload"). A config reload starts a
----fresh Lua state and wipes `deck_scroll`'s in-process table, but it does
----not move any window — whichever member was visible before the reload is
----still standing exactly where `M.boxes` last placed it, and every other
----member is still off-screen where it was. Reading that back is enough to
----recover the same visible member across a reload without persisting
----anything to the store.
----@param spec Deck.Spec
----@param tiles Scene.Tile[]
----@param area Scene.Area the same work area `M.boxes` was last called with
----@param positions table<string, HL.Box> live geometry per address (a
----member this pass has no position for is simply skipped)
----@return table<integer, integer> column order -> 1-based visible index
-function M.live_scroll(spec, tiles, _area, positions)
-  local stacks = M.stacks(spec, tiles)
-  local out = {}
-  for order, stack in pairs(stacks) do
-    local representatives = layout.collapse_groups(stack)
-    -- Every member of a column now stands at the same box, so geometry can no
-    -- longer say which one is showing. Focus order can: the member the column
-    -- shows is the one the compositor last had focused, and that survives a
-    -- reload exactly as geometry did.
-    local best, best_rank
-    for j, rep in ipairs(representatives) do
-      local rank = rep.address and positions[rep.address]
-      rank = type(rank) == "table" and rank.rank or rank
-      if type(rank) == "number" and (best_rank == nil or rank < best_rank) then
-        best, best_rank = j, rank
-      end
-    end
-    if best then
-      out[order] = best
-    end
-  end
-  return out
-end
-
 M.MIN_COLUMNS = MIN_COLUMNS
 M.MAX_COLUMNS = MAX_COLUMNS
 

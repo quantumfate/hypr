@@ -70,7 +70,7 @@ end
 ---@return Scene.Tile[] tiles
 ---@return table<string, string> workspace_of live workspace name per address
 ---@return table<string, HL.Box> positions live `{x, y}` per address, for
----`deck.live_scroll` (Task A: deriving the visible member across a reload)
+---membership bookkeeping
 local function member_tiles(spec)
   local tiles, workspace_of, positions = {}, {}, {}
   for _, w in ipairs(hl.get_windows() or {}) do
@@ -149,35 +149,14 @@ local function scroll_to_arrivals(spec, scene_name, tiles)
     for index, tile in ipairs(stack) do
       -- An arrival is a member this pass has not seen before. With no
       -- previous set (the very first pass, including right after a reload)
-      -- every member looks new -- `M.live_scroll`'s reload-recovery below
-      -- runs first and already fixed the scroll index from live geometry,
-      -- so this loop's fallback default (index 1) only ever matters for a
-      -- column with no live position to derive from yet.
+      -- every member looks new, and the column simply shows the first one
+      -- (`M.boxes`'s own default) until something scrolls it.
       local unseen = tile.address and previous and not previous[tile.address]
       if unseen then
         deck_scroll.set(scene_name, order, index)
         break
       end
     end
-  end
-end
-
----Re-derive each column's scroll index from live window position and write
----it into `deck_scroll` before this pass reads it back out — the merge that
----makes the visible member survive a reload (Task A; docs/deck.md "Scroll
----survives a reload"). A reload wipes `deck_scroll`'s in-process table, but
----not any window's position, so `deck.live_scroll` recovers the same index
----`M.boxes` last computed. A column with no live position yet (nothing
----placed at all) is left alone -- `scroll_to_arrivals` and `deck.boxes`'s
----own default (index 1) cover that case instead.
----@param spec Deck.Spec
----@param scene_name string
----@param tiles Scene.Tile[]
----@param area Scene.Area
----@param positions table<string, HL.Box>
-local function sync_scroll_from_live(spec, scene_name, tiles, area, positions)
-  for order, index in pairs(deck.live_scroll(spec, tiles, area, positions)) do
-    deck_scroll.set(scene_name, order, index)
   end
 end
 
@@ -249,8 +228,9 @@ end
 ---  * `opacity 0` on the rest -- they share one box, so a translucent window
 ---    on top otherwise reads every window under it and the column
 ---    accumulated shade with each hidden member;
----  * `no_focus` on the rest -- an invisible window still takes focus, which
----    is what made a column with more than one member feel dead to click.
+---  * nothing else: `no_focus` on the hidden ones was tried and reverted --
+---    the member you scroll TO is hidden until the next pass, so refusing it
+---    focus refused the scroll itself.
 ---
 ---Every dispatch is deferred by a tick and issued only on a change: raising
 ---and setting a property each re-enter `recalculate`, so doing either from
@@ -293,16 +273,10 @@ local function reveal_visible(boxes, visible)
 
   require("hypr.lib.hypr").oneshot(1, function()
     for _, item in ipairs(changed) do
-      local hidden = item.opacity == 0
       hl.dispatch(hl.dsp.window.set_prop({
         window = "address:" .. item.address,
         prop = "opacity",
         value = item.opacity,
-      }))
-      hl.dispatch(hl.dsp.window.set_prop({
-        window = "address:" .. item.address,
-        prop = "no_focus",
-        value = hidden and 1 or 0,
       }))
     end
     for _, address in ipairs(raise) do
@@ -324,11 +298,10 @@ function M.place(scene, scene_name, ctx)
   end
 
   local gaps_in, gaps_out = gaps(scene)
-  local tiles, _, positions = member_tiles(scene)
+  local tiles = member_tiles(scene)
   -- Live truth first (Task A: survives a reload), then arrivals -- a window
   -- that opened since the last pass overrides whatever live position it
   -- inherited from wherever it happened to spawn.
-  sync_scroll_from_live(scene, scene_name, tiles, ctx.area, positions)
   scroll_to_arrivals(scene, scene_name, tiles)
   local boxes, visible = deck.boxes(scene, tiles, ctx.area, {
     gaps_in = gaps_in,

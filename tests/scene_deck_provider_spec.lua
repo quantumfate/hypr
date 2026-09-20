@@ -288,9 +288,8 @@ t.describe("hiding the non-visible members behind the visible one", function()
       end
     end
     t.eq(0, props["address:0x2:opacity"], "a hidden member is out of the composite")
-    t.eq(1, props["address:0x2:no_focus"], "and out of the input path -- an invisible window still takes clicks")
-    t.eq(1, props["address:0x1:opacity"])
-    t.eq(0, props["address:0x1:no_focus"])
+    t.eq(1, props["address:0x1:opacity"], "the shown member is fully opaque")
+    t.eq(nil, props["address:0x2:no_focus"], "a hidden member stays focusable -- scrolling to it IS focusing it")
   end)
 
   t.it("asks a held member matching the scroll index to come home", function()
