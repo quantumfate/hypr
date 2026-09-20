@@ -97,6 +97,12 @@ end
 ---@type table<string, table<string, true>>
 local seen = {}
 
+---What each member's opacity was last set to, keyed by address. A dispatch
+---inside the layout pass re-enters `recalculate` (a property change is a
+---change), so the pass issues one only when the value actually moves -- and
+---even then from outside the pass.
+local opacity_state = {}
+
 ---Drop a closed window from the membership record.
 ---
 ---`seen` is what makes "new" mean "this scene has never placed this window";
@@ -111,6 +117,7 @@ function M.forget(address)
   for _, members in pairs(seen) do
     members[address] = nil
   end
+  opacity_state[address] = nil
 end
 
 ---Point a column at a window that has just arrived in it.
@@ -233,29 +240,49 @@ end
 ---already has, and `hypr/scene/provider.lua` delegates here for a scene
 ---declaring `layout = "deck"`. The registration above stays for a host that
 ---can select it directly.
----Show exactly one member per column: raise it, and make every member hidden
+---Show exactly one member per column: raise it, and keep every member hidden
 ---behind it fully transparent.
 ---
 ---Z-order alone is not enough. The members share one box now, so a translucent
 ---window on top reads every window under it -- the column accumulated shade
----and tint with each hidden member. `opacity 0` on the hidden ones takes them
----out of the composite entirely; the shown one is restored to 1 on the pass
----that reveals it, so nothing has to remember what was hidden.
+---and tint with each hidden member. `opacity 0` takes the hidden ones out of
+---the composite entirely.
+---
+---Both dispatches are deferred by a tick and issued only on a change: raising
+---and setting a property each re-enter `recalculate`, and doing either from
+---inside the pass is an unbounded recursion, not a redraw.
 ---@param boxes Scene.Box[]
 ---@param visible table<integer, string> column order -> address it shows
 local function reveal_visible(boxes, visible)
   local shown = {}
   for _, address in pairs(visible) do
     shown[address] = true
-    hl.dispatch(hl.dsp.window.bring_to_top({ window = "address:" .. address }))
   end
+
+  local changed = {}
   for _, box in ipairs(boxes) do
-    hl.dispatch(hl.dsp.window.set_prop({
-      window = "address:" .. box.address,
-      prop = "opacity",
-      value = shown[box.address] and 1 or 0,
-    }))
+    local want = shown[box.address] and 1 or 0
+    if opacity_state[box.address] ~= want then
+      opacity_state[box.address] = want
+      changed[#changed + 1] = { address = box.address, opacity = want, raise = want == 1 }
+    end
   end
+  if #changed == 0 then
+    return
+  end
+
+  require("hypr.lib.hypr").oneshot(1, function()
+    for _, item in ipairs(changed) do
+      hl.dispatch(hl.dsp.window.set_prop({
+        window = "address:" .. item.address,
+        prop = "opacity",
+        value = item.opacity,
+      }))
+      if item.raise then
+        hl.dispatch(hl.dsp.window.bring_to_top({ window = "address:" .. item.address }))
+      end
+    end
+  end)
 end
 
 ---@param scene Scene.Spec

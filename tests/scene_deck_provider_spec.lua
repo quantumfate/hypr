@@ -255,6 +255,12 @@ t.describe("hiding the non-visible members behind the visible one", function()
     local a = target("0x1", "Kitty-Main", "code")
     local b = target("0x2", "Kitty-Main", "code")
     provider.recalculate({ area = AREA, targets = { a, b } })
+    -- Raising and the opacity toggle are deferred by a tick: doing either
+    -- inside the pass re-enters `recalculate`, which is an unbounded
+    -- recursion rather than a redraw.
+    for _, timer in ipairs(stub.timers or {}) do
+      timer.cb()
+    end
 
     local shown, hidden = placed(a), placed(b)
     t.ok(shown and hidden, "both members are placed, neither leaves the workspace")
