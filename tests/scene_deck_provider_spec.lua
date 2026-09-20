@@ -19,6 +19,9 @@ local function fresh(scenes, windows, specs)
           return { base = { scenes = keyed } }
         end,
         put = function() end,
+        -- The real handle shallow-merges a patch; the dock publish uses it,
+        -- and a fake missing it reads as "this store cannot be written".
+        set = function() end,
       }
     end,
   }
