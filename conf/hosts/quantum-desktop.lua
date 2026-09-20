@@ -60,7 +60,7 @@ return {
       -- Steam games: fullscreen proton/steam windows, no split.
       { workspace = "6", default_name = "steam-games" },
       -- Obsidian + Linear side-by-side. Shared by work + study modes.
-      { workspace = "8", default_name = "obsidian-linear", monitor = "secondary" },
+      { workspace = "8", default_name = "obsidian-linear" }, -- , monitor = "secondary"
       -- Media: fullscreen media player.
       { workspace = "11", default_name = "media", monitor = "secondary" },
       -- Logs: tmux log workspace, secondary.

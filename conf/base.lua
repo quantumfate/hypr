@@ -22,7 +22,7 @@
 -- monitor with no `gaps_by_monitor` entry -- and the compositor's own boot-time
 -- gaps, before any host resolves -- gets.
 ---@type { gaps_in: number, gaps_out: { top: number, right: number, bottom: number, left: number } }
-local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 0, bottom = 56, left = 56 } }
+local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 56, bottom = 56, left = 56 } }
 
 ---The desk's geometry half, keyed by hypr.lib.profile's fingerprint of
 ---hl.get_monitors(), not by hostname. desk-dual's numbers are the former
@@ -49,7 +49,7 @@ local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 0, bottom = 
 local geometry_profiles = {
   [require("hypr.lib.profile").DESK_DUAL] = {
     gaps_by_monitor = {
-      primary = { gaps_in = 20, gaps_out = { top = 12, right = 0, bottom = 15, left = 30 } },
+      primary = { gaps_in = 20, gaps_out = { top = 12, right = 30, bottom = 15, left = 30 } },
       secondary = { gaps_in = 48, gaps_out = { top = 12, right = 64, bottom = 64, left = 64 } },
     },
   },
@@ -78,18 +78,6 @@ return {
   ---@type table<string, AppScope>
   apps = {
     media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },
-    -- The gaming scene's own zen instance (LEO-230): pinned to name:gaming by
-    -- windowrules, opened and closed with the Dofus group by the scene's
-    -- declared companion (hypr/scene/companion.lua; the spawn lives in the
-    -- scene document now, so this entry names the same command for the binds
-    -- that still spawn it directly). It needs its OWN profile, not -P Media:
-    -- zen is single-instance per profile, so launching a second -P Media
-    -- window only opens a tab-strip window inside the running media browser's
-    -- process — --name is ignored there, the class stays zen-twilight-media,
-    -- and the +media-browser rule drags it to name:media. A distinct profile
-    -- forces a distinct process, which is what makes --name (and therefore
-    -- the class gate below) real.
-    scene_browser = { cmd = "zen-twilight -P GamingMedia --name zen-gaming-media", class = "zen-gaming-media" },
     main_browser = { cmd = "zen-twilight", class = "zen-twilight" },
     dev_browser = { cmd = "firefox-developer-edition", class = "firefox-developer-edition" },
     terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },

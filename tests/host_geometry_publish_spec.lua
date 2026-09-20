@@ -59,7 +59,7 @@ end
 t.describe("conf.host.build publishes per-monitor gaps -- LEO-340", function()
   t.it("desk-dual: each monitor publishes its profile's own sides", function()
     local monitors = published_monitors("quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 30, right = 0 }, monitors["DP-1"])
+    t.eq({ left = 30, right = 30 }, monitors["DP-1"])
     t.eq({ left = 64, right = 64 }, monitors["DP-2"])
   end)
 
@@ -91,26 +91,26 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
     seed_scenes({ code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
     local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
     -- The visible edge adds what the layout's own gap misses: the rule's
-    -- gaps_out (DP-1 { left = 30, right = 0 } in the desk-dual primary profile)
+    -- gaps_out (DP-1 { left = 30, right = 30 } in the desk-dual primary profile)
     -- plus the rule's gaps_in (20) and the 1px border on each inset side.
-    t.eq({ left = 76, right = 81 }, workspaces["code"])
+    t.eq({ left = 76, right = 111 }, workspaces["code"])
   end)
 
   t.it("a deck scene collapses its sided gaps_out to one number on every side", function()
     seed_scenes({ code = { layout = "deck", gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
     local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 76, right = 46 }, workspaces["code"])
+    t.eq({ left = 76, right = 76 }, workspaces["code"])
   end)
 
   t.it("a scene with no gaps_out resolves the host workspace-spec, keyed by default_name", function()
     -- The workspace inset re-adds the rule's gaps_out (the number the monitor
     -- map publishes) and, on an inset side, the rule's gaps_in (20 in the
-    -- desk-dual primary profile) and the 1px border; the right side is flush,
-    -- so only the border lands. Tracks base.lua's desk-dual primary profile,
+    -- desk-dual primary profile) and the 1px border, on both sides now that the
+    -- primary profile insets its right edge too. Tracks base.lua's desk-dual primary profile,
     -- like the monitor map above.
     seed_scenes({ code = {} })
     local workspaces = published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
-    t.eq({ left = 81, right = 1 }, workspaces["code"])
+    t.eq({ left = 81, right = 81 }, workspaces["code"])
   end)
 
   t.it("a workspace with no declared scene is absent: nothing to subscribe to", function()
@@ -121,7 +121,7 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
   t.it("a runtime scene edit re-publishes on the engine's first re-read, no reload", function()
     seed_scenes({ code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
     t.eq(
-      { left = 76, right = 81 },
+      { left = 76, right = 111 },
       published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })["code"]
     )
     -- Edit the declaration: the next load (fresh engine state per published())
@@ -129,7 +129,7 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
     -- map into the same store — the bar's watchChanges re-emits on its own.
     seed_scenes({ code = { gaps_out = 12 } })
     t.eq(
-      { left = 63, right = 33 },
+      { left = 63, right = 63 },
       published("workspaces", "quantum-desktop", { { width = 5120 }, { width = 1920 } })["code"]
     )
   end)
