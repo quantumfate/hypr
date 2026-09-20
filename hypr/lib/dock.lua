@@ -44,6 +44,15 @@ M.ANCHOR_WORDS = {
   ["bottom-left"] = { "bottom", "left" },
   ["bottom-center"] = { "bottom", "center" },
   ["bottom-right"] = { "bottom", "right" },
+  -- Mirrored corners: the SIDE gutter, aligned to one end of that edge. The
+  -- nine-grid alone cannot say "in the left gutter, at the bottom" -- its
+  -- corners always lead with the vertical word -- and that is a position a
+  -- scene genuinely wants (a vertical isle standing in the left gutter,
+  -- bottom-aligned). Leading with the horizontal word says it.
+  ["left-top"] = { "top", "left", "h" },
+  ["left-bottom"] = { "bottom", "left", "h" },
+  ["right-top"] = { "top", "right", "h" },
+  ["right-bottom"] = { "bottom", "right", "h" },
 }
 
 ---Whether `of` is one of the four grammars a dock target may name.
@@ -83,10 +92,16 @@ end
 ---dominant, the other is pure alignment.
 ---@param vword string
 ---@param hword string
+---@param lead string? "h" when the anchor led with its horizontal word
 ---@return Dock.Edge? edge, ("x"|"y")? axis, ("start"|"center"|"end")? align, string? other_edge
-local function dominant(vword, hword)
+local function dominant(vword, hword, lead)
   local v_edge = vword == "top" or vword == "bottom"
   local h_edge = hword == "left" or hword == "right"
+  if lead == "h" and h_edge and v_edge then
+    -- The side gutter is the dominant one, and the vertical word aligns the
+    -- isle along it; the vertical edge stays as the switch's other candidate.
+    return hword, "y", (vword == "top" and "start" or "end"), vword
+  end
   if v_edge and h_edge then
     return vword, "x", (hword == "left" and "start" or "end"), hword
   elseif v_edge then
@@ -250,13 +265,16 @@ local function resolve_chain(entry, ctx, claimed, stepped_down)
   local words = M.ANCHOR_WORDS[entry.at]
   -- `dominant` also reports the axis it resolved on; nothing downstream needs
   -- it, since the edge already carries the direction.
-  local edge, _, align, other_edge = dominant(words[1], words[2])
+  local edge, _, align, other_edge = dominant(words[1], words[2], words[3])
 
   local resolved_edge, resolved_align = edge, align
   if edge and not is_screen and inter_window(edge, target, ctx.boxes) then
     resolved_edge = nil
     if other_edge then
-      local switched_align = words[1] == "top" and "start" or "end"
+      -- Switching axis re-reads the anchor's own words: the alignment that
+      -- applied along the refused edge is not the one the other edge takes.
+      local switched_align = (words[3] == "h") and (words[2] == "left" and "start" or "end")
+        or (words[1] == "top" and "start" or "end")
       if not inter_window(other_edge, target, ctx.boxes) then
         resolved_edge, resolved_align = other_edge, switched_align
       end

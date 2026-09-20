@@ -122,6 +122,37 @@ t.describe("dock.resolve: collapse and the fallback ladder", function()
   end)
 end)
 
+t.describe("dock.resolve: the side-leading corners", function()
+  t.it("left-bottom stands in the left gutter, aligned to the window's bottom", function()
+    local out =
+      dock.resolve({ ["bar.a"] = { at = "left-bottom", of = "block:1" } }, ctx({ ["block:1"] = SOLO }, { SOLO }))
+    local isle = out["bar.a"]
+    t.eq("docked", isle.state)
+    t.eq("left", isle.grow, "the left gutter is the dominant one, not the bottom")
+    t.eq(SOLO.x, isle.anchor.x)
+    t.eq(SOLO.y + SOLO.h, isle.anchor.y, "aligned to the window's bottom edge")
+    t.eq("vertical", isle.orientation, "a side gutter stacks its content")
+  end)
+
+  t.it("right-top stands in the right gutter, aligned to the window's top", function()
+    local out =
+      dock.resolve({ ["bar.a"] = { at = "right-top", of = "block:1" } }, ctx({ ["block:1"] = SOLO }, { SOLO }))
+    t.eq("right", out["bar.a"].grow)
+    t.eq(SOLO.y, out["bar.a"].anchor.y)
+  end)
+
+  t.it("falls to the other edge when its own gutter faces a window", function()
+    -- LEFT's right side faces RIGHT, so `right-bottom` takes the bottom edge
+    -- it also names rather than docking between the two windows.
+    local out = dock.resolve(
+      { ["bar.a"] = { at = "right-bottom", of = "block:1" } },
+      ctx({ ["block:1"] = LEFT }, { LEFT, RIGHT })
+    )
+    t.eq("docked", out["bar.a"].state)
+    t.eq("down", out["bar.a"].grow)
+  end)
+end)
+
 t.describe("dock.resolve: two isles, one gutter", function()
   t.it("the first claimant keeps the region and the second steps down", function()
     local docks = {

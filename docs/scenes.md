@@ -330,7 +330,12 @@ docks = {
 ```
 
 - `at` — the nine-grid: `top-left` `top-center` `top-right` `middle-left`
-  `center` `middle-right` `bottom-left` `bottom-center` `bottom-right`.
+  `center` `middle-right` `bottom-left` `bottom-center` `bottom-right`, plus
+  the four side-leading corners `left-top` `left-bottom` `right-top`
+  `right-bottom`. A nine-grid corner docks to the horizontal edge it names and
+  aligns along it; a side-leading corner docks to the **side** gutter and
+  aligns to the window's top or bottom — "in the left gutter, at the bottom",
+  which the nine-grid alone cannot say.
 - `of` — `screen`, `block:<order>`, `slot:<slot>` or `class:<class>`. Block,
   slot and class name a tile the layout placed this pass; a block with no live
   window names nothing, which is what makes its dock collapse.
