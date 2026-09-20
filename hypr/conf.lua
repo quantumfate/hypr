@@ -38,14 +38,11 @@ hl.config({
       popups_ignorealpha = 0.2,
     },
 
-    -- A sheet on a desk casts a short, tight shadow — enough to lift it off the
-    -- wallpaper, not enough to glow. The old 30px range was a halo.
+    -- No shadows anywhere. The border is what separates a window from the
+    -- wallpaper, and a shadow only added weight -- doubly so on a deck, where
+    -- members stand at the same box and every hidden one cast its own.
     shadow = {
-      enabled = true,
-      range = 8,
-      render_power = 2,
-      offset = { 0, 2 },
-      color = "rgba(0000009a)",
+      enabled = false,
     },
   },
 

@@ -182,7 +182,10 @@ end
 ---side a real 0 -- deck no longer collapses it to one symmetric number.
 ---scroll: 1-based visible index per column order, from session state the
 ---provider owns; nil/missing defaults to 1 (the first window).
----@return Scene.Box[] boxes one per deck member, visible or off-screen
+---@return Scene.Box[] boxes one per deck member; a hidden member takes the
+---visible member's box exactly
+---@return table<integer, integer> visible address of the member each column
+---shows, keyed by column order -- the executor raises it above its siblings
 function M.boxes(spec, tiles, area, opts)
   opts = opts or {}
   local gaps_in = opts.gaps_in or 0
@@ -215,14 +218,16 @@ function M.boxes(spec, tiles, area, opts)
   local inner_h = area.h - top - bottom
   local usable = inner_w - gaps_in * (#columns - 1)
 
-  -- Where a hidden member of a column parks, one column-height off either
-  -- edge — a fixed offset rather than one slot per hidden member, since
-  -- nothing observes their relative order while off-screen; only the
-  -- transition into/out of the visible slot is ever seen.
-  local above_y = inner_y - inner_h - gaps_in
-  local below_y = inner_y + inner_h + gaps_in
+  -- A hidden member takes the visible member's box exactly: same origin, same
+  -- size. Hyprland clamps a tile placed outside the viewport back inside and
+  -- keeps the size it chose, so the off-screen park only produced members at
+  -- slightly different origins -- one rendering shorter than the other, and a
+  -- window resizing as the column scrolled. Hidden behind the visible one,
+  -- every member keeps one size for its whole life, which is what scrolling
+  -- must not disturb.
 
   local shares = fractions(columns)
+  local visible = {}
   local cursor = inner_x
   for i, column in ipairs(columns) do
     local width = (i == #columns) and (inner_x + inner_w - cursor) or math.floor(usable * shares[i] + 0.5)
@@ -230,7 +235,10 @@ function M.boxes(spec, tiles, area, opts)
     local representatives, members = layout.collapse_groups(stack)
     local index = M.clamp_scroll(scroll[column.order], #representatives)
     for j, rep in ipairs(representatives) do
-      local y = (j == index) and inner_y or (j < index) and above_y or below_y
+      local y = inner_y
+      if j == index then
+        visible[column.order] = rep.address
+      end
       local group_members = rep.group and members[rep.group]
       if group_members then
         for _, member in ipairs(group_members) do
@@ -242,7 +250,7 @@ function M.boxes(spec, tiles, area, opts)
     end
     cursor = cursor + width + gaps_in
   end
-  return boxes
+  return boxes, visible
 end
 
 ---Column order -> 1-based index of whichever representative is currently
@@ -261,22 +269,25 @@ end
 ---@param positions table<string, HL.Box> live geometry per address (a
 ---member this pass has no position for is simply skipped)
 ---@return table<integer, integer> column order -> 1-based visible index
-function M.live_scroll(spec, tiles, area, positions)
-  local top, bottom = area.y, area.y + area.h
+function M.live_scroll(spec, tiles, _area, positions)
   local stacks = M.stacks(spec, tiles)
   local out = {}
   for order, stack in pairs(stacks) do
     local representatives = layout.collapse_groups(stack)
+    -- Every member of a column now stands at the same box, so geometry can no
+    -- longer say which one is showing. Focus order can: the member the column
+    -- shows is the one the compositor last had focused, and that survives a
+    -- reload exactly as geometry did.
+    local best, best_rank
     for j, rep in ipairs(representatives) do
-      local box = rep.address and positions[rep.address]
-      -- `M.boxes` places exactly one representative per column inside the
-      -- work area's vertical span; every other one sits a full column
-      -- height above or below it, strictly outside. Whichever one lands
-      -- inside is the visible member.
-      if box and box.y >= top and box.y < bottom then
-        out[order] = j
-        break
+      local rank = rep.address and positions[rep.address]
+      rank = type(rank) == "table" and rank.rank or rank
+      if type(rank) == "number" and (best_rank == nil or rank < best_rank) then
+        best, best_rank = j, rank
       end
+    end
+    if best then
+      out[order] = best
     end
   end
   return out

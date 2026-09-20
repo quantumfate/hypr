@@ -403,7 +403,7 @@ function M.attach()
     require("hypr.lib.hypr").oneshot(1, function()
       local ws = hl.get_active_workspace()
       if ws and ws.name then
-        require("hypr.scene.deck_provider").reconcile(ws.name)
+        require("hypr.scene.deck_provider").reconcile(ws.name, w)
       end
       M.recalculate_focused()
     end)

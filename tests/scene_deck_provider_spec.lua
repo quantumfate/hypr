@@ -178,6 +178,45 @@ t.describe("gap precedence", function()
   end)
 end)
 
+t.describe("focus after a close", function()
+  local TWO_COLUMN = {
+    default_name = "code",
+    layout = "deck",
+    columns = {
+      { order = 1, share = 0.5, classes = { "Kitty-Main" } },
+      { order = 2, share = 0.5, classes = { "zen-twilight" } },
+    },
+  }
+
+  t.it("falls back inside the closing window's own column, never into the neighbour", function()
+    -- Two members left in the first column and one in the second. Closing the
+    -- first column's visible member must hand focus to its sibling, not to
+    -- the browser next door.
+    local windows = {
+      { address = "0x2", class = "Kitty-Main", workspace = { name = "code" } },
+      { address = "0x3", class = "zen-twilight", workspace = { name = "code" } },
+    }
+    local stub, provider = fresh({ TWO_COLUMN }, windows)
+    -- `reconcile` runs outside a layout callback, so it reads the monitor
+    -- list and the live windows rather than a ctx.
+    stub.monitors =
+      { { name = "DP-1", x = 0, y = 0, width = AREA.w, height = AREA.h, active_workspace = { name = "code" } } }
+    provider.recalculate({
+      area = AREA,
+      targets = { target("0x2", "Kitty-Main", "code"), target("0x3", "zen-twilight", "code") },
+    })
+
+    require("hypr.scene.deck_provider").reconcile("code", { address = "0x1", class = "Kitty-Main" })
+    local focused
+    for _, action in ipairs(stub.dispatched) do
+      if action.name == "dsp.focus" then
+        focused = action.args[1].window
+      end
+    end
+    t.eq("address:0x2", focused, "the surviving member of that column takes focus")
+  end)
+end)
+
 t.describe("membership survives exactly as long as the window", function()
   t.it("a closed address stops counting as a member this scene has placed", function()
     -- `seen` is what makes an arrival an arrival. An address the compositor
@@ -202,12 +241,12 @@ t.describe("membership survives exactly as long as the window", function()
   end)
 end)
 
-t.describe("parking the non-visible members off-screen", function()
-  t.it("places a non-visible member beyond the viewport, on the same workspace", function()
-    -- LEO-402: a hidden member stays tiled where the compositor animates it.
-    -- It travels off the monitor along the scroll axis rather than stacking
-    -- behind the visible member, and it never leaves the workspace -- moving
-    -- it to a special workspace is what made the scroll read as a cut.
+t.describe("hiding the non-visible members behind the visible one", function()
+  t.it("places every member at one box and raises the one the column shows", function()
+    -- Scrolling must never resize a window: an off-screen park was clamped
+    -- back into view at a slightly different origin, which is why one member
+    -- rendered shorter than its sibling. Every member now stands at the same
+    -- box and z-order decides what you see.
     local windows = {
       { address = "0x1", class = "Kitty-Main", workspace = { name = "code" } },
       { address = "0x2", class = "Kitty-Main", workspace = { name = "code" } },
@@ -216,17 +255,25 @@ t.describe("parking the non-visible members off-screen", function()
     local a = target("0x1", "Kitty-Main", "code")
     local b = target("0x2", "Kitty-Main", "code")
     provider.recalculate({ area = AREA, targets = { a, b } })
-    t.ok(placed(a), "the first arrival is shown by default")
-    local hidden = placed(b)
-    t.ok(hidden, "the hidden member is placed, not moved away")
-    t.ok(hidden.y >= AREA.y + AREA.h or hidden.y + hidden.h <= AREA.y, "it sits outside the viewport")
-    t.ok(hidden.y ~= placed(a).y, "it is not stacked behind the visible member")
+
+    local shown, hidden = placed(a), placed(b)
+    t.ok(shown and hidden, "both members are placed, neither leaves the workspace")
+    t.eq(shown.x, hidden.x)
+    t.eq(shown.y, hidden.y)
+    t.eq(shown.w, hidden.w)
+    t.eq(shown.h, hidden.h)
+
+    local raised = false
     for _, action in ipairs(stub.dispatched) do
+      if action.name == "dsp.window.bring_to_top" and action.args[1].window == "address:0x1" then
+        raised = true
+      end
       t.ok(
         not (action.name == "dsp.window.move" and action.args[1].window == "address:0x2"),
         "a hidden member is never dispatched off the workspace"
       )
     end
+    t.ok(raised, "the member the column shows is raised above its siblings")
   end)
 
   t.it("asks a held member matching the scroll index to come home", function()

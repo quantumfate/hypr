@@ -82,7 +82,9 @@ local function member_tiles(spec)
         workspace_of[tile.address] = ws.name
       end
       if tile.address and w.at then
-        positions[tile.address] = w.at
+        -- Focus rank, not position: every member of a column shares one box
+        -- now, so "which one is showing" is the one most recently focused.
+        positions[tile.address] = { rank = w.focusHistoryID or w.focus_history_id }
       end
     end
   end
@@ -231,6 +233,31 @@ end
 ---already has, and `hypr/scene/provider.lua` delegates here for a scene
 ---declaring `layout = "deck"`. The registration above stays for a host that
 ---can select it directly.
+---Show exactly one member per column: raise it, and make every member hidden
+---behind it fully transparent.
+---
+---Z-order alone is not enough. The members share one box now, so a translucent
+---window on top reads every window under it -- the column accumulated shade
+---and tint with each hidden member. `opacity 0` on the hidden ones takes them
+---out of the composite entirely; the shown one is restored to 1 on the pass
+---that reveals it, so nothing has to remember what was hidden.
+---@param boxes Scene.Box[]
+---@param visible table<integer, string> column order -> address it shows
+local function reveal_visible(boxes, visible)
+  local shown = {}
+  for _, address in pairs(visible) do
+    shown[address] = true
+    hl.dispatch(hl.dsp.window.bring_to_top({ window = "address:" .. address }))
+  end
+  for _, box in ipairs(boxes) do
+    hl.dispatch(hl.dsp.window.set_prop({
+      window = "address:" .. box.address,
+      prop = "opacity",
+      value = shown[box.address] and 1 or 0,
+    }))
+  end
+end
+
 ---@param scene Scene.Spec
 ---@param scene_name string
 ---@param ctx HL.LayoutContext
@@ -250,11 +277,12 @@ function M.place(scene, scene_name, ctx)
   -- inherited from wherever it happened to spawn.
   sync_scroll_from_live(scene, scene_name, tiles, ctx.area, positions)
   scroll_to_arrivals(scene, scene_name, tiles)
-  local boxes = deck.boxes(scene, tiles, ctx.area, {
+  local boxes, visible = deck.boxes(scene, tiles, ctx.area, {
     gaps_in = gaps_in,
     gaps_out = gaps_out,
     scroll = deck_scroll.get_all(scene_name),
   })
+  reveal_visible(boxes, visible)
   for _, box in ipairs(boxes) do
     local target = by_address[box.address]
     if target then
@@ -316,7 +344,7 @@ end
 ---`window.close` event. Called once after a window closes, from
 ---`hypr/scene/provider.lua`'s `window.close` handler.
 ---@param scene_name string workspace/scene name
-function M.reconcile(scene_name)
+function M.reconcile(scene_name, closed)
   local scenes = spec_lib.load()
   local scene = scenes and scenes[scene_name]
   if not scene or not deck.applies(scene) then
@@ -335,21 +363,36 @@ function M.reconcile(scene_name)
   end
   local tiles = member_tiles(scene)
   local gaps_in, gaps_out = gaps(scene)
-  local boxes = deck.boxes(scene, tiles, area, {
+  local _, visible = deck.boxes(scene, tiles, area, {
     gaps_in = gaps_in,
     gaps_out = gaps_out,
     scroll = deck_scroll.get_all(scene_name),
   })
-  local visible, first_visible = {}, nil
-  for _, box in ipairs(boxes) do
-    if box.y >= area.y and box.y < area.y + area.h then
-      visible[box.address] = true
-      first_visible = first_visible or box.address
+
+  -- Focus belongs to the column that lost the window, while that column still
+  -- has members: a close must not send the keyboard wandering into the
+  -- neighbouring column. The closed window's own column is read from its
+  -- class, since the window itself is already gone by now.
+  local column = closed and closed.class and deck.column_for(scene, { class = closed.class, tags = closed.tags })
+  local wanted = column and visible[column.order]
+  if not wanted then
+    -- No column to prefer (an unknown class, or that column is now empty):
+    -- any visible member beats leaving the keyboard on nothing.
+    for _, address in pairs(visible) do
+      wanted = wanted or address
     end
   end
+  if not wanted then
+    return
+  end
+
+  local shown = {}
+  for _, address in pairs(visible) do
+    shown[address] = true
+  end
   local active = hl.get_active_window()
-  if first_visible and not (active and visible[active.address]) then
-    hl.dispatch(hl.dsp.focus({ window = "address:" .. first_visible }))
+  if not (active and shown[active.address]) then
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. wanted }))
   end
 end
 
