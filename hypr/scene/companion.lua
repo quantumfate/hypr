@@ -51,12 +51,15 @@ function M.decisions(spec, ws_name, windows)
       local members, companions = 0, {}
       for _, w in ipairs(windows) do
         local name = w.workspace and w.workspace.name
-        if name == ws_name then
-          if spec_lib.class_matches(w.class, block.classes) then
-            members = members + 1
-          elseif spec_lib.class_matches(w.class, { spawn.class }) then
-            companions[#companions + 1] = w
-          end
+        if name == ws_name and spec_lib.class_matches(w.class, block.classes) then
+          members = members + 1
+        elseif spec_lib.class_matches(w.class, { spawn.class }) and M.belongs(w, ws_name) then
+          -- Counted wherever it currently stands, not only once it is home: a
+          -- claimed companion is stamped `slot:<ws>/...` on its open and only
+          -- then moved, so counting workspace membership alone would read the
+          -- window the engine just launched as absent and launch a second one
+          -- in the gap.
+          companions[#companions + 1] = w
         end
       end
       if members == 0 and #companions > 0 then
@@ -76,6 +79,26 @@ function M.decisions(spec, ws_name, windows)
     end
   end
   return out
+end
+
+---Whether a live window belongs to `ws_name`'s scene for counting purposes:
+---it stands on that workspace, or it carries a slot tag the scene stamped on
+---it (`slot:<ws_name>/...`, `hypr/scene/identify.lua`). The tag is what makes
+---the count honest between a claimed companion's open and the move that
+---sends it home.
+---@param w HL.Window
+---@param ws_name string
+---@return boolean
+function M.belongs(w, ws_name)
+  if w.workspace and w.workspace.name == ws_name then
+    return true
+  end
+  for _, tag in ipairs(w.tags or {}) do
+    if tag == "slot:" .. ws_name or tag:match("^slot:" .. ws_name:gsub("%p", "%%%0") .. "/") then
+      return true
+    end
+  end
+  return false
 end
 
 ---The strongest decision for one pending key, after the caller's in-flight

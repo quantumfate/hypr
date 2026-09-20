@@ -221,6 +221,22 @@ t.describe("the companion lifecycle", function()
       t.eq(1, #d, "once the marker clears, the next convergence may fill again")
     end)
 
+    t.it("a claimed companion counts before it is home, so the gap spawns nothing", function()
+      -- Between a claimed companion's open and the move that sends it home it
+      -- stands on whatever workspace its pin rule chose, carrying the slot tag
+      -- the claim stamped. Counting workspace membership alone read that as
+      -- "no companion" and launched a second one in the gap.
+      local spec, companion = fresh()
+      local claimed = media_on_media("0xd1")
+      claimed.tags = { "slot:gaming/browser" }
+      t.eq(0, #companion.decisions(spec, "gaming", { dofus("0xa1"), claimed }))
+    end)
+
+    t.it("an untagged window of the class elsewhere is not this scene's companion", function()
+      local spec, companion = fresh()
+      t.eq("spawn", companion.decisions(spec, "gaming", { dofus("0xa1"), media_on_media("0xd2") })[1].action)
+    end)
+
     t.it("an omitted max_spawns keeps exactly today's behaviour — one companion", function()
       local spec, companion = fresh()
       t.eq(1, spec.blocks[1].spawn.max_spawns, "the default cap is one")
