@@ -1,10 +1,9 @@
 # bin/ — the helpers the desktop spawns
 
 The `,name.sh` helpers Hyprland's binds and Quickshell call. They used to live
-in a standalone [scripts](https://github.com/quantumfate/scripts) repo, now
-retired into this one — the delivery rule is that the config ships beside the
-code it invokes, and `bin/` is the PATH entry system-config puts on every
-session.
+in a standalone scripts repo, retired into this one — the delivery rule is
+that the config ships beside the code it invokes, and `bin/` is the PATH
+entry system-config puts on every session.
 
 Most are small `,name.sh` wrappers invoked from Hyprland keybinds. A few
 integrate with the shared state / UI:
@@ -17,14 +16,39 @@ integrate with the shared state / UI:
   here). A project is a set of kitty windows in one Hyprland group on the
   `code` scene — no sessions, no sockets; the project ends when its last
   window closes and nothing is remembered. `$QF_STORE/projects.json` is the
-  source of truth for which projects exist and their window template
-  (`,proj.sh sync` populates it from a filesystem scan; nothing else scans).
-  `pick` chooses a project with fzf, never in a separate window — from a
-  Hyprland bind (no terminal at all) it opens one project-classed kitty
-  window whose first screen IS fzf, and that window's `open` call brings up
-  the rest of the project's windows (`pick --inline`, used internally for
-  that re-exec). Full reference, including how an nvim window is asked to
-  quit rather than force-closed, in the script's own header comment.
+  source of truth for which projects exist and their window template —
+  hand-curated, never discovered: `,proj.sh add <name> [path]` is the
+  deliberate "this directory is a project now" gesture, `drop` removes one,
+  and `sync` only refreshes what each stored project's own `.proj.toml`
+  declares (nothing scans the filesystem; the tms-era scan is gone with the
+  tms config it read).
+
+  The store and the `code` scene have to name the SAME projects. A project the
+  scene declares no block for matches nothing on a `strays = "float"` scene, so
+  it opens floating instead of grouping — which is how a store left full of
+  scan-era leftovers produced projects that could never form a group. The set
+  is the five sibling repos AGENTS.md's read order and repo map name: `hypr`,
+  `quickshell`, `system-config`, `nvim`, `security-and-privacy`. Adding a
+  project means adding its `Proj-<name>` block (and its column entry) to the
+  `code` scene in `hyprfocus.default.json` in the same change. The template is the project's tabs — nvim, yazi (its
+  own command: quitting yazi ends the tab), zsh, run. `pick` chooses a
+  project with fzf — from a Hyprland bind (no terminal at all) it opens one
+  project-classed kitty window on the code workspace whose first screen IS
+  fzf, and that window's `open` call brings up the rest of the project's
+  windows (`pick --inline`, used internally for that re-exec). The picker
+  runs under `$SHELL -ic`, and an interactive shell's startup files may
+  rewrite `QF_STORE` (the live desk's `.zshenv` exports it back to
+  `$XDG_STATE_HOME/quantum-store`), so `launch_inline` pins the store this
+  process resolved into the picker's own command line instead of trusting it
+  to survive the rc. Because the
+  `code` scene declares one group block per project, `Proj-picker` matches
+  none of them, so the engine's stray-float floats the picker instead of
+  folding it into a project's group. `,proj.sh pick-window` opens exactly
+  one template window of the focused project (the same one-tab-at-a-time
+  gesture as `open-one`); `pick-scope` and `scope` do the same for a
+  project's declared scopes. Full reference, including how an nvim window
+  is asked to quit rather than force-closed, in the script's own header
+  comment.
 
 - `bin/,job.sh` — starts a long-running job (dev server, build, watcher) as a
   transient `systemd --user` service instead of a plain background process, so
@@ -83,20 +107,52 @@ integrate with the shared state / UI:
   reloads on every `apply`: it stamps the palette it last reloaded for
   (`$XDG_CACHE_HOME/quantumfate/hyprland.applied`, the same pattern
   `apply_transparency` already used for its own dial) and skips `hyprctl
-  reload` when the resolved palette hasn't moved — closing the one way a
+reload` when the resolved palette hasn't moved — closing the one way a
   same-palette `apply` (chiefly `theme-auto.timer`'s hourly tick, which calls
   `apply` — and therefore `apply_wallpaper` — unconditionally) could still
   reload purely because it ran, with no colour change to show for it. A real
   palette switch still reloads, since Hyprland's own colours only come from
   re-running its Lua config (see `apply_hyprland`'s own comment).
 
-  Every apply also writes `$XDG_CONFIG_HOME/zsh/theme.zsh` — `BAT_THEME` and
-  `FZF_DEFAULT_OPTS` for the resolved palette, since zsh/fzf read no store and
-  get no live D-Bus poke of their own. The zsh role's rc file must `source
-~/.config/zsh/theme.zsh` (after this file exists) for a shell to pick up
-  the palette it was started under; a shell already running picks it up the
-  next time something re-sources rc (a new prompt does not re-source on its
-  own — same "next launch" tier as Zen/Obsidian below).
+  Every apply also writes `$XDG_CONFIG_HOME/zsh/theme.zsh`, which is the whole
+  shell's share of the palette: `BAT_THEME` (delta reads its syntax theme from
+  it too), `DELTA_OPTS`/`GIT_PAGER`, `DFT_BACKGROUND`, `LS_COLORS`/`EZA_COLORS`,
+  `FZF_DEFAULT_OPTS`, the `LESS_TERMCAP` escapes, and the whole
+  `ZSH_HIGHLIGHT_STYLES` map. Zsh reads no store and gets no live D-Bus poke of
+  its own, so a generated file the rc sources is its equivalent — and it is the
+  ONLY place the shell's colours are decided. A colour-bearing variable
+  hardcoded in the rc silently outranks every palette switch, which is exactly
+  how the shell used to stay Macchiato on a Latte desk; `system-config`'s
+  `roles/zsh/templates/zshrc.j2` sources this file near the top and keeps only
+  the structure that does not follow a palette (the pager command, fzf's key
+  bindings, difftastic's highlighting switch).
+
+  Every hex comes from `accent_hex`, the one palette table in the script — 26
+  Catppuccin roles across the four flavours. Nothing else in `,theme.sh` may
+  spell a colour out; `fzf_colors` and the delta diff backgrounds (a `blend_hex`
+  tint of the flavour's own base) are both derived from it.
+
+  A shell already running picks the new file up the next time something
+  re-sources rc (a new prompt does not re-source on its own — same "next launch"
+  tier as Zen/Obsidian below); `systemctl --user set-environment` covers
+  anything uwsm spawns after the apply, so a new terminal window is immediate.
+
+  The GTK declaration files the theming role seeded follow the apply too
+  (`gtk-3.0`/`gtk-4.0` `settings.ini`, `xsettingsd.conf`, `.gtkrc-2.0.mine`
+  and the nwg-look store at `.local/share/nwg-look/gsettings`): `apply_gtk`
+  rewrites theme, icon pack and `gtk-application-prefer-dark-theme` /
+  `color-scheme` into every file a reader could be looking at, so no consumer
+  can disagree about what is on. The nwg-look store in particular is what its
+  GUI renders from — a click on Apply there re-exports the whole set from the
+  store, so keeping it in agreement stops the GUI from painting the seed
+  palette back over the desk.
+
+  Zen is the other next-launch surface: `apply_zen` writes only the runtime
+  accent — `$CONFIG/zen/shared/zen-palette.css` and the accent /
+  colour-scheme lines in `$CONFIG/zen/shared/user.js`. The static chrome CSS
+  is provisioned by system-config's `roles/browser` into that same shared
+  directory and is never overwritten here, so per-profile CSS edits survive
+  (see that role's README).
 
   nvim needs no restart at all: `apply_nvim` pokes every running editor's
   control socket, and every editor also watches the store itself, so a flip
@@ -129,15 +185,19 @@ integrate with the shared state / UI:
   the live session.
 
 - `bin/dofus_swap.py` — Dofus auto turn-swap detector. Reads its roster from the
-  shared team source of truth (`$QF_STORE/dofus/team.json`), the same file
-  the Quickshell UI edits, so team changes take effect live.
-  (Querying that team store from the shell is done with `dofus-team`, which lives
-  in the quickshell repo's `scripts/`.)
+  shared team source of truth (`$QF_STORE/dofus/team.json`), the same file the
+  Quickshell UI edits, so team changes take effect live; toggled from the Dofus
+  submap's `s` (`hypr/services/dofus/swap.lua`). Operating instructions —
+  calibration, per-character `learn`, tuning constants, limits — live in
+  [dofus_swap.md](dofus_swap.md). (Querying that team store from the shell is
+  done with `dofus-team`, which lives in the quickshell repo's `scripts/`.)
 
-- `bin/copy_settings.sh` + `bin/wrap_action.sh` — the leftover, hand-invoked
-  Dofus helpers (ex-[dofus-scripts](https://github.com/quantumfate/dofus-scripts),
-  retired here): settings replication across accounts/characters, and the
-  keybind wrapper that lets a global chord fall through to the game window.
+- `bin/copy_settings.sh` + `bin/,copy-settings.sh` — Dofus settings replication
+  across accounts/characters (ex-[dofus-scripts](https://github.com/quantumfate/dofus-scripts),
+  retired here). `copy_settings.sh` is the engine, hand-invoked with channel
+  flags; `,copy-settings.sh` is the bound wrapper — the Dofus submap's `p` opens
+  it in a held floating terminal and toasts the outcome once, defaulting to
+  BETA + EXPERIMENTAL.
 
 - `bin/obsidian_vault.py` + `bin/,obsidian-cli-wrapper.sh` — Obsidian Zettelkasten
   bootstrap: scans `~/Documents/Obsidian/Main`, infers the missing
@@ -231,6 +291,19 @@ integrate with the shared state / UI:
   from `conf/host.lua`). `,profile-force clear` drops it early; `,profile-force
 status` reads the store directly for what is standing and until when.
 
+- `bin/,zen-dispatcher.sh` — routes external URLs to a Zen profile and
+  container by domain. Registered as the default `http`/`https` handler
+  (`.desktop` file + mimeapps), so any link opened outside an app — including
+  the Ankama launcher's login flow and its `127.0.0.1:9001` OAuth callback —
+  lands in the right browsing context instead of a bare window. Routing is a
+  document, not a per-site patchwork: the Dofus set (ankama.com, dofus
+  domains, the launcher's localhost callback) opens in `zen-twilight`'s
+  `Dofus` profile and container via `ext+container:name=…&url=…`, the media
+  set in the `Media` profile, real local dev servers fall outside the matrix
+  to `firefox-developer-edition`, and everything else is refused loudly over
+  `,notify` with the source hint rather than silently dropped. The desk env
+  must have both `uwsm-app` and this script on PATH.
+
 How the shared state + IPC bridges work:
 [quickshell/ARCHITECTURE.md](https://github.com/quantumfate/quickshell/blob/main/ARCHITECTURE.md).
 
@@ -245,3 +318,19 @@ so, never resurrect an old one. Seeding and reseeding now run themselves at
 session start (`hypr/lib/maintenance.lua`, called from `hypr/events/start.lua`)
 and log every action with `stage=maintenance` — `,hyprfocus seed` and
 `,proj.sh sync` are no longer something to remember to run by hand.
+
+### `,scene-quiet`
+
+Stand the scene engine down while something else works on the windows it
+keeps alive. A scene reopens its companions, so closing one to wipe or
+re-create the application behind it is a race the engine wins every time;
+this pauses the deciding, not the desk — windows stay put, modes still apply.
+
+```
+,scene-quiet on [seconds]   # default 300, capped at 3600
+,scene-quiet off
+,scene-quiet status
+```
+
+The pause carries a deadline and expires by itself: a desk that has quietly
+stopped converging is worse than one that reopens a window.
