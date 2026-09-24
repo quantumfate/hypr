@@ -9,6 +9,7 @@
 -- Nothing here dispatches, focuses, or sets a timer. That is the whole point:
 -- geometry stops depending on which window has focus, and there is no
 -- correction to verify because there was no correction.
+local handlers = require("hypr.lib.handlers")
 local spec_lib = require("hypr.scene.spec")
 local layout = require("hypr.scene.layout")
 local order = require("hypr.scene.order")
@@ -485,7 +486,7 @@ function M.attach()
   -- deferred pass repairs focus (`deck_provider.reconcile`) and then
   -- redraws; the tick lets the compositor finish removing the window first,
   -- so the pass sees the stack it actually left.
-  hl.on("window.close", function(w)
+  handlers.on("window.close", function(w)
     -- Retire the address first, synchronously: the deferred pass below must
     -- not see a closed window still counted as a member this scene placed.
     require("hypr.scene.deck_provider").forget(w and w.address)

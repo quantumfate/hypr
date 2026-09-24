@@ -1,3 +1,4 @@
+local handlers = require("hypr.lib.handlers")
 local dofus_launch = require("hypr.services.dofus.launch")
 local common = require("hypr.services.dofus.common")
 local team = require("hypr.services.dofus.team")
@@ -139,7 +140,7 @@ hyprfocus_binds.attribute(
 -- is the same nine times out of ten.
 ---@type boolean?
 local admitted
-hl.on("window.active", function()
+handlers.on("window.active", function()
   local wanted = on_dofus() or on_dofus_overlay()
   if wanted == admitted then
     return

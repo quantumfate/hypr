@@ -743,7 +743,26 @@ menu() { # $1 = prompt, choices on stdin -> the chosen line on stdout
 
 FZF_PICK_OPTS=(--prompt=" Project " --reverse --no-preview --height=100%)
 
-fzf_pick() { list | cut -f1 | fzf "${FZF_PICK_OPTS[@]}"; }
+# Every project that has at least one live window right now, one per line.
+# A project IS its windows, so "open" is a question for the compositor, not
+# for any remembered set.
+open_projects() {
+    command -v hyprctl >/dev/null 2>&1 || return 0
+    hyprctl clients -j 2>/dev/null | jq -r --arg p "$CLASS_PREFIX" '
+        .[] | .class | select(startswith($p)) | ltrimstr($p)' | sort -u
+}
+
+# The picker opens projects; it does not switch between the ones already
+# open. Those are on the bar, which shows what is running and which is
+# focused, and clicking one is how you go to it -- so listing them here as
+# well would be offering the same thing twice, and the list a picker is most
+# useful with is the one it can actually act on.
+fzf_pick() {
+    local open
+    open=$(open_projects)
+    list | cut -f1 | { [[ -n $open ]] && grep -Fxv -f <(printf '%s\n' "$open") || cat; } |
+        fzf "${FZF_PICK_OPTS[@]}"
+}
 
 # One inline-picker spawner for every picker (project, scope, window): one
 # kitty window classed `Proj-picker`, running `$SELF <subcmd> --inline <args>`
@@ -824,6 +843,17 @@ store_scope_names() { # $1 = project name
     store_project "$1" | jq -r '.scopes // {} | keys[]'
 }
 
+# A project's declared scopes that are not already open: same rule as the
+# project picker, one level down. A live scope is a tab you reach with the
+# project's own keys, not something to spawn a second time.
+unopened_scope_names() { # $1 = project name
+    local name=$1 class live
+    class=$(class_for "$name")
+    live=$(live_windows "$class" | cut -f1 | sort -u)
+    store_scope_names "$name" |
+        { [[ -n $live ]] && grep -Fxv -f <(printf '%s\n' "$live") || cat; }
+}
+
 # Opens the FOCUSED project's declared scope <name>: focuses it if a
 # `slot:<name>` window is already live, otherwise spawns it with the scope's
 # own command and tags it — joining the group by construction, since it
@@ -859,7 +889,7 @@ launch_inline_scope_picker() { # $1 = project name
 
 pick_scope() { # $1 = project name (resolved by the caller, before the picker spawned)
     local name=${1:?pick-scope: project name required} choice own_addr addr
-    choice=$(store_scope_names "$name" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name scope ") || exit 0
+    choice=$(unopened_scope_names "$name" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name scope ") || exit 0
     [[ -n $choice ]] || exit 0
     # Before `scope_open` moves focus off this window — see `own_window_address`.
     own_addr=$(own_window_address) || true

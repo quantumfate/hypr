@@ -23,6 +23,7 @@
 --
 -- This file connects those to Hyprland's events, plus decision-record logging
 -- (LEO-352) and mode-scoped binding admission on workspace arrival.
+local handlers = require("hypr.lib.handlers")
 local spec_lib = require("hypr.scene.spec")
 local companion = require("hypr.scene.companion")
 local identify = require("hypr.scene.identify")
@@ -961,7 +962,7 @@ for scene_name, spec in pairs(specs) do
   end
 end
 
-hl.on("window.open", function(w)
+handlers.on("window.open", function(w)
   -- A window arriving fullscreen on a scene whose design does not allow it
   -- is cleared before it is ever laid out: the same "windows on ordinary
   -- scenes do not maximise" contract the focus reconciliation enforces.
@@ -1075,7 +1076,7 @@ local function keep_focus_in_column(w, scene_name)
   end
 end
 
-hl.on("window.close", function(w)
+handlers.on("window.close", function(w)
   local name = w and scene_for(w)
   local fields = window_fields(w, name)
   fields.stage = "leave"
@@ -1119,7 +1120,7 @@ end)
 -- A cross-workspace move is a map into the destination in law: the window
 -- becomes the destination scene's. Deliberately narrow — a move into one
 -- scene must not re-converge companions for every other one unnecessarily.
-hl.on("window.move_to_workspace", function(w)
+handlers.on("window.move_to_workspace", function(w)
   -- A remembered spawn source that left its workspace can no longer be
   -- returned to; clear it before the move re-evaluates the scene.
   if w and w.address and w.workspace then
@@ -1220,7 +1221,7 @@ local function is_scene_member(w)
   return spec ~= nil and spec_lib.block_for(spec, w.class, w.tags) ~= nil
 end
 
-hl.on("window.active", function(w)
+handlers.on("window.active", function(w)
   if w and w.group then
     group_adapters.record_focus(grouping.group_key(w), w.address)
   end
@@ -1287,11 +1288,11 @@ local function sweep_docks()
   dock_publish.sweep(keep)
 end
 
-hl.on("monitor.focused", function()
+handlers.on("monitor.focused", function()
   pcall(sweep_docks)
 end)
 
-hl.on("workspace.active", function()
+handlers.on("workspace.active", function()
   pcall(sweep_docks)
   keep_off_ignored(nil)
   -- A scene workspace created after the last apply (or after its output
