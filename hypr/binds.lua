@@ -883,7 +883,9 @@ submap.tree({
     bind.resize_entry("l", 20, 0, { config.tertiary_mod }),
     bind.resize_entry("j", 0, -20, { config.tertiary_mod }),
     bind.resize_entry("k", 0, 20, { config.tertiary_mod }),
-    { key = "e", desc = "Cycle the workspace layout", stay = true, action = cycle_workspace_layout },
+    -- No layout key here: `SUPER+x` at the root already cycles the workspace
+    -- layout, and a second key for the same action is one more thing the
+    -- cheatsheet has to explain without offering anything new.
   },
 })
 

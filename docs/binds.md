@@ -41,21 +41,21 @@ just binds-doc
 | `XF86MonBrightnessUp`      | Brightness up                                       | system               |
 | `mouse:274`                | Dofus: press current member (middle click)          | contextual           |
 | `up`                       | Dofus: press current member                         | contextual           |
-| `ALT+TAB`                  | Alt-tab: next window                                |                      |
+| `ALT+TAB`                  | Alt-tab: next window                                | system               |
 | `ALT+XF86AudioLowerVolume` | Media player volume down                            | system               |
 | `ALT+XF86AudioRaiseVolume` | Media player volume up                              | system               |
-| `ALT+p`                    | Execute hyprpicker to extract hex code              |                      |
-| `ALT+SUPER+F`              | Fullscreen window                                   |                      |
-| `ALT+SUPER+T`              | Toggle floating                                     |                      |
-| `ALT+SUPER+X`              | Maximize window                                     |                      |
-| `ALT+SUPER+m`              | Minimize Window                                     |                      |
-| `ALT+SUPER+mouse:272`      | Move a window with left click                       |                      |
-| `CTRL+SUPER+e`             | Open the power menu (wlogout)                       |                      |
+| `ALT+p`                    | Execute hyprpicker to extract hex code              | system               |
+| `ALT+SUPER+F`              | Fullscreen window                                   | system               |
+| `ALT+SUPER+T`              | Toggle floating                                     | system               |
+| `ALT+SUPER+X`              | Maximize window                                     | system               |
+| `ALT+SUPER+m`              | Minimize Window                                     | system               |
+| `ALT+SUPER+mouse:272`      | Move a window with left click                       | system               |
+| `CTRL+SUPER+e`             | Open the power menu (wlogout)                       | system               |
 | `CTRL+SUPER+j`             | Scroll this column to the next thing                | system               |
 | `CTRL+SUPER+k`             | Scroll this column to the previous thing            | system               |
 | `SHIFT+left`               | Dofus: previous team member                         | contextual           |
 | `SHIFT+right`              | Dofus: next team member                             | contextual           |
-| `SHIFT+ALT+TAB`            | Alt-tab: previous window                            |                      |
+| `SHIFT+ALT+TAB`            | Alt-tab: previous window                            | system               |
 | `SHIFT+CTRL+SUPER+escape`  | Modes: return to neutral                            | system               |
 | `SHIFT+SUPER+TAB`          | Workspace: Previous on this monitor                 | system               |
 | `SHIFT+SUPER+ampersand`    | Move focused window to workspace & on this monitor  | system               |
@@ -98,7 +98,7 @@ just binds-doc
 | `SUPER+plus`               | Workspace + on this monitor                         | system               |
 | `SUPER+r`                  | Open Application Launcher                           | system               |
 | `SUPER+return`             | Open the Terminal                                   | system               |
-| `SUPER+semicolon`          | Close focused window (or its whole group)           |                      |
+| `SUPER+semicolon`          | Close focused window (or its whole group)           | system               |
 | `SUPER+slash`              | Show keybind cheatsheet                             | system               |
 | `SUPER+space`              | Which-key…                                          | system               |
 | `SUPER+t`                  | Open a project (picker)                             | system               |
@@ -110,11 +110,11 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Cancel                                        |                      |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Cancel                                        | system               |
+| `escape`       | Leave this submap, back one level             | system               |
 | `return`       | Pick selected window                          |                      |
-| `SHIFT+escape` | Cancel (reverse)                              |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Cancel (reverse)                              | system               |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 | `SHIFT+return` | Pick selected window (reverse)                |                      |
 
 ## `applications` submap
@@ -126,13 +126,13 @@ just binds-doc
 | `b`            | Open the Browser                              |                      |
 | `c`            | Open Calculator                               |                      |
 | `d`            | Open Zen Browser media profile                |                      |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `f`            | Open Yazi                                     |                      |
 | `m`            | Open Proton Pass                              |                      |
 | `p`            | Open Shelly                                   |                      |
 | `s`            | Open Shelly                                   |                      |
 | `CTRL+d`       | Open the dev Browser                          |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `configuration` submap
 
@@ -141,9 +141,9 @@ just binds-doc
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
 | `b`            | Open Bluetui                                  |                      |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `v`            | Open Wiremix                                  |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `dofus` submap
 
@@ -151,19 +151,19 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `a`            | Ankama launcher                               |                      |
-| `c`            | Show focused window class                     |                      |
-| `d`            | Toggle launch-on-open                         |                      |
-| `escape`       | Leave this submap, back one level             |                      |
-| `l`            | Assign character classes                      |                      |
-| `n`            | Rename focused window                         |                      |
-| `o`            | Show roster                                   |                      |
-| `p`            | Copy settings to all accounts                 |                      |
-| `r`            | Reload team store                             |                      |
-| `s`            | Toggle swap                                   |                      |
-| `t`            | Open team selector                            |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
-| `SHIFT+s`      | Selected team                                 |                      |
+| `a`            | Ankama launcher                               | scene: dofus         |
+| `c`            | Show focused window class                     | scene: dofus         |
+| `d`            | Toggle launch-on-open                         | scene: dofus         |
+| `escape`       | Leave this submap, back one level             | system               |
+| `l`            | Assign character classes                      | scene: dofus         |
+| `n`            | Rename focused window                         | scene: dofus         |
+| `o`            | Show roster                                   | scene: dofus         |
+| `p`            | Copy settings to all accounts                 | scene: dofus         |
+| `r`            | Reload team store                             | scene: dofus         |
+| `s`            | Toggle swap                                   | scene: dofus         |
+| `t`            | Open team selector                            | scene: dofus         |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
+| `SHIFT+s`      | Selected team                                 | scene: dofus         |
 
 ## `focus` submap
 
@@ -171,11 +171,11 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `f`            | Start work                                    |                      |
 | `i`            | Focus mode status                             |                      |
 | `s`            | Back to neutral                               |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `layout` submap
 
@@ -183,9 +183,9 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `s`            | scrolling…                                    |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `layout-scrolling` submap
 
@@ -194,12 +194,12 @@ just binds-doc
 | Key            | Does                                             | Where it should live |
 | -------------- | ------------------------------------------------ | -------------------- |
 | `equal`        | Scrolling: widen the active column               |                      |
-| `escape`       | Leave this submap, back one level                |                      |
+| `escape`       | Leave this submap, back one level                | system               |
 | `f`            | Scrolling: fit the active column to the viewport |                      |
 | `h`            | Scrolling: move window to the previous column    |                      |
 | `l`            | Scrolling: move window to the next column        |                      |
 | `minus`        | Scrolling: narrow the active column              |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap    |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap    | system               |
 
 ## `logs` submap
 
@@ -210,7 +210,7 @@ just binds-doc
 | `a`            | Audit / denials                               |                      |
 | `b`            | This boot, from the top                       |                      |
 | `e`            | Errors this boot                              |                      |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `f`            | Live journal                                  |                      |
 | `g`            | Go to the logs workspace                      |                      |
 | `h`            | hyprfocus decisions                           |                      |
@@ -219,7 +219,7 @@ just binds-doc
 | `p`            | Previous boot                                 |                      |
 | `w`            | Warnings this boot                            |                      |
 | `x`            | Close all log sessions                        |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `modes` submap
 
@@ -227,11 +227,11 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `g`            | Enter Gaming                                  |                      |
 | `s`            | Enter Study                                   |                      |
 | `w`            | Enter Work                                    |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `obsidian` submap
 
@@ -239,11 +239,11 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `n`            | New note                                      |                      |
 | `s`            | Vault status                                  |                      |
 | `t`            | Tag tree                                      |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `pokemon` submap
 
@@ -251,10 +251,10 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `l`            | Open the left Pokemon media window            |                      |
 | `r`            | Open the right Pokemon media window           |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `project` submap
 
@@ -262,14 +262,14 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `n`            | Focus the active project's nvim window        |                      |
 | `o`            | Open a project scope (picker)                 |                      |
 | `p`            | Open a project (its default window)           |                      |
 | `r`            | Focus the active project's run window         |                      |
 | `y`            | Focus the active project's yazi window        |                      |
 | `z`            | Focus the active project's zsh window         |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 | `SHIFT+k`      | Kill the focused project (all its windows)    |                      |
 
 ## `screen-record` submap
@@ -278,10 +278,10 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `o`            | Record current output (again to stop)         |                      |
 | `r`            | Record a region (again to stop)               |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `screen-shot` submap
 
@@ -289,11 +289,11 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `o`            | Screenshot current output                     |                      |
 | `r`            | Screenshot a selected region                  |                      |
 | `w`            | Screenshot current window                     |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `screencapture` submap
 
@@ -301,10 +301,10 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `r`            | Screen record…                                |                      |
 | `s`            | Screenshot…                                   |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `shelf` submap
 
@@ -314,35 +314,35 @@ just binds-doc
 | -------------- | --------------------------------------------- | -------------------- |
 | `a`            | Ankama Launcher                               |                      |
 | `c`            | CopyQ                                         |                      |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `k`            | ckb-next                                      |                      |
 | `l`            | Lutris                                        |                      |
 | `m`            | Spotify                                       |                      |
 | `s`            | Signal                                        |                      |
 | `t`            | Steam                                         |                      |
 | `v`            | Vesktop                                       |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `shell` submap
 
 14 binds.
 
-| Key            | Does                                          | Where it should live |
-| -------------- | --------------------------------------------- | -------------------- |
-| `b`            | Toggle notifications                          |                      |
-| `c`            | Open the Control Centre                       |                      |
-| `d`            | Toggle do-not-disturb                         |                      |
-| `escape`       | Leave this submap, back one level             |                      |
-| `f`            | Focus mode…                                   |                      |
-| `h`            | IPC help                                      |                      |
-| `i`            | Theme info                                    |                      |
-| `m`            | Toggle system monitor                         |                      |
-| `n`            | Next wallpaper                                |                      |
-| `p`            | Previous wallpaper                            |                      |
-| `t`            | Cycle theme                                   |                      |
-| `u`            | Open the System Center                        |                      |
-| `x`            | Diagnose window placement                     |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| Key            | Does                                          | Where it should live                         |
+| -------------- | --------------------------------------------- | -------------------------------------------- |
+| `b`            | Toggle notifications                          | tree: shell                                  |
+| `c`            | Open the Control Centre                       | tree: shell                                  |
+| `d`            | Toggle do-not-disturb                         | tree: shell                                  |
+| `escape`       | Leave this submap, back one level             | system                                       |
+| `f`            | Focus mode…                                   | tree: focus (door)                           |
+| `h`            | IPC help                                      | tree: shell                                  |
+| `i`            | Theme info                                    | tree: theme                                  |
+| `m`            | Toggle system monitor                         | tree: shell                                  |
+| `n`            | Next wallpaper                                | tree: theme                                  |
+| `p`            | Previous wallpaper                            | tree: theme                                  |
+| `t`            | Cycle theme                                   | tree: theme                                  |
+| `u`            | Open the System Center                        | tree: shell                                  |
+| `x`            | Diagnose window placement                     | dev-only — does not belong beside daily keys |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system                                       |
 
 ## `terminal` submap
 
@@ -350,47 +350,46 @@ just binds-doc
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `escape`       | Leave this submap, back one level             |                      |
+| `escape`       | Leave this submap, back one level             | system               |
 | `return`       | Open the Terminal                             |                      |
 | `s`            | Open a project on its shell window            |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 | `SUPER+f`      | Open the floating Terminal                    |                      |
 
 ## `which` submap
 
 14 binds.
 
-| Key            | Does                                          | Where it should live |
-| -------------- | --------------------------------------------- | -------------------- |
-| `a`            | Applications                                  |                      |
-| `c`            | Configuration                                 |                      |
-| `d`            | Dofus                                         | contextual           |
-| `escape`       | Leave this submap, back one level             |                      |
-| `k`            | Toggle keyboard layout                        |                      |
-| `m`            | Layout                                        |                      |
-| `n`            | Pokemon                                       |                      |
-| `p`            | Projects                                      |                      |
-| `q`            | Shell / Quickshell                            |                      |
-| `r`            | Window management                             |                      |
-| `s`            | Screen capture                                |                      |
-| `t`            | Terminal                                      |                      |
-| `w`            | Shelves                                       |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| Key            | Does                                          | Where it should live           |
+| -------------- | --------------------------------------------- | ------------------------------ |
+| `a`            | Applications                                  | tree: applications (door)      |
+| `c`            | Configuration                                 | tree: configuration (door)     |
+| `d`            | Dofus                                         | contextual                     |
+| `escape`       | Leave this submap, back one level             | system                         |
+| `k`            | Toggle keyboard layout                        |                                |
+| `m`            | Layout                                        | tree: layout (door)            |
+| `n`            | Pokemon                                       | tree: pokemon (door)           |
+| `p`            | Projects                                      | tree: project (door)           |
+| `q`            | Shell / Quickshell                            | tree: shell (door)             |
+| `r`            | Window management                             | tree: window-management (door) |
+| `s`            | Screen capture                                | tree: screencapture (door)     |
+| `t`            | Terminal                                      | tree: terminal (door)          |
+| `w`            | Shelves                                       | tree: shelf (door)             |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system                         |
 
 ## `window-management` submap
 
-11 binds.
+10 binds.
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
-| `e`            | Cycle the workspace layout                    |                      |
-| `escape`       | Leave this submap, back one level             |                      |
-| `h`            | Resize vertically by -10                      |                      |
-| `j`            | Resize horizontally by -10                    |                      |
-| `k`            | Resize horizontally by 10                     |                      |
-| `l`            | Resize vertically by 10                       |                      |
-| `ALT+h`        | Resize vertically by -20                      |                      |
-| `ALT+j`        | Resize horizontally by -20                    |                      |
-| `ALT+k`        | Resize horizontally by 20                     |                      |
-| `ALT+l`        | Resize vertically by 20                       |                      |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap |                      |
+| `escape`       | Leave this submap, back one level             | system               |
+| `h`            | Resize vertically by -10                      | system               |
+| `j`            | Resize horizontally by -10                    | system               |
+| `k`            | Resize horizontally by 10                     | system               |
+| `l`            | Resize vertically by 10                       | system               |
+| `ALT+h`        | Resize vertically by -20                      | system               |
+| `ALT+j`        | Resize horizontally by -20                    | system               |
+| `ALT+k`        | Resize horizontally by 20                     | system               |
+| `ALT+l`        | Resize vertically by 20                       | system               |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
