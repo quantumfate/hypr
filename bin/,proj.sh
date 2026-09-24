@@ -585,9 +585,9 @@ spawn_window() { # $1 = class, $2 = role, $3 = path, $4 = workspace, $5 = explic
 # group (caught live: two `Proj-hypr` windows, the second carrying no
 # `slot:` tag at all). The failure is recorded and the loop goes on, and
 # `reconcile_slots` below gives the untagged window its role afterwards.
-spawn_missing() { # $1 = class, $2 = path, $3 = workspace, roles...
-    local class=$1 path=$2 workspace=$3
-    shift 3
+spawn_missing() { # $1 = class, $2 = path, $3 = workspace, $4 = role to land on ("" for none), roles...
+    local class=$1 path=$2 workspace=$3 land=$4
+    shift 4
     local role
     local -a unstamped=()
     for role in "$@"; do
@@ -597,6 +597,16 @@ spawn_missing() { # $1 = class, $2 = path, $3 = workspace, roles...
         fi
     done
     ((${#unstamped[@]})) && reconcile_slots "$class" "${unstamped[@]}"
+    # Focus once, at the end, on the tab that was actually asked for. The
+    # windows themselves map unfocused (`project-window-no-steal` in
+    # hypr/windowrules.lua): a project opens because a PROJECT was asked for,
+    # and letting each terminal take focus as it maps drags the keyboard
+    # along behind the spawn order and leaves it wherever the last one landed.
+    if [[ -n $land ]]; then
+        local addr
+        addr=$(live_windows "$class" | awk -F'\t' -v r="$land" '$1 == r { print $2; exit }')
+        [[ -n $addr ]] && focus_window "$addr"
+    fi
     return 0
 }
 
@@ -658,11 +668,11 @@ open() { # $1 = project name, $2 = window (role) to land on
     done
 
     if ((${#missing[@]})); then
-        (spawn_missing "$class" "$path" "$workspace" "${missing[@]}" &)
-        # A brand-new or partially-spawned project already took the workspace
-        # (and with it, focus) via the first spawn's `[workspace ...]` exec
-        # prefix — nothing further to do until spawn_missing's tagging lands,
-        # which runs backgrounded on purpose.
+        # Backgrounded on purpose: a keybind must not block on the spawn and
+        # tag polls. The `[workspace ...]` exec prefix still brings the
+        # workspace forward; focus is `spawn_missing`'s last act, on the role
+        # that was asked for, once the template has finished arriving.
+        (spawn_missing "$class" "$path" "$workspace" "$window" "${missing[@]}" &)
         return 0
     fi
 
@@ -875,6 +885,11 @@ scope_open() { # $1 = project name, $2 = scope name
     (
         spawn_window "$class" "$scope" "$path" "$workspace" "$cmd"
         stamp_slot "$class" "$scope"
+        # A scope window maps unfocused like every other project window
+        # (`project-window-no-steal`), and this one WAS asked for by name, so
+        # it is focused here rather than left for the user to go and find.
+        addr=$(live_windows "$class" | awk -F'\t' -v r="$scope" '$1 == r { print $2; exit }')
+        [[ -n $addr ]] && focus_window "$addr"
     ) &
 }
 

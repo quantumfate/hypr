@@ -451,6 +451,19 @@ require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
 local drawer = require("hypr.lib.drawer")
 drawer.rules(drawer.load())
 
+-- A project's windows open because `,proj.sh open` was asked for a PROJECT,
+-- not for each terminal in it. Four of them map in sequence, and every one
+-- that takes focus as it maps drags the keyboard along behind the spawn
+-- order, so the user lands on whichever window happened to be last rather
+-- than on the tab they asked for. `,proj.sh` focuses the requested role once,
+-- after the template has finished spawning; until then nothing in the group
+-- should be pulling focus on its own.
+hl.window_rule({
+  name = "project-window-no-steal",
+  match = { initial_class = "Proj-[A-Za-z0-9_-]+" },
+  no_initial_focus = true,
+})
+
 -- Hidden holding places stay silent. A window parked on one of these special
 -- workspaces is intentionally out of sight; it must not ask for focus or
 -- respond to activation requests, and if the special workspace itself becomes
