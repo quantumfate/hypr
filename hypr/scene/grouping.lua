@@ -75,16 +75,41 @@ function M.decide(spec, w, live)
   end
 
   if w.group then
+    -- A group block admits ONLY its own classes (AGENTS.md: "a group must
+    -- reject windows whose class is not explicitly allowed"), and `auto_group`
+    -- still swallows across blocks even after compiling the rules. Being in
+    -- *a* group was read as being in the *right* one, so two project blocks
+    -- opened on the same scene merged into one group of eight (spiked live)
+    -- and nothing ever ejected them. Check the company, not just membership.
+    local members = w.group.members
+    members = (members and members.title) and { members } or (members or {})
+    for _, member in ipairs(members) do
+      if member.address ~= w.address and group_block_for(spec, member.class, member.tags) ~= block then
+        return { action = "eject", window = w, block = block }
+      end
+    end
     return { action = "none", window = w, block = block } -- already a member
   end
 
+  -- A deck scene parks the members it is not showing on a hold workspace
+  -- (hypr/scene/deck.lua). That is a parking place for this scene's own
+  -- windows, not a different home, so a block-mate sitting there is still a
+  -- peer: matching only `w`'s own workspace meant a project whose windows the
+  -- deck held could never form its group at all -- each window opened alone,
+  -- was parked before any peer arrived, and every later peer looked at an
+  -- empty workspace (spiked live: four `Proj-hypr` windows, `grouped = 0`,
+  -- three of them on `special:deck-hold`).
   local ws_name = w.workspace.name
+  local hold = require("hypr.scene.deck_provider").HOLD
+  local function same_home(name)
+    return name == ws_name or name == hold
+  end
   local peers = {}
   for _, other in ipairs(live) do
     if
       other.address ~= w.address
       and other.workspace
-      and other.workspace.name == ws_name
+      and same_home(other.workspace.name)
       and group_block_for(spec, other.class, other.tags) == block
     then
       peers[#peers + 1] = other

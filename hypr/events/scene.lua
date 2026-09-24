@@ -33,8 +33,31 @@ local home = require("hypr.scene.home")
 local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
 local nav = require("hypr.lib.nav")
+local dock_publish = require("hypr.scene.dock_publish")
 
 local specs = spec_lib.load()
+
+-- Standing down (`M.quiet`). Maintenance on the applications a scene keeps
+-- alive -- wiping a browser profile, say -- means closing windows the scene
+-- exists to reopen, and the reconverge wins that race every time. The flag
+-- lives in the store rather than this state, so it survives the config
+-- reload such work usually involves, and it carries a DEADLINE rather than a
+-- boolean: a pause nobody lifts is a desk that has quietly stopped being a
+-- desk, so it expires on its own.
+local quiet_store = require("hypr.lib.store").define("scene-quiet")
+
+---The deadline while one stands, or nil. Expiry is read, never written: a
+---stale deadline is simply in the past.
+---@return number?
+local function quiet_until()
+  local ok, value = pcall(function()
+    return quiet_store:get("until")
+  end)
+  if not ok or type(value) ~= "number" then
+    return nil
+  end
+  return value > os.time() and value or nil
+end
 
 -- In-flight spawns, keyed workspace:companion-class, so a scan racing the
 -- companion's own open event never asks twice. Cleared when the companion
@@ -42,16 +65,56 @@ local specs = spec_lib.load()
 -- arms it, because the events are what a companion's presence rides anyway.
 local pending = {}
 
+-- Focus source to restore to after a spawned or launched companion maps. A
+-- chain of cap fills can spawn several companions in sequence; the source is
+-- the member that triggered the first spawn, inherited while the chain lasts.
+local spawn_source = {}
+
+-- How long to wait after a claimed companion maps before returning focus, so
+-- the new window has landed but the user has not had time to react.
+local FOCUS_RETURN_MS = 50
+
+---Whether a remembered spawn source is still alive on the workspace it was
+---recorded for.
+---@param entry table?
+---@return table?
+local function valid_source(entry)
+  if not entry then
+    return nil
+  end
+  local w = hl.get_window("address:" .. entry.address)
+  if not w or not w.workspace or w.workspace.name ~= entry.workspace then
+    return nil
+  end
+  return entry
+end
+
+-- Scene names the running mode admits. Forward-declared because companion
+-- convergence below is gated on it, and the definition (which reads the
+-- applied desk, with the pointer as the pre-apply fallback) lives further down.
+local active_scenes
+
 ---Keep the desk off the host's ignored monitors (`config.host.ignored_monitors`):
 ---a special shown there is re-shown on the primary, and a window standing on
 ---one of its plain workspaces moves, address-targeted, to the primary's active
 ---workspace.
+---
+---Relocating a special necessarily flashes focus through the primary (a
+---special shows on the focused monitor), which used to be left there: the user
+---was on DP-2, a shelf on the ignored panel pulled them to DP-1. The focus is
+---therefore put back on the monitor they were already on once the relocation
+---has landed, so the ignored panel is corrected without taking the desk with
+---it (LEO-423). A window move carries no such flash and is never followed by a
+---focus dispatch.
 ---@param w HL.Window?
 local function keep_off_ignored(w)
   local host = (rawget(_G, "config") or {}).host or {}
   local actions = nav.off_ignored(host.ignored_monitors, host.primary_monitor, hl.get_monitors() or {}, w)
+  local before = (hl.get_active_monitor() or {}).name
+  local relocated = false
   for _, action in ipairs(actions) do
     if action.show then
+      relocated = true
       hl.dispatch(hl.dsp.focus({ monitor = host.primary_monitor }))
       hl.dispatch(hl.dsp.workspace.toggle_special(action.show))
     else
@@ -69,6 +132,22 @@ local function keep_off_ignored(w)
       window = action.move,
       workspace = action.show or action.workspace,
       monitor = host.primary_monitor,
+    })
+  end
+  local restore = relocated and nav.restore_after_relocate(host.ignored_monitors, before, host.primary_monitor) or nil
+  if restore then
+    -- After the relocation has had a tick to land, not in the same breath as
+    -- it: the toggle targets the primary, and an immediate refocus would race
+    -- it. Bounded and one-shot, so it can never become a focus loop.
+    require("hypr.lib.hypr").oneshot(50, function()
+      hl.dispatch(hl.dsp.focus({ monitor = restore }))
+    end)
+    trace.emit({
+      stage = "admit",
+      event = "ignored_monitor_refocus",
+      decision = "restore",
+      reason = "relocating a special on an ignored monitor must not keep focus",
+      monitor = restore,
     })
   end
 end
@@ -165,6 +244,29 @@ local function converge_companions(name, exclude)
   if not spec then
     return
   end
+  -- Only a scene the running mode admits has companions. This used to run for
+  -- every spawn-carrying scene on every event and at load, so a withdrawn
+  -- scene's companion opened onto whatever workspace was focused — the code
+  -- scene's `zen-twilight` landing on dofus as a floating stray (LEO-423).
+  if not active_scenes()[name] then
+    return
+  end
+  -- Never judge presence while a mode apply is mid-shuffle. The apply holds,
+  -- restores and withdraws members in phases, and an event landing between
+  -- those phases sees the wrong admitted set — which is what closed the code
+  -- scene's browser while its members were merely being parked on the
+  -- holding place (a companion whose members come back must come back with
+  -- them). The apply reconverges every admitted scene itself once its phases
+  -- are done (M.reconverge).
+  if hyprfocus.applying() then
+    return
+  end
+  if quiet_until() then
+    -- Standing down: something outside the desk is working on these windows
+    -- (wiping a browser profile is the case this exists for), and the scene
+    -- would undo it by reopening every companion the moment it closed.
+    return
+  end
   local windows = hl.get_windows() or {}
   if exclude then
     local kept = {}
@@ -177,7 +279,29 @@ local function converge_companions(name, exclude)
   end
   for _, decision in ipairs(companion.filter(companion.decisions(spec, name, windows), pending)) do
     if decision.action == "spawn" then
+      local active = hl.get_active_window()
+      local source, source_ws
+      if active and active.workspace and active.workspace.name == name then
+        local block = spec_lib.block_for(spec, active.class, active.tags)
+        if block and block.spawns and #block.spawns > 0 then
+          source = active.address
+          source_ws = name
+          spawn_source[name] = { address = source, workspace = source_ws }
+        end
+      end
+      if not source then
+        local inherited = valid_source(spawn_source[name])
+        if inherited and inherited.workspace == name then
+          source = inherited.address
+          source_ws = inherited.workspace
+        end
+      end
       companion.expire(decision.pending_key, pending)
+      local entry = pending[decision.pending_key]
+      if entry and source then
+        entry.source = source
+        entry.workspace = source_ws
+      end
       trace.emit({
         stage = "interact",
         event = "companion_spawn",
@@ -186,18 +310,65 @@ local function converge_companions(name, exclude)
         scene = name,
       })
       hl.dispatch(hl.dsp.exec_cmd(("uwsm app -- %s"):format(decision.command)))
-    elseif decision.addresses then
-      for _, address in ipairs(decision.addresses) do
+    elseif decision.action == "adopt" then
+      -- The window is alive and parked; this scene takes it rather than
+      -- asking for one more. Stamping the slot first keeps the claim honest:
+      -- the move lands on the workspace the tag already says it belongs to.
+      local address = decision.address
+      local live = hl.get_windows() or {}
+      local w
+      for _, candidate in ipairs(live) do
+        if candidate.address == address then
+          w = candidate
+        end
+      end
+      if w then
+        local tag = identify.assign_for(spec, w, live, name)
+        if tag then
+          hl.dispatch(hl.dsp.window.tag({ window = "address:" .. address, tag = "+" .. tag }))
+        end
+        require("hypr.hyprfocus.hold").release(address)
+        hl.dispatch(hl.dsp.window.move({
+          window = "address:" .. address,
+          workspace = "name:" .. name,
+          follow = false,
+        }))
         trace.emit({
           stage = "interact",
-          event = "companion_close",
-          decision = "close",
-          reason = "companion reconverge",
+          event = "companion_adopted",
+          decision = "move",
+          reason = "a parked window of this class answers the spawn",
           scene = name,
           trace = address,
           address = address,
         })
-        hl.dispatch(hl.dsp.window.close({ window = "address:" .. address }))
+      end
+      pending[decision.pending_key] = nil
+    elseif decision.addresses then
+      -- Only addresses the compositor still knows. A companion that closed
+      -- on its own between the scan and this dispatch is already gone, and
+      -- asking the compositor to close it again is an error it reports on
+      -- screen — a handful of them at once on a mode swap, which is when the
+      -- most companions reconverge.
+      local live = {}
+      for _, w in ipairs(hl.get_windows() or {}) do
+        if w.address then
+          live[w.address] = true
+        end
+      end
+      for _, address in ipairs(decision.addresses) do
+        if live[address] then
+          trace.emit({
+            stage = "interact",
+            event = "companion_close",
+            decision = "close",
+            reason = "companion reconverge",
+            scene = name,
+            trace = address,
+            address = address,
+          })
+          hl.dispatch(hl.dsp.window.close({ window = "address:" .. address }))
+        end
       end
       pending[decision.pending_key] = nil
     end
@@ -211,16 +382,64 @@ end
 ---convergence (presence is derived) instead of stalling on a stale marker.
 ---@param key string
 local function claim_consume(key)
-  local n = pending[key]
-  if n == nil then
+  local entry = pending[key]
+  if type(entry) ~= "table" then
+    pending[key] = nil
     return
   end
-  n = type(n) == "number" and n or 1
-  if n <= 1 then
+  if entry.count <= 1 then
     pending[key] = nil
   else
-    pending[key] = n - 1
+    entry.count = entry.count - 1
   end
+end
+
+---After a launched or spawned window maps, return focus to the window that
+---was focused when the intent was armed, unless the user or another event has
+---already moved focus elsewhere.
+---@param w HL.Window the window that consumed the intent
+---@param intent Scene.PendingIntent the pending intent entry that was consumed
+local function restore_focus_after_claim(w, intent)
+  local source_addr = intent.source
+  if not source_addr then
+    return
+  end
+  -- Do not fight a mode transition: transition.lua suspends focus-on-activate
+  -- and raises a no_focus guard for the bracket, so opens already map unfocused.
+  local transition = require("hypr.lib.transition")
+  if transition.active() then
+    return
+  end
+  require("hypr.lib.hypr").oneshot(FOCUS_RETURN_MS, function()
+    if transition.active() then
+      return
+    end
+    local source = hl.get_window("address:" .. source_addr)
+    if not source then
+      return
+    end
+    if intent.workspace and source.workspace and source.workspace.name ~= intent.workspace then
+      return
+    end
+    local current = hl.get_active_window()
+    if current and current.address == source_addr then
+      return
+    end
+    -- If focus is no longer on the newly mapped window, something else (a
+    -- user click or a later event) has taken it; don't fight that.
+    if current and current.address ~= w.address then
+      return
+    end
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. source_addr }))
+    trace.emit({
+      stage = "interact",
+      event = "focus_restored",
+      decision = "refocus",
+      reason = "spawned/launched window stole focus; returned to source",
+      window = source_addr,
+      trace = source_addr,
+    })
+  end)
 end
 
 ---Claim the window an armed launch intent opened for (LEO-412): a pending
@@ -228,11 +447,12 @@ end
 ---intent scene's own workspace — with the profile shared, `+media-browser`
 ---pins the launched window to `name:media` before this pass sees it. The
 ---first intent a class match settles stamps the scene's free slot through
----`identify.assign_for` (scoped to the intent's workspace, so pokemon's two
----slots count siblings that were already claimed and sent home), which is
----what lets the block's slot claim and the home decision route the window to
----its scene. One open settles at most one intent; hand-opened windows with no
----intent armed are left untouched.
+---`identify.assign_for` (scoped to the intent's workspace, so a scene with
+---several slots — dofus and media sharing the profile — counts siblings that
+---were already claimed and sent home), which is what lets the block's slot
+---claim and the home decision route the window to its scene. One open settles
+---at most one intent; hand-opened windows with no intent armed are left
+---untouched.
 ---@param w HL.Window?
 local function claim_launched(w)
   if not (w and w.class) then
@@ -251,7 +471,9 @@ local function claim_launched(w)
     local ws_name = key:match("^(.-):")
     local spec = ws_name and specs[ws_name]
     local tag = spec and identify.assign_for(spec, w, live, ws_name)
+    local intent = pending[key]
     claim_consume(key)
+    restore_focus_after_claim(w, intent)
     if tag then
       hl.dispatch(hl.dsp.window.tag({ window = "address:" .. w.address, tag = "+" .. tag }))
       trace.emit(window_fields(w, ws_name, {
@@ -283,10 +505,11 @@ end
 
 ---Stamp the identity tag (LEO-364) `identify.assign` picks for `w`, if any:
 ---one of several same-class windows a scene's `slot` blocks need told apart
----(pokemon's two media browsers, `docs/scenes.md` "Ambiguous classes"). Runs
----before `scene_for` in the `window.open` handler so the rest of this pass
----sees the tag on `w` immediately — reading `w.tags` live, not through a
----rule the compositor would only evaluate at open (see identify.lua header).
+---(dofus and media sharing the one browser profile, `docs/scenes.md`
+---"Ambiguous classes"). Runs before `scene_for` in the `window.open` handler
+---so the rest of this pass sees the tag on `w` immediately — reading `w.tags`
+---live, not through a rule the compositor would only evaluate at open (see
+---identify.lua header).
 ---@param w HL.Window?
 local function stamp_identity(w)
   local spec = w and w.workspace and specs[w.workspace.name]
@@ -303,6 +526,22 @@ local function stamp_identity(w)
   }))
 end
 
+-- Bring a window the deck parked back to its scene's workspace. A group's
+-- members must share a workspace, so a `group:add` of a held window silently
+-- leaves it on the hold special and out of the group it just joined.
+---@param member HL.Window?
+---@param scene_name string
+local function unhold(member, scene_name)
+  local hold = require("hypr.scene.deck_provider").HOLD
+  if member and member.workspace and member.workspace.name == hold then
+    hl.dispatch(hl.dsp.window.move({
+      window = "address:" .. member.address,
+      workspace = "name:" .. scene_name,
+      follow = false,
+    }))
+  end
+end
+
 ---Execute one `grouping.decide` decision (LEO-369): `hl.dispatch`/`HL.Group`
 ---calls the spike verified live, never a loop or timer. `seed` folds every
 ---currently ungrouped block peer in the same pass, since a peer that opened
@@ -314,6 +553,21 @@ end
 ---@param w HL.Window?
 local function apply_group_decision(w)
   local spec = w and w.workspace and specs[w.workspace.name]
+  -- A window the deck has parked stands on a hold workspace, which owns no
+  -- scene -- so reading the spec from the workspace alone gave a held window
+  -- no grouping decision at all, and a block whose members were all parked
+  -- could never converge. `hypr/scene/compile.lua` stamps each window with
+  -- its scene (`scene:<name>`), so the parked ones still say where they
+  -- belong.
+  if not spec and w then
+    for _, tag in ipairs(w.tags or {}) do
+      local scene = tag:match("^scene:([^*]+)")
+      if scene and specs[scene] then
+        spec = specs[scene]
+        break
+      end
+    end
+  end
   if not spec then
     return
   end
@@ -340,6 +594,7 @@ local function apply_group_decision(w)
     end
 
     local anchor = ordered[1] or decision.members[1]
+    unhold(anchor, scene_name)
     hl.dispatch(hl.dsp.group.toggle({ window = "address:" .. anchor.address }))
     local seeded = hl.get_window("address:" .. anchor.address)
     if seeded and seeded.group then
@@ -348,6 +603,8 @@ local function apply_group_decision(w)
       for i = 2, #ordered do
         local member = hl.get_window("address:" .. ordered[i].address)
         if member then
+          unhold(member, scene_name)
+          member = hl.get_window("address:" .. ordered[i].address) or member
           pcall(function()
             seeded.group:add(member)
           end)
@@ -366,6 +623,10 @@ local function apply_group_decision(w)
     local target = hl.get_window("address:" .. decision.target.address)
     local joiner = hl.get_window("address:" .. w.address)
     if target and target.group and joiner then
+      unhold(target, scene_name)
+      unhold(joiner, scene_name)
+      target = hl.get_window("address:" .. decision.target.address) or target
+      joiner = hl.get_window("address:" .. w.address) or joiner
       -- Same reordering, for a window arriving after the group already
       -- exists: `HL.Group:add(window, index)` takes a 1-based insertion
       -- index (verified against Hyprland 0.56's Lua binding source), so the
@@ -412,12 +673,22 @@ local function apply_group_decision(w)
   end
 end
 
----Scene names admitted by the mode last applied, or an empty set before the
----first apply — a re-home never claims a window into a scene the mode is not
----currently running.
+---Scene names admitted by the mode last applied. Before the first apply
+---(config load, a reload) the applied desk is nil, so the pointer's effective
+---mode is resolved instead — otherwise a reload would converge no companions
+---at all, and the load-time pass exists to catch already-open members.
 ---@return table<string, true>
-local function active_scenes()
+active_scenes = function()
   local desk = hyprfocus.applied_desk()
+  if not desk then
+    local declaration = hyprfocus.declaration()
+    if declaration then
+      local ok, resolved = pcall(require("hypr.hyprfocus.resolve").resolve, declaration, hyprfocus.active())
+      if ok then
+        desk = resolved
+      end
+    end
+  end
   local out = {}
   for _, placement in ipairs(desk and desk.scenes or {}) do
     out[placement.name] = true
@@ -441,6 +712,23 @@ local function apply_stray_decision(w)
     return
   end
   hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address }))
+  -- Fit the floating stray to its monitor once the float has landed: a floated
+  -- tile keeps its tiled box, which is the whole screen on a wide monitor and
+  -- can sit off it. Address-targeted, no focus change, no noise.
+  local address = w.address
+  require("hypr.lib.hypr").oneshot(50, function()
+    local win = hl.get_window("address:" .. address)
+    if not win or not win.floating then
+      return
+    end
+    local monitor = win.monitor or (win.workspace and win.workspace.monitor)
+    if not monitor then
+      return
+    end
+    local width, height = strays.fit_size(monitor)
+    hl.dispatch(hl.dsp.window.resize({ window = "address:" .. address, x = width, y = height }))
+    hl.dispatch(hl.dsp.window.center({ window = "address:" .. address }))
+  end)
   trace.emit(window_fields(w, spec.name, {
     stage = "arrange",
     event = "stray_float",
@@ -507,9 +795,133 @@ end
 ---arms are N intents, each settled by its own matching open.
 ---@param name string scene name (the workspace `default_name` it owns)
 ---@param class string
+---Stand the scene engine down for `seconds` (default 300, capped at an hour),
+---or lift it with `false`. While quiet, companion convergence decides
+---nothing: windows a scene keeps alive can be closed, replaced or wiped
+---without being reopened under the hand doing the work.
+---@param seconds number|false
+---@return number? deadline
+function M.quiet(seconds)
+  if seconds == false then
+    quiet_store:set({ ["until"] = 0 })
+    trace.emit({
+      stage = "interact",
+      event = "scene_quiet",
+      decision = "resume",
+      reason = "the scene engine is converging again",
+    })
+    return nil
+  end
+  local span = math.min(math.max(tonumber(seconds) or 300, 1), 3600)
+  local deadline = os.time() + span
+  quiet_store:set({ ["until"] = deadline })
+  trace.emit({
+    stage = "interact",
+    event = "scene_quiet",
+    decision = "pause",
+    reason = ("standing down for %ds"):format(span),
+  })
+  return deadline
+end
+
+---Whether the engine is standing down right now, and until when.
+---@return number?
+function M.quiet_until()
+  return quiet_until()
+end
+
 function M.arm_launch(name, class)
   local key = companion.key(name, class)
-  pending[key] = (type(pending[key]) == "number" and pending[key] or 0) + 1
+  local active = hl.get_active_window()
+  local source, source_ws
+  -- A user-initiated launch records whatever window was focused on the scene
+  -- workspace as the source; unlike engine spawns, the active member may be in
+  -- a block that does not itself carry a spawn declaration.
+  if active and active.workspace and active.workspace.name == name then
+    source = active.address
+    source_ws = name
+    spawn_source[name] = { address = source, workspace = source_ws }
+  end
+  local existing = pending[key]
+  if type(existing) ~= "table" then
+    pending[key] = { count = 1, source = source, workspace = source_ws }
+  else
+    existing.count = existing.count + 1
+    if source then
+      existing.source = source
+      existing.workspace = source_ws
+    end
+  end
+end
+
+---Whether a scene lets its windows maximise or go fullscreen. The desk's
+---presentation rule: windows on ordinary scenes never sit maximized — an
+---app asserting that state (zen re-requests maximize after its surface is
+---remapped by a hold round trip, which read as "zen maximizes after a
+---scene swap") is reconciled away. The scenes where fullscreen IS the
+---design — the gaming mode's set (Dofus's capture region, the Steam scenes'
+---`fullscreen_state` window rules, the media scene) — are allowed, read
+---from the declaration's `modes.gaming` scene list so the gate stays
+---declaration-driven: a mode added to gaming extends the allowance without
+---code changes. A missing or unreadable declaration leaves the engine
+---silent rather than fighting every window on the desk.
+---@param scene_name string?
+---@return boolean
+function M.fullscreen_allowed(scene_name)
+  if not scene_name then
+    return false
+  end
+  local ok, declaration = pcall(hyprfocus.declaration)
+  if not ok or type(declaration) ~= "table" or type(declaration.modes) ~= "table" then
+    return true
+  end
+  local gaming = declaration.modes.gaming
+  if type(gaming) ~= "table" or type(gaming.scenes) ~= "table" then
+    return true
+  end
+  for _, placement in ipairs(gaming.scenes) do
+    if placement.name == scene_name then
+      return true
+    end
+  end
+  return false
+end
+
+---A window's fullscreen/maximize state cleared, address-targeted, no focus
+---dance. `w.fullscreen` is 1 (compositor fullscreen) or 2 (maximized); the
+---toggle with the matching mode is what lands the state back at 0. This is
+---only called from the `window.active` handler, so the toggle's implicit
+---target — the focused window — is the window being cleared, and the
+---dispatcher needs no window argument (the fork's shape, as the binds use
+---it).
+---@param w HL.Window?
+local function clear_fullscreen(w)
+  if not w or (w.fullscreen or 0) == 0 then
+    return
+  end
+  hl.dispatch(hl.dsp.window.fullscreen({
+    mode = w.fullscreen == 2 and "maximized" or "fullscreen",
+  }))
+  trace.emit({
+    stage = "arrange",
+    event = "fullscreen_cleared",
+    decision = "clear",
+    reason = "a non-gaming scene's window does not maximise",
+    trace = w.address,
+    fullscreen = w.fullscreen,
+  })
+end
+
+---Converge every admitted scene's companions in one pass. The mode apply
+---calls this once its phases are done: the per-event convergence is
+---suspended while the apply runs (see `converge_companions`), so this is
+---what respawns the companions of a scene the apply just restored —
+---deterministically at the end of the shuffle, not whenever an event
+---happens to land next.
+function M.reconverge()
+  for name in pairs(active_scenes()) do
+    converge_companions(name)
+  end
 end
 
 ---Leftmost live tile of the block matching `match`, or nil.
@@ -541,7 +953,7 @@ end
 -- derived, so converging once here converges structs already on the desk.
 for scene_name, spec in pairs(specs) do
   for _, block in ipairs(spec.blocks) do
-    if block.spawn then
+    if block.spawns then
       converge_companions(scene_name)
       break
     end
@@ -549,6 +961,23 @@ for scene_name, spec in pairs(specs) do
 end
 
 hl.on("window.open", function(w)
+  -- A window arriving fullscreen on a scene whose design does not allow it
+  -- is cleared before it is ever laid out: the same "windows on ordinary
+  -- scenes do not maximise" contract the focus reconciliation enforces.
+  guarded("clear_arrival_fullscreen", w, function()
+    -- Only when the arrival is the focused window (the toggle's implicit
+    -- target): the active handler covers every focus moment, so an
+    -- arriving-but-unfocused window is left for its own focus.
+    local active = hl.get_active_window()
+    if
+      (w.fullscreen or 0) ~= 0
+      and active
+      and active.address == w.address
+      and not M.fullscreen_allowed(M.active(w.workspace))
+    then
+      clear_fullscreen(w)
+    end
+  end)
   -- A class matching an armed launch intent is that launch settling: stamp
   -- its scene's free slot (LEO-412) before identity/home run, so the block's
   -- slot claim and the home decision route a pinned-then-claimed window home
@@ -616,6 +1045,14 @@ hl.on("window.close", function(w)
   if w and w.group then
     group_adapters.record_leave(grouping.group_key(w), w.address)
   end
+  -- A remembered spawn source that has closed can no longer be returned to.
+  if w and w.address then
+    for ws_name, entry in pairs(spawn_source) do
+      if entry.address == w.address then
+        spawn_source[ws_name] = nil
+      end
+    end
+  end
   -- A close event's payload may not say where the window stood, but the
   -- lifecycle is derived from live windows, so every spawn-carrying scene
   -- re-derives for free — there is no remembered book to consult. The
@@ -625,7 +1062,7 @@ hl.on("window.close", function(w)
   -- block's companions.
   for scene_name, spec in pairs(specs) do
     for _, block in ipairs(spec.blocks) do
-      if block.spawn then
+      if block.spawns then
         converge_companions(scene_name, w and w.address)
         break
       end
@@ -637,6 +1074,15 @@ end)
 -- becomes the destination scene's. Deliberately narrow — a move into one
 -- scene must not re-converge companions for every other one unnecessarily.
 hl.on("window.move_to_workspace", function(w)
+  -- A remembered spawn source that left its workspace can no longer be
+  -- returned to; clear it before the move re-evaluates the scene.
+  if w and w.address and w.workspace then
+    for ws_name, entry in pairs(spawn_source) do
+      if entry.address == w.address and w.workspace.name ~= entry.workspace then
+        spawn_source[ws_name] = nil
+      end
+    end
+  end
   -- A move into a slot scene is a map into it in law (see comment below):
   -- stamp identity here too, so a window moved in by hand still gets told
   -- apart from its same-class siblings.
@@ -665,7 +1111,7 @@ hl.on("window.move_to_workspace", function(w)
   guarded("converge_other_companions", w, function()
     for other_scene, spec in pairs(specs) do
       for _, block in ipairs(spec.blocks) do
-        if block.spawn then
+        if block.spawns then
           converge_companions(other_scene)
           break
         end
@@ -685,9 +1131,91 @@ end)
 -- `hypr/lib/nav.lua`'s `mod+h/l` reads this back, through
 -- `group_adapters`'s default `enter`, so entering a group next time lands
 -- here again instead of always on its first member.
+-- Windows the user floated deliberately (the `SUPER+ALT+T` toggle registers
+-- the address here); a member in this set is never re-tiled by the float
+-- reconciliation below, so a deliberate float stays until the user toggles
+-- it off. Session-only, keyed by address.
+local deliberate_floats = {}
+
+---Register/unregister a window as deliberately floated. The float toggle
+---bind calls this right after its dispatch; the window's own floating state
+---on the next event pass says which way the toggle went.
+---@param address string?
+function M.arm_float(address)
+  if address then
+    deliberate_floats[address] = true
+  end
+end
+
+---Clear the deliberate-float mark: the user toggled the window back.
+---@param address string?
+function M.disarm_float(address)
+  if address then
+    deliberate_floats[address] = nil
+  end
+end
+
+---Whether a window's class is a claimed block member of its workspace's
+---scene — the windows whose geometry the scene owns, and therefore the ones
+---a drag-float strands out of the layout (a dragged member never re-tiles on
+---its own: the layout has no float branch, and no float event exists to hook,
+---spiked live on this build).
+---@param w table?
+---@return boolean
+local function is_scene_member(w)
+  if not w or not w.workspace or not w.workspace.name then
+    return false
+  end
+  local scene = M.active(w.workspace)
+  if not scene then
+    return false
+  end
+  local spec = specs[scene]
+  return spec ~= nil and spec_lib.block_for(spec, w.class, w.tags) ~= nil
+end
+
 hl.on("window.active", function(w)
   if w and w.group then
     group_adapters.record_focus(grouping.group_key(w), w.address)
+  end
+  -- The fullscreen reconciliation: a window that arrived maximized or
+  -- fullscreen on a scene whose design does not allow it — zen re-requests
+  -- maximize after its surface is remapped by a hold round trip, which read
+  -- as "zen maximizes after a scene swap" — is cleared here and on every
+  -- focus, so an app that re-asserts loses every round. Deliberate toggles
+  -- (the maximize/fullscreen keybinds, via `M.arm_float`'s registry) are
+  -- never fought, nor are the gaming mode's scenes, where fullscreen is the
+  -- design.
+  if w and (w.fullscreen or 0) ~= 0 and w.workspace and w.workspace.name then
+    local scene_name = M.active(w.workspace)
+    if scene_name and not M.fullscreen_allowed(scene_name) and not deliberate_floats[w.address] then
+      clear_fullscreen(w)
+    end
+  end
+  -- The float reconciliation: a block member of the focused scene that is
+  -- floating on its own workspace is a drag artifact — the drag made the
+  -- compositor float it, and nothing else would ever put it back (the
+  -- layout sees no target, the strays executor only floats, nothing
+  -- re-tiles). Re-tile it address-targeted, no focus dance. Deliberate
+  -- floats (the keybind toggle) are marked and left alone until toggled
+  -- off; so are non-members, which is `strays` and pip territory.
+  if
+    w
+    and w.floating
+    and w.workspace
+    and w.workspace.name
+    and not deliberate_floats[w.address]
+    and is_scene_member(w)
+  then
+    hl.dispatch(hl.dsp.window.float({ window = "address:" .. w.address }))
+    trace.emit({
+      stage = "arrange",
+      event = "member_refloat",
+      decision = "tile",
+      reason = "a dragged block member re-tiles on focus",
+      scene = M.active(w.workspace.name),
+      trace = w.address,
+    })
   end
 end)
 
@@ -695,7 +1223,30 @@ end)
 -- trees (LEO-266). Arranging the workspace is not this file's job: the scene
 -- layout provider is asked by the compositor on every change and needs no
 -- event subscription (see "Hyprland primitives" in AGENTS.md).
+---Retire dock maps for monitors whose workspace no longer declares any.
+---
+---The publish itself rides the layout pass, which a monitor showing an
+---undeclared workspace (or an empty one) never runs -- so without this its
+---last map stands, and quickshell keeps placing isles against boxes that
+---belong to a scene now standing somewhere else entirely.
+local function sweep_docks()
+  local keep = {}
+  for _, monitor in ipairs(hl.get_monitors() or {}) do
+    local ws = monitor.active_workspace
+    local spec = ws and ws.name and specs[ws.name]
+    if monitor.name and spec and spec.docks then
+      keep[monitor.name] = true
+    end
+  end
+  dock_publish.sweep(keep)
+end
+
+hl.on("monitor.focused", function()
+  pcall(sweep_docks)
+end)
+
 hl.on("workspace.active", function()
+  pcall(sweep_docks)
   keep_off_ignored(nil)
   -- A scene workspace created after the last apply (or after its output
   -- appeared) still stands where it was made; stand it on its role's output.
@@ -703,6 +1254,15 @@ hl.on("workspace.active", function()
   local ws = hl.get_active_workspace()
   local scene_name = M.active(ws)
   if scene_name then
+    -- The bar owes this monitor the new scene's dock map NOW, synchronously:
+    -- the arrival recalc below is a focus dispatch, and an app re-activating
+    -- in the same breath (linear is the live case) bounces focus before it
+    -- lands — leaving the previous scene's dock docs under this scene, which
+    -- is the "bars wonky until a relog" report. The screen-frame isles are
+    -- correct immediately; block-docked isles rest until the recalc refines.
+    pcall(function()
+      require("hypr.scene.provider").publish_arrival(scene_name)
+    end)
     pcall(function()
       hyprfocus.apply_bindings(hyprfocus.active(), scene_name)
     end)

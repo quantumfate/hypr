@@ -12,33 +12,53 @@
 # Projects live in the store ($QF_STORE/projects.json, schema in the
 # quickshell repo, registry row in system-config/docs/stores.md): which
 # projects exist, where each one lives, and its window template are read
-# from there at runtime. The store is the source of truth; it is no longer a
-# metadata sidecar next to a filesystem scan. `sync` is the only thing that
-# still scans (the tms config's project roots + bookmarks, same definition
-# tms itself uses, plus each project's `.proj.toml`) — it populates the
-# store, it is not consulted on every `open`/`pick`/`list`. Run it after
-# adding, moving or renaming a repo, or after editing a `.proj.toml`:
+# from there at runtime. The store is hand-curated and nothing here
+# discovers projects: `,proj.sh add <name> [path]` is the one deliberate
+# "this directory is a project now" gesture, `drop` the way out, and
+# `sync` only refreshes what each stored project's own `.proj.toml`
+# declares (windows/workspace/scopes; metadata fields — kind/study/
+# priority — are left alone). The scan is gone along with the tms config
+# it read: a project exists because someone added it. Run `sync` after
+# editing a `.proj.toml`:
 #
 #   ,proj.sh sync
 #
 # Each window carries the class `Proj-<name>` (Hyprland matches classes as
 # regex, kept to [A-Za-z0-9_-]) plus a launch-time role tag (`slot:nvim`,
-# `slot:zsh`, `slot:run`, stamped by `stamp_slot`) so a
-# reopen can tell which template windows are already live.
+# `slot:yazi`, `slot:zsh`, `slot:run`, stamped by `stamp_slot`) so a reopen
+# can tell which template windows are already live. The template windows
+# are the project's tabs — one Hyprland group, one tab per role; yazi is
+# one of them, so a project has its file manager one tab away, and
+# quitting yazi ends that tab the way quitting any terminal does.
 #
-#   ,proj.sh pick [window]        fzf over the store's projects: a kitty
-#                                 window whose first screen IS fzf when
-#                                 there is no terminal to run it in already
+#   ,proj.sh pick [window]        fzf over the store's projects: one
+#                                 FLOATING kitty window on the code
+#                                 workspace whose first screen IS fzf
 #                                 (--inline: this process IS that window,
-#                                 used internally to re-exec into it)
+#                                 used internally to re-exec into it) — the
+#                                 `code` scene groups one `Proj-<name>`
+#                                 block per project, so a `Proj-picker`
+#                                 window matches no block and the engine's
+#                                 stray-float keeps it out of every group
 #   ,proj.sh open <name> [window] open a project by its store name, or
 #                                 focus/complete it if some of its windows
 #                                 are already open
+#   ,proj.sh open-one <name> <window>
+#                                 open (or focus) exactly one of a
+#                                 project's template windows, never the
+#                                 whole template
+#   ,proj.sh pick-window          fzf, inline, over the FOCUSED project's
+#                                 template windows; the chosen one is
+#                                 opened on its own (open-one, not `open`)
 #   ,proj.sh list                 name<TAB>path, one per line, from the store
-#   ,proj.sh sync                 rescan the tms roots + bookmarks and
-#                                 .proj.toml, and write path/windows/
-#                                 workspace into the store (metadata fields —
-#                                 kind/study/priority — are left alone)
+#   ,proj.sh add <name> [path]    deliberately make a directory a project:
+#                                 writes path/windows/workspace/scopes into
+#                                 the store from the repo's .proj.toml, or
+#                                 the defaults where it says nothing
+#   ,proj.sh sync                 refresh every stored project from its own
+#                                 .proj.toml (windows/workspace/scopes);
+#                                 discovers nothing — a directory that was
+#                                 never added stays invisible
 #   ,proj.sh kill [name]          close every window of a project (the
 #                                 focused one if name is omitted); a window
 #                                 running nvim is asked to quit gracefully
@@ -59,19 +79,18 @@
 #
 # --- scopes: a project's own working context, on demand -------------------
 #
-# Beyond the fixed nvim/zsh/run template, a project can declare named
+# Beyond the fixed nvim/yazi/zsh/run template, a project can declare named
 # scopes — a terminal with a command the project's own configuration
 # carries, "like scenes but for projects". Declared in `.proj.toml`'s
-# `[scopes]` table (repo root) or the tms config's
-# `[projects.<name>.scopes]`, one plain `name = "command"` per line, e.g.:
+# `[scopes]` table (repo root), one plain `name = "command"` per line, e.g.:
 #
 #   [scopes]
 #   test = "just test"
 #   logs = "journalctl --user -f"
 #
 # `sync` folds this into the store's `scopes` object the same way it folds
-# `windows`/`workspace` (later source wins, whole-table replace — see
-# `load_project_conf`). A scope's role tag is `slot:<name>`, the same
+# `windows`/`workspace` (whole-table replace — see `load_project_conf`). A
+# scope's role tag is `slot:<name>`, the same
 # `slot:` vocabulary the fixed template uses, so `open`/`focus`/`kill` never
 # need to know a window is a scope rather than a template role — the store
 # and the live tag are the only difference.
@@ -114,8 +133,7 @@ set -euo pipefail
 # The shared quantum-store directory (QF_STORE).
 QF_ROOT="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}"
 PROJECTS_JSON="$QF_ROOT/projects.json"
-TMS_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/tms/config.toml"
-TEMPLATE_WINDOWS=(nvim zsh run)
+TEMPLATE_WINDOWS=(nvim yazi zsh run)
 # Where a project window is mapped unless it asks for somewhere else. Both
 # hosts name workspace 1 "code"; a project overrides it with `workspace =`.
 DEFAULT_WORKSPACE=code
@@ -129,7 +147,7 @@ NVIM_SOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}/proj-nvim"
 die() {
     printf '%s: %s\n' "${0##*/}" "$1" >&2
     if command -v notify-send >/dev/null 2>&1; then
-        ,notify proj -u critical "" "$1" 2>/dev/null || true
+        ,notify project-manager "" "$1" -u critical 2>/dev/null || true
     fi
     exit 1
 }
@@ -167,12 +185,12 @@ store_field() { # $1 = name, $2 = jq filter over the project object
     store_project "$1" | jq -r "$2 // empty"
 }
 
-# --- toml (used only by `sync`) ------------------------------------------
+# --- toml (used only by `sync`/`add`) -------------------------------------
 
-# tms's toml is flat and hand-written, so a line scraper beats a toml parser
-# here — no extra runtime dependency for a handful of keys.
+# The .proj.toml is flat and hand-written, so a line scraper beats a toml
+# parser here — no extra runtime dependency for a handful of keys.
 
-section() { # $1 = file, $2 = table name, e.g. "projects.foo" ("" = top level)
+section() { # $1 = file, $2 = table name ("" = top level)
     [[ -f $1 ]] || return 0
     awk -v want="$2" '
     /^[[:space:]]*\[/ {
@@ -213,31 +231,26 @@ conf_kv() { # section body on stdin -> "key<TAB>value" per line
     sed -n 's/^[[:space:]]*\([A-Za-z0-9_.-]*\)[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1\t\2/p'
 }
 
-toml_array() { section "$TMS_CONFIG" "" | conf_array "$1"; }
-
-# {"name":"cmd",...} for a project's `[scopes]` (or `[projects.<n>.scopes]`)
-# body on stdin, or "{}" for a body that declares none.
+# {"name":"cmd",...} for a project's `[scopes]` body on stdin, or "{}" for a
+# body that declares none.
 scopes_json() {
     conf_kv | jq -R 'split("\t") | {(.[0]): .[1]}' | jq -sc 'add // {}'
 }
 
 # Resolves the window template, target workspace and declared scopes for one
-# project into PROJ_WINDOWS / PROJ_WORKSPACE / PROJ_SCOPES. Later sources
-# win, so the repo's own file overrides the central tms config.
+# project into PROJ_WINDOWS / PROJ_WORKSPACE / PROJ_SCOPES: what its own
+# .proj.toml declares, the defaults where it says nothing.
 PROJ_WINDOWS=()
 PROJ_WORKSPACE=""
 PROJ_SCOPES="{}"
-load_project_conf() { # $1 = project name, $2 = path
+load_project_conf() { # $1 = project path
     PROJ_WINDOWS=("${TEMPLATE_WINDOWS[@]}")
     PROJ_WORKSPACE=$DEFAULT_WORKSPACE
     PROJ_SCOPES="{}"
-    local body ws scopes_body sc
-    local -a bodies=() w=()
-    bodies+=("$(section "$TMS_CONFIG" "projects.$1")")
-    bodies+=("$(section "$2/.proj.toml" "")")
-    for body in "${bodies[@]}"; do
-        [[ -n $body ]] || continue
-        w=()
+    local body ws sc
+    local -a w=()
+    body=$(section "$1/.proj.toml" "")
+    if [[ -n $body ]]; then
         mapfile -t w < <(printf '%s\n' "$body" | conf_array windows)
         if ((${#w[@]})); then
             PROJ_WINDOWS=("${w[@]}")
@@ -246,115 +259,80 @@ load_project_conf() { # $1 = project name, $2 = path
         if [[ -n $ws ]]; then
             PROJ_WORKSPACE=$ws
         fi
-    done
-    # `[scopes]` is its own top-level table (repo `.proj.toml`) or
-    # `[projects.<n>.scopes]` (tms config) — read separately from the flat
-    # bodies above since `section()` only ever returns one named table.
-    for scopes_body in "$(section "$TMS_CONFIG" "projects.$1.scopes")" "$(section "$2/.proj.toml" "scopes")"; do
-        [[ -n $scopes_body ]] || continue
-        sc=$(printf '%s\n' "$scopes_body" | scopes_json)
-        [[ $sc != "{}" ]] && PROJ_SCOPES=$sc
-    done
+    fi
+    # `[scopes]` is its own top-level table — read separately from the flat
+    # body above since `section()` only ever returns one named table.
+    sc=$(section "$1/.proj.toml" "scopes" | scopes_json)
+    if [[ $sc != "{}" ]]; then
+        PROJ_SCOPES=$sc
+    fi
 }
 
-# The project scan: a project is a git repo under one of tms's roots (its own
-# definition, so tms and this stay in agreement), plus its bookmarks — the
-# same rule `,proj.sh` used before the store existed. Only `sync` calls this
-# now; nothing on the `open`/`pick`/`list` path scans the filesystem.
-scan() {
-    local -a excludes=()
-    local dir
-    while read -r dir; do
-        # ".git" is in tms's exclude list, but it is exactly what the scan
-        # matches on — excluding it would find nothing.
-        if [[ -n $dir && $dir != .git ]]; then
-            excludes+=(--exclude "$dir")
-        fi
-    done < <(toml_array excluded_dirs)
-
-    local path depth
-    while read -r path depth; do
-        [[ -d $path ]] || continue
-        # No --type filter: a linked worktree's .git is a file, not a directory.
-        fd --hidden --no-ignore --max-depth "$depth" \
-            "${excludes[@]}" '^\.git$' "$path" 2>/dev/null |
-            sed 's:/\.git/\?$::'
-    done < <(awk '
-    function flush() { if (path != "") print path, depth; path = ""; depth = 10 }
-    function quoted(   s) {
-      return (match($0, /"[^"]*"/)) ? substr($0, RSTART + 1, RLENGTH - 2) : ""
-    }
-    BEGIN                             { depth = 10 }
-    /^\[/                             { flush() }
-    /^[[:space:]]*path[[:space:]]*=/  { path = quoted() }
-    /^[[:space:]]*depth[[:space:]]*=/ { depth = $0; gsub(/[^0-9]/, "", depth) }
-    END                               { flush() }
-  ' "$TMS_CONFIG")
-
-    # … plus the bookmarks, which are plain directories.
-    toml_array bookmarks
+# Writes one project's template fields into the store document: its path
+# (re-pointed, so `add` on a moved repo relocates it), windows, workspace
+# and scopes — what the repo's own .proj.toml declares, the defaults where
+# it says nothing. Dashboard metadata (kind/study/priority) is kept for a
+# project already there and defaulted for a new one.
+fold_project() { # $1 = document, $2 = name, $3 = path -> new document on stdout
+    local doc=$1 name=$2 path=$3 windows_json workspace_json
+    load_project_conf "$path"
+    windows_json=$(printf '%s\n' "${PROJ_WINDOWS[@]}" | jq -R . | jq -sc .)
+    workspace_json=$(printf '%s' "$PROJ_WORKSPACE" | jq -R .)
+    printf '%s' "$doc" | jq -c \
+        --arg n "$name" --arg p "$path" \
+        --argjson w "$windows_json" --argjson ws "$workspace_json" --argjson sc "${PROJ_SCOPES}" '
+    .projects[$n] = (
+      (.projects[$n] // {kind: "repo", study: false, priority: 5})
+      + {path: $p, windows: $w, workspace: $ws, scopes: $sc}
+    )'
 }
 
-# name<TAB>path for every repo the scan finds, deduping basenames the same
-# way the pre-store scan did (parent/name once a basename collides).
-scan_named() {
-    scan | sed 's:/*$::' | sort -u | awk -F/ '
-    { name[NR] = $NF; path[NR] = $0; parent[NR] = $(NF-1); n = NR }
-    END {
-      for (i = 1; i <= n; i++) count[name[i]]++
-      for (i = 1; i <= n; i++)
-        printf "%s\t%s\n", (count[name[i]] > 1 ? parent[i] "/" name[i] : name[i]), path[i]
-    }' | sort
+# ,proj.sh add <name> [path]: the one deliberate way a project enters the
+# store. No scan runs anywhere in this script — a directory is a project
+# because someone named it one, so the picker's list stays exactly as long
+# as the person tending the store wants it.
+add() { # $1 = name, $2 = path (default: $PWD)
+    command -v jq >/dev/null 2>&1 || die "add: jq is required"
+    local name=${1:?add: project name required}
+    local path=${2:-$PWD}
+    if command -v readlink >/dev/null 2>&1; then
+        path=$(readlink -f "$path") || true
+    fi
+    if [[ ! -d $path ]]; then
+        die "add: not a directory, no project was added: $path"
+    fi
+    fold_project "$(store_read)" "$name" "$path" | jq . | store_write
+    printf 'add: %s -> %s\n' "$name" "$path"
 }
 
-# Rescans and writes path/windows/workspace into the store, one project at a
-# time. Dashboard metadata (kind/study/priority) is left untouched for a
-# project already in the store, and defaulted for one that is new. Nothing
-# is ever removed here: a repo the scan no longer finds just keeps its last
-# known path, which `sync`'s own report below flags as stale so a human
-# decides whether to drop it (`,proj.sh drop <name>`).
+# Refreshes every project already in the store from its own .proj.toml
+# (windows/workspace/scopes rewritten; kind/study/priority untouched). It
+# discovers nothing: a directory that was never added stays invisible, and
+# an entry whose path no longer resolves is reported — never pruned — so a
+# human decides whether to drop it (`,proj.sh drop <name>`).
 sync() {
     command -v jq >/dev/null 2>&1 || die "sync: jq is required"
-    local doc name path added=0 updated=0 stale=0
+    local doc name path refreshed=0 stale=0
+    local -a names=()
     doc=$(store_read)
-    while IFS=$'\t' read -r name path; do
-        [[ -n $name && -n $path ]] || continue
-        load_project_conf "$name" "$path"
-        local windows_json workspace_json existing
-        windows_json=$(printf '%s\n' "${PROJ_WINDOWS[@]}" | jq -R . | jq -sc .)
-        workspace_json=$(printf '%s' "$PROJ_WORKSPACE" | jq -R .)
-        existing=$(printf '%s' "$doc" | jq -c --arg n "$name" '.projects[$n] // empty')
-        if [[ -z $existing ]]; then
-            added=$((added + 1))
-        else
-            updated=$((updated + 1))
+    mapfile -t names < <(printf '%s' "$doc" | jq -r '.projects | keys[]')
+    for name in "${names[@]}"; do
+        path=$(printf '%s' "$doc" | jq -r --arg n "$name" '.projects[$n].path // empty')
+        if [[ -z $path ]]; then
+            printf 'sync: %s has no path yet (use: ,proj.sh add %s <path>)\n' "$name" "$name" >&2
+            continue
         fi
-        doc=$(printf '%s' "$doc" | jq -c \
-            --arg n "$name" --arg p "$path" \
-            --argjson w "$windows_json" --argjson ws "$workspace_json" --argjson sc "${PROJ_SCOPES}" '
-        .projects[$n] = (
-          (.projects[$n] // {kind: "repo", study: false, priority: 5})
-          + {path: $p, windows: $w, workspace: $ws, scopes: $sc}
-        )')
-    done < <(scan_named)
-
-    # Report (never prune): a stored project whose path no longer resolves.
-    local stale_names=""
-    while read -r name; do
-        path=$(printf '%s' "$doc" | jq -r --arg n "$name" '.projects[$n].path')
         if [[ ! -d $path ]]; then
             stale=$((stale + 1))
-            stale_names="$stale_names  $name -> $path (missing)\n"
+            printf 'sync: %s -> %s (missing; use: ,proj.sh drop %s)\n' "$name" "$path" "$name" >&2
+            continue
         fi
-    done < <(printf '%s' "$doc" | jq -r '.projects | keys[]')
+        doc=$(fold_project "$doc" "$name" "$path")
+        refreshed=$((refreshed + 1))
+    done
 
     printf '%s\n' "$doc" | jq . | store_write
-    printf 'sync: %d added, %d updated\n' "$added" "$updated"
-    if ((stale > 0)); then
-        printf 'sync: %d stale entr%s (path no longer exists — nothing removed automatically):\n' \
-            "$stale" "$([[ $stale == 1 ]] && echo y || echo ies)"
-        printf '%b' "$stale_names"
-    fi
+    printf 'sync: %d refreshed\n' "$refreshed"
 }
 
 drop() { # $1 = name — remove one project from the store by hand
@@ -390,9 +368,15 @@ hypr_dispatch() { # $1 = lua expression returning a dispatcher
 # Runs backgrounded — the exec dispatch above returns before the window
 # maps, so this polls for it — and `open` must not block a keybind on that
 # poll.
+# How long `stamp_slot` waits for a launch to map. A kitty window behind
+# `uwsm app` and an interactive shell rc is routinely slower than the two
+# seconds this used to allow, and a timeout here used to cost the rest of the
+# template (see `spawn_missing`), so the budget is generous on purpose.
+STAMP_TRIES=160
+
 stamp_slot() { # $1 = class, $2 = role
     local class=$1 role=$2 addr tries
-    for ((tries = 0; tries < 40; tries++)); do
+    for ((tries = 0; tries < STAMP_TRIES; tries++)); do
         addr=$(hyprctl clients -j 2>/dev/null | jq -r --arg c "$class" '
             [.[] | select(.class == $c) | select((.tags // []) | map(startswith("slot:")) | any | not)]
             | last | .address // empty')
@@ -503,32 +487,52 @@ reassert_focus_after_picker_closes() { # $1 = picker's own address, $2 = target 
 }
 
 # The live address of a project's <role> window (or its template's first,
-# same default `open` uses) — what the picker just landed the user on, so
-# `reassert_focus_after_picker_closes` knows what to re-assert.
+# same default `open` uses), waiting a bounded beat for a spawn that is
+# still mapping — the exec dispatch returns long before the window does, so
+# a picker needs this to name what it just asked for. Nonzero when the role
+# never shows: no address, no reassert-focus dance scheduled.
 current_role_address() { # $1 = project name, $2 = window (role), optional
-    local name=$1 window=${2-} class
+    local name=$1 window=${2-} class addr tries
     class=$(class_for "$name")
     local -a windows=()
     mapfile -t windows < <(store_project "$name" | jq -r '.windows[]')
-    ((${#windows[@]})) || windows=("${TEMPLATE_WINDOWS[@]}")
+    if ((${#windows[@]} == 0)); then
+        windows=("${TEMPLATE_WINDOWS[@]}")
+    fi
     window=${window:-${windows[0]}}
-    live_windows "$class" | awk -F'\t' -v r="$window" '$1 == r { print $2; exit }'
+    for ((tries = 0; tries < 40; tries++)); do
+        addr=$(live_windows "$class" | awk -F'\t' -v r="$window" '$1 == r { print $2; exit }')
+        if [[ -n $addr ]]; then
+            printf '%s\n' "$addr"
+            return 0
+        fi
+        sleep 0.05
+    done
+    return 1
 }
 
 # --- window template ---------------------------------------------------------
 
-# nvim gets a control socket (see the header comment on nvim quitting); every
-# other role opens a plain shell for the user to run something in.
+# nvim gets a control socket (see the header comment on nvim quitting) and
+# yazi IS the tab it opens (quitting yazi ends the window, the way a file
+# manager tab ends); every other role opens a plain shell for the user to
+# run something in.
 nvim_sock_for() { printf '%s/%s.sock\n' "$NVIM_SOCK_DIR" "$1"; } # $1 = class
 
 window_command() { # $1 = role, $2 = class, $3 = path -> the command, or nothing
-    [[ $1 == nvim ]] || return 0
-    mkdir -p "$NVIM_SOCK_DIR"
-    local sock
-    sock=$(nvim_sock_for "$2")
-    rm -f "$sock"
-    printf '%s -ic %s\n' "$(printf '%q' "$SHELL")" \
-        "$(printf '%q' "nvim --listen $(printf '%q' "$sock") .")"
+    if [[ $1 == nvim ]]; then
+        mkdir -p "$NVIM_SOCK_DIR"
+        local sock
+        sock=$(nvim_sock_for "$2")
+        rm -f "$sock"
+        printf '%s -ic %s\n' "$(printf '%q' "$SHELL")" \
+            "$(printf '%q' "nvim --listen $(printf '%q' "$sock") .")"
+        return 0
+    fi
+    if [[ $1 == yazi ]]; then
+        printf 'yazi\n'
+    fi
+    return 0
 }
 
 # Execs one project window for the given role, on `workspace`. Does not tag
@@ -561,13 +565,52 @@ spawn_window() { # $1 = class, $2 = role, $3 = path, $4 = workspace, $5 = explic
 # not by the shell-level test, which never spawns two roles close enough
 # together to race). Run as one background job so a keybind still never
 # blocks, but the spawns inside it are strictly one-at-a-time.
+#
+# A stamp that times out must not take the rest of the template with it: this
+# script runs under `set -e`, so the bare `stamp_slot` call this loop used to
+# make aborted the whole subshell the first time a window was slow to map —
+# a project opened two of its four windows and the user saw a half-built
+# group (caught live: two `Proj-hypr` windows, the second carrying no
+# `slot:` tag at all). The failure is recorded and the loop goes on, and
+# `reconcile_slots` below gives the untagged window its role afterwards.
 spawn_missing() { # $1 = class, $2 = path, $3 = workspace, roles...
     local class=$1 path=$2 workspace=$3
     shift 3
     local role
+    local -a unstamped=()
     for role in "$@"; do
         spawn_window "$class" "$role" "$path" "$workspace"
-        stamp_slot "$class" "$role"
+        if ! stamp_slot "$class" "$role"; then
+            unstamped+=("$role")
+        fi
+    done
+    ((${#unstamped[@]})) && reconcile_slots "$class" "${unstamped[@]}"
+    return 0
+}
+
+# Give a role to every window of `class` that mapped too late for its own
+# `stamp_slot` to catch it. Untagged windows are taken in the order Hyprland
+# lists them and matched against the roles that never got stamped, so a
+# template whose windows all arrive late still ends up fully slotted rather
+# than invisible to `live_windows` (and so respawned on the next `open`).
+reconcile_slots() { # $1 = class, roles...
+    local class=$1
+    shift
+    local -a pending=("$@") addrs=()
+    local tries
+    for ((tries = 0; tries < STAMP_TRIES; tries++)); do
+        mapfile -t addrs < <(hyprctl clients -j 2>/dev/null | jq -r --arg c "$class" '
+            .[] | select(.class == $c)
+            | select((.tags // []) | map(startswith("slot:")) | any | not)
+            | .address')
+        ((${#addrs[@]} >= ${#pending[@]})) && break
+        sleep 0.05
+    done
+    local i=0 addr
+    for addr in "${addrs[@]}"; do
+        ((i < ${#pending[@]})) || break
+        hypr_dispatch "hl.dsp.window.tag({ window = \"address:$addr\", tag = \"+slot:${pending[i]}\" })"
+        ((i++))
     done
 }
 
@@ -619,6 +662,49 @@ open() { # $1 = project name, $2 = window (role) to land on
     fi
 }
 
+# open-one <name> <window>: exactly ONE template window, never the whole
+# template (`open` completes; this is the single-tab gesture) — focus it
+# when it is already live, otherwise spawn it into the project's group and
+# tag it. Backgrounded like `scope_open` so a keybind never blocks on the
+# tag poll; `pick-window` (terminal-side) waits for the address itself when
+# it needs it for the reassert-focus dance.
+open_one() { # $1 = project name, $2 = window (role)
+    local name=${1:?open-one: project name required}
+    local role=${2:?open-one: window role required}
+    local path class workspace addr known=0 w
+    path=$(store_field "$name" '.path')
+    [[ -n $path ]] || die "open-one: no such project in the store: $name (try: ,proj.sh add $name <path>)"
+    [[ -d $path ]] || die "open-one: $name's path no longer exists: $path"
+    class=$(class_for "$name")
+
+    local -a windows=()
+    mapfile -t windows < <(store_project "$name" | jq -r '.windows[]')
+    if ((${#windows[@]} == 0)); then
+        windows=("${TEMPLATE_WINDOWS[@]}")
+    fi
+    for w in "${windows[@]}"; do
+        if [[ $w == "$role" ]]; then
+            known=1
+            break
+        fi
+    done
+    if ((known == 0)); then
+        die "open-one: $name's template has no '$role' window (has: ${windows[*]})"
+    fi
+
+    addr=$(live_windows "$class" | awk -F'\t' -v r="$role" '$1 == r { print $2; exit }')
+    if [[ -n $addr ]]; then
+        focus_window "$addr"
+        return 0
+    fi
+    workspace=$(store_field "$name" '.workspace')
+    workspace=${workspace:-$DEFAULT_WORKSPACE}
+    (
+        spawn_window "$class" "$role" "$path" "$workspace"
+        stamp_slot "$class" "$role"
+    ) &
+}
+
 # --- picker -------------------------------------------------------------
 
 # `confirm`'s non-tty yes/no prompt. A terminal, not a layer surface — see
@@ -647,39 +733,47 @@ FZF_PICK_OPTS=(--prompt=" Project " --reverse --no-preview --height=100%)
 
 fzf_pick() { list | cut -f1 | fzf "${FZF_PICK_OPTS[@]}"; }
 
-# No terminal at all (a Hyprland bind). Opens exactly one project-classed
-# window — `class_for picker` matches the ordinary project rule, so it tiles
-# like any other project terminal, no dedicated rule needed — running
-# `pick --inline`, whose fzf IS that window's first screen.
+# One inline-picker spawner for every picker (project, scope, window): one
+# kitty window classed `Proj-picker`, running `$SELF <subcmd> --inline <args>`
+# whose fzf IS that window's first screen. Floating needs no picker-specific
+# code: the `code` scene groups one literal `Proj-<name>` block per project,
+# so `Proj-picker` matches none of them — `hypr/scene/strays.lua` floats any
+# window whose class matches no block on a `strays = "float"` scene, sized a
+# fraction of the monitor and centered, outside every project group. Nothing
+# here asks for that, and nothing must: a picker that joined a project's
+# group would reorder its tabs while it is only a prompt. (The nested e2e's
+# `code` fixture declares the same shape, so 97_project_picker.sh pins this.)
 #
-# Pinning needs no picker-specific code: the `code` scene groups by BLOCK
-# (`Kitty-Main`/`Proj-*`, one shared group), and `hypr/scene/grouping.lua`
-# joins a new member to whichever group already holds the most of that
-# block's live peers — matched by block, never by literal class. So
-# `Proj-picker` folds into the project group already on screen the instant
-# it opens, the same way a declared scope does; nothing here asks for that.
-#
-# Unpinning is not quite as free: `pick`'s `open()` call (below) dispatches
-# focus to the chosen window and `focus_window` confirms it stuck, but
-# kitty then closes the picker window once its own shell exits, and closing
-# THAT background group member can still steal focus back even though it
-# was never the active one — verified live, this was NOT a race
-# (`focus_window`'s reassert had already succeeded) but a real Hyprland
-# group-close behaviour (tests/e2e/scenarios/97_project_picker.sh caught
-# it). `reassert_focus_after_picker_closes`, backgrounded and decoupled
-# from the picker's own process (which is dead the instant its window
-# closes), waits for that close and re-asserts focus once more.
-launch_inline_picker() { # $1 = window
-    local window=${1-} pick_cmd launch_cmd
-    pick_cmd=$(printf '%q pick --inline' "$SELF")
-    [[ -n $window ]] && pick_cmd="$pick_cmd $(printf '%q' "$window")"
+# Closing cleanly is not quite as free: the caller dispatches focus to the
+# chosen window and `focus_window` confirms it stuck, but kitty then closes
+# the picker window once its own shell exits, and closing that window can
+# still steal focus back even though it was never the active one — verified
+# live, this was NOT a race (`focus_window`'s reassert had already
+# succeeded) but a real Hyprland group-close behaviour
+# (tests/e2e/scenarios/97_project_picker.sh caught it).
+# `reassert_focus_after_picker_closes`, backgrounded and decoupled from the
+# picker's own process (which is dead the instant its window closes), waits
+# for that close and re-asserts focus once more.
+launch_inline() { # $1 = subcommand, $2 = workspace, rest = its inline args
+    local sub=$1 workspace=$2
+    shift 2
+    local pick_cmd launch_cmd arg
+    # The picker runs under `$SHELL -ic`, and an interactive shell's startup
+    # files can rewrite QF_STORE (the live desk's ~/.zshenv exports it back
+    # to $XDG_STATE_HOME/quantum-store), silently pointing every store read
+    # inside the picker at a different tree. Hand the store this process
+    # resolved down as an env prefix, which the rc cannot reach.
+    pick_cmd="QF_STORE=$(printf '%q' "$QF_ROOT") $(printf '%q %q --inline' "$SELF" "$sub")"
+    for arg in "$@"; do
+        pick_cmd="$pick_cmd $(printf '%q' "$arg")"
+    done
     launch_cmd="kitty --class $(printf '%q' "$(class_for picker)")"
     launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -ic $(printf '%q' "$pick_cmd")"
     if command -v uwsm >/dev/null 2>&1; then
         launch_cmd="uwsm app -- $launch_cmd"
     fi
     if command -v hyprctl >/dev/null 2>&1; then
-        launch_cmd="[workspace name:$DEFAULT_WORKSPACE] $launch_cmd"
+        launch_cmd="[workspace name:$workspace] $launch_cmd"
         hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
         return 0
     fi
@@ -742,25 +836,13 @@ scope_open() { # $1 = project name, $2 = scope name
     ) &
 }
 
-# fzf, inline, over one project's declared scopes — same "this process IS
-# the picker window" shape as `launch_inline_picker`/`pick`, except the
+# fzf, inline, over one project's declared scopes — the same "this process
+# IS the picker window" shape as the project picker (`pick`), except the
 # project name is resolved and handed down BEFORE the picker window spawns
 # and steals focus, since by the time it exists the focused window has
 # already changed.
 launch_inline_scope_picker() { # $1 = project name
-    local name=$1 pick_cmd launch_cmd
-    pick_cmd=$(printf '%q pick-scope --inline %q' "$SELF" "$name")
-    launch_cmd="kitty --class $(printf '%q' "$(class_for picker)")"
-    launch_cmd="$launch_cmd -e $(printf '%q' "$SHELL") -ic $(printf '%q' "$pick_cmd")"
-    if command -v uwsm >/dev/null 2>&1; then
-        launch_cmd="uwsm app -- $launch_cmd"
-    fi
-    if command -v hyprctl >/dev/null 2>&1; then
-        launch_cmd="[workspace name:$DEFAULT_WORKSPACE] $launch_cmd"
-        hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$launch_cmd")\")"
-        return 0
-    fi
-    exec "$SHELL" -c "$launch_cmd"
+    launch_inline pick-scope "$DEFAULT_WORKSPACE" "$1"
 }
 
 pick_scope() { # $1 = project name (resolved by the caller, before the picker spawned)
@@ -770,7 +852,9 @@ pick_scope() { # $1 = project name (resolved by the caller, before the picker sp
     # Before `scope_open` moves focus off this window — see `own_window_address`.
     own_addr=$(own_window_address) || true
     scope_open "$name" "$choice"
-    addr=$(live_windows "$(class_for "$name")" | awk -F'\t' -v r="$choice" '$1 == r { print $2; exit }')
+    # A live scope answers at once; a fresh spawn is still mapping, and
+    # `current_role_address` waits a bounded beat for it.
+    addr=$(current_role_address "$name" "$choice") || addr=""
     if [[ -n $own_addr && -n $addr ]]; then
         setsid "$SELF" _reassert-focus "$own_addr" "$addr" </dev/null >/dev/null 2>&1 &
         disown
@@ -786,10 +870,49 @@ cmd_pick_scope() {
     launch_inline_scope_picker "$name"
 }
 
+# --- window picker ---------------------------------------------------------
+
+# fzf, inline, over ONE project's template windows — the scope picker's twin,
+# one tab at a time instead of `open`'s complete-the-template: the choice is
+# handed to `open_one`, which focuses a live window or spawns exactly that
+# one. The project name is resolved and handed down before the picker window
+# spawns, same as the scope picker.
+pick_window() { # $1 = project name (resolved by the caller, before the picker spawned)
+    local name=${1:?pick-window: project name required} choice own_addr addr
+    local -a windows=()
+    mapfile -t windows < <(store_project "$name" | jq -r '.windows[]')
+    if ((${#windows[@]} == 0)); then
+        windows=("${TEMPLATE_WINDOWS[@]}")
+    fi
+    choice=$(printf '%s\n' "${windows[@]}" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name window ") || exit 0
+    [[ -n $choice ]] || exit 0
+    # Before `open_one` moves focus off this window — see `own_window_address`.
+    own_addr=$(own_window_address) || true
+    open_one "$name" "$choice"
+    # A live window is already focused by `open_one`; a fresh spawn is still
+    # mapping, and `current_role_address` waits a bounded beat for it.
+    addr=$(current_role_address "$name" "$choice") || addr=""
+    if [[ -n $own_addr && -n $addr ]]; then
+        setsid "$SELF" _reassert-focus "$own_addr" "$addr" </dev/null >/dev/null 2>&1 &
+        disown
+    fi
+}
+
+# A Hyprland bind, no terminal in sight: resolve the focused project NOW
+# (before the picker spawns and steals focus), then hand off to a picker
+# window that already knows which project it's picking a template window
+# for.
+cmd_pick_window() {
+    local name workspace
+    name=$(project_of_focused)
+    workspace=$(store_field "$name" '.workspace')
+    launch_inline pick-window "${workspace:-$DEFAULT_WORKSPACE}" "$name"
+}
+
 pick() { # $1 = window
-    local choice own_addr inline=0
+    local choice own_addr target inline=0
     if [[ ${INLINE-} == 1 ]]; then
-        # This process IS the terminal (`launch_inline_picker` spawned it):
+        # This process IS the terminal (`launch_inline` spawned it):
         # fzf is its first screen, so nothing may delay reaching it.
         inline=1
         choice=$(fzf_pick) || exit 0
@@ -797,7 +920,7 @@ pick() { # $1 = window
         choice=$(fzf_pick) || exit 0
     else
         # A Hyprland bind, no terminal in sight — hand off to one.
-        launch_inline_picker "${1-}"
+        launch_inline pick "$DEFAULT_WORKSPACE" ${1:+"$1"}
         return
     fi
     [[ -n $choice ]] || exit 0
@@ -806,9 +929,14 @@ pick() { # $1 = window
     ((inline)) && { own_addr=$(own_window_address) || true; }
     open "$choice" "${1-}"
     if [[ -n ${own_addr-} ]]; then
-        setsid "$SELF" _reassert-focus "$own_addr" "$(current_role_address "$choice" "${1-}")" \
-            </dev/null >/dev/null 2>&1 &
-        disown
+        # A live window's address answers at once; a fresh project's first
+        # spawn is still mapping, and `current_role_address` waits for it.
+        target=$(current_role_address "$choice" "${1-}") || target=""
+        if [[ -n $target ]]; then
+            setsid "$SELF" _reassert-focus "$own_addr" "$target" \
+                </dev/null >/dev/null 2>&1 &
+            disown
+        fi
     fi
 }
 
@@ -871,7 +999,12 @@ kill_project() { # $1 = project name (optional; defaults to the focused project)
                 continue
             }
         else
-            hypr_dispatch "hl.dsp.window.close(\"address:$addr\")" || true
+            # Table form, never `hl.dsp.window.close("address:...")` — a bare
+            # string arg is ignored by the Lua plugin (the selector upval ends
+            # up nil) and the dispatch closes the FOCUSED window instead,
+            # which could take down a live nvim slot right next to the one
+            # being spared (AGENTS.md, "Hyprland primitives").
+            hypr_dispatch "hl.dsp.window.close({ window = \"address:$addr\" })" || true
         fi
     done < <(live_windows "$class")
     if ((${#blocked[@]})); then
@@ -882,11 +1015,12 @@ kill_project() { # $1 = project name (optional; defaults to the focused project)
 
 case "${1-pick}" in
 list) list ;;
+add) add "${2-}" "${3-}" ;;
 sync) sync ;;
 drop) drop "${2-}" ;;
 pick)
     shift
-    # `--inline`: this process IS the picker window `launch_inline_picker`
+    # `--inline`: this process IS the picker window `launch_inline`
     # spawned (`pick_cmd`, above) — re-exec'd here instead of parsed as a
     # project argument.
     if [[ ${1-} == --inline ]]; then
@@ -899,9 +1033,22 @@ open)
     shift
     open "${1-}" "${2-}"
     ;;
+open-one) open_one "${2-}" "${3-}" ;;
 kill) kill_project "${2-}" ;;
 focus) focus_role "${2-}" ;;
 scope) scope_open "$(project_of_focused)" "${2-}" ;;
+pick-window)
+    shift
+    # `--inline`: this process IS the picker window `cmd_pick_window`
+    # spawned — its project name travels as an explicit argument since the
+    # focused window has already changed by the time this runs.
+    if [[ ${1-} == --inline ]]; then
+        shift
+        pick_window "${1-}"
+    else
+        cmd_pick_window
+    fi
+    ;;
 pick-scope)
     shift
     # `--inline`: this process IS the picker window `launch_inline_scope_picker`
