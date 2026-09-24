@@ -1,9 +1,9 @@
 -- Launch-time identity stamping for same-class windows (LEO-364).
 --
 -- Apps set their own class; the compositor cannot rewrite it, so two windows
--- of one class (pokemon's two media browsers, both `zen-twilight-media`) are
--- otherwise indistinguishable to a scene's block match. A block that
--- declares `slot` (hypr/scene/spec.lua) only claims a window already
+-- of one class (dofus and media both launch the shared `zen-twilight-media`
+-- profile) are otherwise indistinguishable to a scene's block match. A block
+-- that declares `slot` (hypr/scene/spec.lua) only claims a window already
 -- carrying the Hyprland tag `slot:<slot>`; this module is what stamps that
 -- tag, once, on whichever live window is still missing one.
 --

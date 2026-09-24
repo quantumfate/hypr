@@ -47,7 +47,7 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 
 ## Dependency completeness (verified)
 
-- **hypr** — every binary the Lua config / `*.conf` / `scripts/` invoke maps to
+- **hypr** — every binary the Lua config / `*.conf` / `bin/` helpers invoke maps to
   a listed package. `grim`, `slurp`, `wl-clipboard`, `jq`, `libnotify` arrive
   transitively as `hyprshot` dependencies, so they need no explicit entry. Only
   `ankama-launcher` (proprietary) is intentionally excluded.

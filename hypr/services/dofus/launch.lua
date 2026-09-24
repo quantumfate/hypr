@@ -11,9 +11,10 @@ M.launch_cmd = 'xdotool set_window --name "Dofus %s" "$(xdotool search --pid %s)
 -- window.open), so the flow is: mod+d -> d (enable) -> branch into a team submap
 -- -> its members get named in order as clients open. See common.team().
 
+-- Silent on purpose: `toggle_enable` is the single toast a press produces (the
+-- completion path reuses it), so announcing the reset here doubled it.
 function M:reset_counter()
   self.counter = 1
-  notify:notify("Dofus Launch Counter Reset", 1000, notify.level.INFO)
 end
 
 function M:increment_counter()

@@ -25,11 +25,11 @@ get_icon() {
 
 # Notify
 notify_volume() {
-    ,notify player -u low "$(get_icon)   $(get_volume)% — Player"
+    ,notify media-player "$(get_icon)   $(get_volume)% — Player" "" -u low
 }
 
 notify_track() {
-    ,notify player -u low "$(get_track)"
+    ,notify media-player "$(get_track)" "" -u low
 }
 
 # Increase Volume
@@ -51,17 +51,17 @@ play_pause() {
     else
         icon=""
     fi
-    ,notify player -u low "$icon  $status" "$(get_track)"
+    ,notify media-player "$icon  $status" "$(get_track)" -u low
 }
 
 # Previous track
 prev_track() {
-    playerctl previous && sleep 0.1 && ,notify player -u low "  Previous" "$(get_track)"
+    playerctl previous && sleep 0.1 && ,notify media-player "  Previous" "$(get_track)" -u low
 }
 
 # Next track
 next_track() {
-    playerctl next && sleep 0.1 && ,notify player -u low "  Next" "$(get_track)"
+    playerctl next && sleep 0.1 && ,notify media-player "  Next" "$(get_track)" -u low
 }
 
 # Execute accordingly

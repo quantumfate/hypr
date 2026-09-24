@@ -61,6 +61,9 @@ local function fresh_scene()
     apply_bindings = function() end,
     active = function() end,
     replace = function() end,
+    applying = function()
+      return false
+    end,
   }
 
   for _, mod in ipairs({
@@ -130,6 +133,27 @@ end
 local function open(stub, w)
   for _, cb in ipairs(stub.event_handlers["window.open"] or {}) do
     cb(w)
+  end
+end
+
+---@param stub table
+---@return string? the last dsp.focus window selector, if any
+local function last_focus_target(stub)
+  local target
+  for _, action in ipairs(stub.dispatched) do
+    if action.name == "dsp.focus" then
+      target = action.args[1] and action.args[1].window
+    end
+  end
+  return target
+end
+
+---@param stub table
+local function fire_focus_return_timers(stub)
+  for _, timer in ipairs(stub.timers) do
+    if timer.opts.timeout == 50 then
+      timer.cb()
+    end
   end
 end
 
@@ -212,5 +236,25 @@ t.describe("launch-claim executor", function()
     open(stub, b)
     t.eq({ "slot:pokemon/chat" }, b.tags, "the surviving pokemon intent settles the next window")
     t.eq("pokemon", b.workspace.name)
+  end)
+
+  t.it("returns focus to the window that armed a user-initiated launch", function()
+    local _, stub, windows, events = fresh_scene()
+    local retro = win(windows, { address = "0xra", class = "com.libretro.RetroArch", ws = "pokemon" })
+    stub.get_active_window = function()
+      return retro
+    end
+    events.arm_launch("pokemon", "zen-twilight-media")
+
+    -- The launched window maps elsewhere (media) and steals focus; a 50 ms
+    -- timer should return focus to the RetroArch window that armed it.
+    local w = win(windows, { address = "0x1", class = "zen-twilight-media", ws = "media" })
+    stub.get_active_window = function()
+      return w
+    end
+    open(stub, w)
+    fire_focus_return_timers(stub)
+
+    t.eq("address:0xra", last_focus_target(stub), "focus returns to the window that armed the launch")
   end)
 end)

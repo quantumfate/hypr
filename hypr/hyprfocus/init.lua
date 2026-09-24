@@ -18,6 +18,7 @@ local boot = require("hypr.hyprfocus.boot")
 local binds = require("hypr.hyprfocus.binds")
 local workspaces = require("hypr.hyprfocus.workspaces")
 local hold = require("hypr.hyprfocus.hold")
+local transition = require("hypr.lib.transition")
 local whichkey = require("hypr.lib.whichkey")
 local trace = require("hypr.lib.trace")
 local scene_spec = require("hypr.scene.spec")
@@ -49,6 +50,15 @@ local POINTER = "focus"
 -- no compositor, and hardcoding a location here would undo that.
 local CLI = ",hyprfocus"
 
+-- Time between publishing the transition veil and starting the rearrangement
+-- (LEO-423). The shell needs a moment to map the full-screen surface AND to
+-- finish its fade-in; without this lead the first rearranged frame blinks
+-- through a half-faded veil. The lead therefore covers the shell's whole
+-- fade-in (500 ms) plus surface mapping. The rearrange then lands behind an
+-- already-opaque surface, and the reveal is the fade-out onto the placed
+-- desk.
+local VEIL_LEAD_MS = 900
+
 --- The desk this runtime last applied, so a returning monitor can re-place
 --- its scenes without resolving again.
 ---@type Hyprfocus.Desk?
@@ -60,6 +70,14 @@ local applied_desk = nil
 --- dropped the inner entries, leaving windows in the holding place with no
 --- origin and no way back. A nested call now refuses instead.
 local applying = false
+
+-- A transition that outlives its whole legitimate lifetime is force-settled
+-- by the bracket module; the apply guard must come down with it, or every
+-- later mode change — the recovery path included — refuses as "already in
+-- progress" while the veil stays up.
+transition.on_force_settle(function()
+  applying = false
+end)
 
 ---@return table? declaration, string? error
 function M.declaration()
@@ -553,95 +571,124 @@ function M.applying()
   return applying
 end
 
-local apply_mode
+-- Gap between the phases of a deferred apply. An `hl.timer` callback is
+-- watchdog-killed after 50 ms on this build (spiked live: "execution timed
+-- out in hl.timer callback"), and a monolithic mode apply exceeds that on a
+-- real desk — every store write (whichkey dump, held record) and the trace
+-- flush costs process spawns. So the deferred apply runs as fixed phases,
+-- one per timer tick, each with budget headroom; the transition bracket
+-- (veil, guard, suspended animations) spans the whole sequence, so the
+-- in-between desk state is never visible. The trace batch also spans the
+-- phases and flushes once at the end.
+local PHASE_GAP_MS = 25
 
----@return table? report, string? error
-function M.apply(mode)
-  if applying then
-    return nil, "apply already in progress"
-  end
-  applying = true
-  local ok, report, err = pcall(apply_mode, mode)
-  applying = false
-  if not ok then
-    return nil, tostring(report)
-  end
-  return report, err
-end
-
+---The shared context the apply phases read and write.
 ---@param mode string
----@return table? report, string? error
-apply_mode = function(mode)
+---@param desk Hyprfocus.Desk? already-resolved desk, to avoid resolving twice
+---@return table? ctx, string? error
+local function apply_ctx(mode, desk)
   local declaration, err = M.declaration()
   if not declaration then
     return nil, err
   end
 
   -- Validate before anything moves: a refused mode changes nothing.
-  local desk, resolve_err = desk_for(declaration, mode, true)
   if not desk then
-    return nil, resolve_err
-  end
-
-  local disabled, bind_err = M.apply_bindings(mode, focused_scene_name())
-  if bind_err then
-    return nil, bind_err
-  end
-
-  local admitted = {}
-  for _, name in ipairs(desk.workspaces) do
-    admitted[name] = true
-  end
-
-  -- Give back what this mode admits, before deciding what is occupied.
-  -- Every move this apply dispatches, so the invariant below judges where
-  -- windows are going rather than where the compositor still reports them.
-  local moves = {}
-  local restored = 0
-  for name in pairs(hold.workspaces()) do
-    if admitted[name] then
-      local count, addresses = hold.restore(name)
-      restored = restored + count
-      for _, address in ipairs(addresses) do
-        moves[address] = name
-      end
+    local resolve_err
+    desk, resolve_err = desk_for(declaration, mode, true)
+    if not desk then
+      return nil, resolve_err
     end
   end
 
-  -- Empty what it does not, so the withdrawal below is not refused.
-  --
-  -- What was emptied is tracked rather than re-read. A move is dispatched, not
-  -- performed: asking the compositor what is standing where in the same breath
-  -- returns the desk as it was a moment ago, the withdrawal is refused against
-  -- stale state, and the mode silently does nothing. Holding moves every
-  -- window on the workspace, so a workspace we held from is empty by
-  -- construction and does not need confirming.
+  return {
+    mode = mode,
+    desk = desk,
+    declaration = declaration,
+    -- Every move this apply dispatches, so the reachability invariant judges
+    -- where windows are going rather than where the compositor still reports
+    -- them.
+    moves = {},
+  }
+end
+
+---Phase 1: binding trees, because withdrawing one is instant and costs
+---nothing.
+---@param ctx table
+local function phase_binds(ctx)
+  local disabled, bind_err = M.apply_bindings(ctx.mode, focused_scene_name())
+  if bind_err then
+    error(bind_err, 0)
+  end
+  ctx.disabled = disabled
+
+  ctx.admitted = {}
+  for _, name in ipairs(ctx.desk.workspaces) do
+    ctx.admitted[name] = true
+  end
+end
+
+---Phase 2: restore, so a workspace this mode admits gets its windows back
+---before anything looks at what is standing where; then hold, emptying the
+---workspaces about to be withdrawn. Holding before withdrawing is not a
+---preference: a workspace disabled while its windows stand on it leaves them
+---somewhere the user cannot reach, and the registry refuses to do it.
+---
+---What was emptied is tracked rather than re-read. A move is dispatched, not
+---performed: asking the compositor what is standing where in the same breath
+---returns the desk as it was a moment ago, the withdrawal is refused against
+---stale state, and the mode silently does nothing. Holding moves every
+---window on the workspace, so a workspace we held from is empty by
+---construction and does not need confirming.
+---@param ctx table
+local function phase_holds(ctx)
+  local restored = 0
+  for name in pairs(hold.workspaces()) do
+    if ctx.admitted[name] then
+      local count, addresses = hold.restore(name)
+      restored = restored + count
+      for _, address in ipairs(addresses) do
+        ctx.moves[address] = name
+      end
+    end
+  end
+  ctx.restored = restored
+
   local parked, emptied = 0, {}
   for _, name in ipairs(workspaces.names()) do
-    if not admitted[name] then
+    if not ctx.admitted[name] then
       local count, addresses = hold.hold(name)
       parked = parked + count
       for _, address in ipairs(addresses) do
-        moves[address] = hold.HELD
+        ctx.moves[address] = hold.HELD
       end
       emptied[name] = true
     end
   end
+  ctx.parked = parked
 
   local occupied = workspaces.occupied()
   for name in pairs(emptied) do
     occupied[name] = nil
   end
+  ctx.occupied = occupied
+end
 
-  local withdrawn, refused = workspaces.admit(desk.workspaces, occupied, desk.main)
+---Phase 3: admit, which now finds the withheld workspaces empty and can
+---actually take them away; then place, moving each scene's workspace to its
+---role's output (`admit/scene_monitor`; a missing output falls back to
+---primary).
+---@param ctx table
+local function phase_admit_place(ctx)
+  local withdrawn, refused = workspaces.admit(ctx.desk.workspaces, ctx.occupied, ctx.desk.main)
 
-  for _, name in ipairs(desk.workspaces) do
+  for _, name in ipairs(ctx.desk.workspaces) do
     trace.emit({
       stage = "admit",
       event = "workspace_admitted",
       decision = "admit",
-      reason = "mode " .. mode,
-      mode = mode,
+      reason = "mode " .. ctx.mode,
+      mode = ctx.mode,
       workspace = name,
     })
   end
@@ -650,8 +697,8 @@ apply_mode = function(mode)
       stage = "admit",
       event = "workspace_withdrawn",
       decision = "withhold",
-      reason = "mode " .. mode .. " does not admit this workspace",
-      mode = mode,
+      reason = "mode " .. ctx.mode .. " does not admit this workspace",
+      mode = ctx.mode,
       workspace = name,
     })
   end
@@ -661,34 +708,40 @@ apply_mode = function(mode)
       event = "workspace_refused",
       decision = "refuse",
       reason = "occupied",
-      mode = mode,
+      mode = ctx.mode,
       workspace = name,
     })
   end
+  ctx.withdrawn = withdrawn
+  ctx.refused = refused
 
   -- Now that the workspaces exist, stand each on its role's output.
-  local placements = M.place(desk)
+  ctx.placements = M.place(ctx.desk)
 
-  applied = mode
-  applied_desk = desk
+  applied = ctx.mode
+  applied_desk = ctx.desk
+end
 
-  -- Background drawers (LEO-363: Signal, Vesktop, Spotify) start silently now
-  -- that the desk's admitted scenes are known. Wrapped in pcall: a launch
-  -- failure is logged by `drawer.bring_up` itself and must never fail an
-  -- otherwise-successful mode transition.
+---Phase 4: background drawers start silently now that the desk's admitted
+---scenes are known; every claimed window comes home; the reachability
+---invariant runs; the compositor accent re-resolves (LEO-341).
+---@param ctx table
+local function phase_finalize(ctx)
+  -- Wrapped in pcall: a launch failure is logged by `drawer.bring_up` itself
+  -- and must never fail an otherwise-successful mode transition.
   pcall(function()
     local drawer = require("hypr.lib.drawer")
-    drawer.bring_up(drawer.load(), desk)
+    drawer.bring_up(drawer.load(), ctx.desk)
   end)
 
   -- Bring every claimed window home, whatever workspace it drifted to while
   -- nothing admitted claimed it (LEO-353). Folded into `moves` so the
   -- reachability projection below judges where these windows are going.
-  for address, workspace in pairs(collect_home(mode, admitted)) do
-    moves[address] = workspace
+  for address, workspace in pairs(collect_home(ctx.mode, ctx.admitted)) do
+    ctx.moves[address] = workspace
   end
 
-  local unreachable = check_reachable(mode, admitted, moves)
+  ctx.unreachable = check_reachable(ctx.mode, ctx.admitted, ctx.moves)
 
   -- Re-resolve the compositor accent now that the mode has actually
   -- transitioned (LEO-341): `colors.lua` only ran this at config load, so
@@ -699,25 +752,134 @@ apply_mode = function(mode)
   -- Wrapped in pcall: a missing/broken theme module must not fail a mode
   -- transition that otherwise succeeded.
   pcall(function()
-    require("hypr.themes.colors").apply_colors(nil, mode)
+    require("hypr.themes.colors").apply_colors(nil, ctx.mode)
   end)
 
-  return {
-    mode = mode,
-    bindings_disabled = disabled,
-    windows_held = parked,
-    windows_restored = restored,
-    workspaces_withdrawn = withdrawn,
+  ctx.report = {
+    mode = ctx.mode,
+    bindings_disabled = ctx.disabled,
+    windows_held = ctx.parked,
+    windows_restored = ctx.restored,
+    workspaces_withdrawn = ctx.withdrawn,
     -- Workspaces that could not be withdrawn because windows still stand on
     -- them. With holding in front of it this should stay empty; a name
     -- appearing here means a window resisted being parked, which is worth
     -- seeing rather than silently working around.
-    workspaces_refused = refused,
-    placements = placements,
+    workspaces_refused = ctx.refused,
+    placements = ctx.placements,
     -- How many windows the reachability invariant flagged (`admit/unreachable`).
-    unreachable = unreachable,
-  },
-    nil
+    unreachable = ctx.unreachable,
+  }
+end
+
+---The apply's phases in order. Order matters, and it is the order that keeps
+---windows reachable: binds, restore, hold, withdraw, place, finalize.
+---@return fun(ctx: table)[]
+local function apply_phases()
+  return { phase_binds, phase_holds, phase_admit_place, phase_finalize }
+end
+
+---Companions reconverge once the apply's phases are done (see
+---`hypr/events/scene.lua`'s `converge_companions` for why the per-event
+---convergence is suspended while an apply runs). Wrapped in pcall: a broken
+---event layer must not fail the apply that just succeeded.
+local function reconverge_companions()
+  pcall(function()
+    require("hypr.events.scene").reconverge()
+  end)
+end
+
+---@param mode string
+---@param present boolean? cover the apply with the shell's transition veil
+---(true only for a genuine mode transition, never for a reload's apply)
+---@param on_settled fun(desk: Hyprfocus.Desk)? run once the transition
+---settles, after the moves
+---@return table? report, string? error
+function M.apply(mode, present, on_settled)
+  if applying then
+    return nil, "apply already in progress"
+  end
+
+  -- Resolve first, synchronously: a refused or unknown mode must report to the
+  -- caller now, not vanish into the deferred work below.
+  local ctx, ctx_err = apply_ctx(mode, nil)
+  if not ctx then
+    return nil, ctx_err
+  end
+
+  if present then
+    -- A genuine transition: publish the veil, let the shell map it, THEN
+    -- rearrange behind it (LEO-423). The rearrange is deferred and phased, so
+    -- the report here only says the transition was accepted; failures land in
+    -- the trace.
+    applying = true
+    -- The settle callback gets the desk resolved now rather than reading the
+    -- applied desk at settle time: an apply that died mid-way would
+    -- otherwise focus the PREVIOUS mode's main, the opposite of the
+    -- transition's intent.
+    --
+    -- Publish the bracket's total lifetime (lead + phased gaps + settle) so
+    -- the shell countdown matches the actual veil instead of outrunning it.
+    local phases = apply_phases()
+    local total_duration_ms = transition.VEIL_MS + VEIL_LEAD_MS + ((#phases - 1) * PHASE_GAP_MS)
+    transition.begin(mode, true, on_settled and function()
+      on_settled(ctx.desk)
+    end, total_duration_ms)
+    trace.begin_batch()
+    local index = 0
+    local function step()
+      index = index + 1
+      local phase = phases[index]
+      if not phase then
+        return
+      end
+      local ok, err = pcall(phase, ctx)
+      if not ok then
+        trace.end_batch()
+        applying = false
+        -- The settle callback must not run: focus would land on a desk the
+        -- phases did not finish arranging.
+        transition.clear_settled()
+        transition.finish(mode)
+        trace.emit({
+          stage = "admit",
+          event = "apply_failed",
+          decision = "fail",
+          reason = tostring(err),
+          mode = mode,
+        })
+        return
+      end
+      if index < #phases then
+        require("hypr.lib.hypr").oneshot(PHASE_GAP_MS, step)
+        return
+      end
+      trace.end_batch()
+      applying = false
+      transition.finish(mode)
+      reconverge_companions()
+    end
+    require("hypr.lib.hypr").oneshot(VEIL_LEAD_MS, step)
+    return { mode = mode, deferred = true }, nil
+  end
+
+  -- A plain apply (config load, reload): synchronous, no veil.
+  applying = true
+  transition.begin(mode, false, nil)
+  trace.begin_batch()
+  local ok, err = pcall(function()
+    for _, phase in ipairs(apply_phases()) do
+      phase(ctx)
+    end
+  end)
+  trace.end_batch()
+  applying = false
+  transition.finish(mode)
+  reconverge_companions()
+  if not ok then
+    return nil, tostring(err)
+  end
+  return ctx.report, nil
 end
 
 ---Land on a mode's declared `main` scene (LEO-400) at the two moments the
@@ -726,22 +888,58 @@ end
 ---from `M.converge` alone, which the watcher also uses to re-apply a mode
 ---that has not actually changed — that path must stay focus-neutral, or
 ---every watcher tick would pull focus home while the user works elsewhere.
+---
+---The landing is re-asserted once, shortly after: a launcher finishing its
+---bring-up in the same breath as the settle (the boot study project is the
+---case) can pull focus off main with an explicit dispatch the transition's
+---open-focus guard does not cover. One quiet check — not a poll — refocuses
+---main only if the landing was actually stolen; a desk that stayed put is
+---left alone.
 ---@param desk Hyprfocus.Desk?
 local function focus_mode_entry(desk)
   if not desk or not desk.main then
     return
   end
-  local ok = pcall(function()
-    hl.dispatch(hl.dsp.focus({ workspace = "name:" .. desk.main }))
-  end)
-  trace.emit({
-    stage = "admit",
-    event = "main_focused",
-    decision = ok and "focus" or "skip",
-    reason = "mode entry falls back to the declared main scene",
-    mode = desk.mode,
-    workspace = desk.main,
-  })
+  local main = desk.main
+  local function land(decision, reason)
+    local ok = pcall(function()
+      hl.dispatch(hl.dsp.focus({ workspace = "name:" .. main }))
+    end)
+    trace.emit({
+      stage = "admit",
+      event = "main_focused",
+      decision = decision,
+      reason = reason,
+      mode = desk.mode,
+      workspace = main,
+    })
+    return ok
+  end
+  land("focus", "mode entry falls back to the declared main scene")
+  -- Bring-up keeps landing after the settle: a launcher with explicit focus
+  -- dispatches pulls focus in the bracket's tail, and a service the CLI half
+  -- just started can map seconds later and take focus on open — the obsidian
+  -- suite is the case that actually bit. A few quiet checks re-land on main
+  -- while that bring-up keeps arriving: each fires only when focus was
+  -- actually pulled off main, the series stops the moment main holds, and
+  -- every check is dropped once a newer apply owns the desk.
+  local REASSERT_AT = { 1200, 3000, 6000 }
+  local check = 0
+  local function reassert()
+    check = check + 1
+    if applied_desk ~= desk then
+      return
+    end
+    local ok, ws = pcall(hl.get_active_workspace)
+    if ok and ws and ws.name and ws.name ~= main then
+      land("reassert", "landing was pulled off main right after the settle")
+    end
+    local next_at = REASSERT_AT[check + 1]
+    if next_at then
+      require("hypr.lib.hypr").oneshot(next_at - REASSERT_AT[check], reassert)
+    end
+  end
+  require("hypr.lib.hypr").oneshot(REASSERT_AT[1], reassert)
 end
 
 ---Enter a mode: record it, apply this runtime's half, and hand the rest to the
@@ -808,11 +1006,54 @@ function M.enter(mode, source, until_at)
     end)
   end
 
-  local report, apply_err = M.converge(mode)
-  if report then
-    focus_mode_entry(M.applied_desk())
+  -- `converge` itself lands on the mode's declared main scene (LEO-423), so
+  -- there is nothing extra to do once it returns.
+  return M.converge(mode)
+end
+
+-- How long to wait after the last mode change before running the theme
+-- adapters and the optional Hyprland reload. Rapid swaps reset the timer, so
+-- the desk only pays for one reload once the user stops swapping.
+local THEME_DEBOUNCE_MS = 5000
+
+-- The deferred theme/reload timer. Reset on every mode change so a burst of
+-- swaps does not stack multiple reloads.
+local theme_timer = nil
+
+---Spawn the CLI half of a mode change. Kept as a single helper so the timing
+---(before/during/after the transition) is controlled in one place.
+---
+-- We split the work: the compositor needs the systemd units and focus-store
+-- update now, but the theme adapters (and the Hyprland reload they can
+-- trigger) are scheduled in the background and debounced. That keeps the
+-- reload from wiping the Lua runtime state in the middle of a burst of swaps.
+---@param mode string
+local function spawn_cli_half(mode)
+  -- Immediate: units, focus store, scene-policy log. No theme adapters, so
+  -- no Hyprland reload happens here.
+  hl.dispatch(hl.dsp.exec_cmd(("HYPRFOCUS_NO_THEME=1 %s apply %s"):format(CLI, mode)))
+
+  -- Deferred: theme surfaces and the optional reload, debounced.
+  if theme_timer then
+    pcall(function()
+      theme_timer:set_enabled(false)
+    end)
+    theme_timer = nil
   end
-  return report, apply_err
+  theme_timer = require("hypr.lib.hypr").oneshot(THEME_DEBOUNCE_MS, function()
+    theme_timer = nil
+    -- `,theme.sh apply` resolves the palette from the focus store, so it
+    -- naturally follows whatever mode ended up active after the burst.
+    -- We suppress the Hyprland reload: colours are pushed live below, and a
+    -- reload would re-run the config and trigger a second (plain) transition
+    -- that disturbs the scene engine.
+    hl.dispatch(hl.dsp.exec_cmd("HYPRFOCUS_NO_RELOAD=1 ,theme.sh apply"))
+    -- Re-apply Hyprland border/groupbar colours now that the theme store
+    -- carries the new mode's leased palette.
+    pcall(function()
+      require("hypr.themes.colors").apply_colors(nil, mode)
+    end)
+  end)
 end
 
 ---Decide and apply what login should do (`hypr/hyprfocus/boot.lua`): enter
@@ -830,15 +1071,10 @@ function M.boot()
   local pointer = ok and handle:get() or nil
   local action, mode = boot.decide(pointer, declaration.modes or {}, expired)
   if action == "resume" then
-    -- `M.enter` also focuses main on success; a resuming boot skips it and
-    -- calls the same fallback directly, since resume must not go through
-    -- `enter`'s pointer rewrite (that would clobber the timed mode's own
-    -- `until`/`previous`).
-    local report, apply_err = M.converge(mode)
-    if report then
-      focus_mode_entry(M.applied_desk())
-    end
-    return report, apply_err
+    -- Resume must not go through `enter`'s pointer rewrite (that would clobber
+    -- the timed mode's own `until`/`previous`); `converge` itself lands on the
+    -- mode's main scene (LEO-423).
+    return M.converge(mode)
   end
   return M.enter(mode, "boot")
 end
@@ -860,11 +1096,27 @@ end
 ---@param mode string
 ---@return table? report, string? error
 function M.converge(mode)
-  local report, apply_err = M.apply(mode)
+  -- Land on the mode's declared main scene when the transition settles, not
+  -- up front: a later queued move or activation would otherwise pull the user
+  -- back off it. `hypr/init.lua`'s load-time apply goes through `M.apply`
+  -- directly and stays focus-neutral, as LEO-400 requires.
+  --
+  -- The CLI half (systemd units, theme re-apply) is spawned only after the
+  -- transition settles. If it runs mid-veil it can call `hyprctl reload`
+  -- (via ,theme.sh), which restarts the Lua state and drops the active
+  -- bracket -- the veil vanishes and focus lands half-moved.
+  local report, apply_err = M.apply(mode, true, function(desk)
+    focus_mode_entry(desk)
+    spawn_cli_half(mode)
+  end)
   pcall(function()
     require("hypr.lib.submap").reset()
   end)
-  hl.dispatch(hl.dsp.exec_cmd(("%s apply %s"):format(CLI, mode)))
+  if not report then
+    -- A refused/errored apply never reaches the settle callback; still run
+    -- the background half so services are not left out of sync.
+    spawn_cli_half(mode)
+  end
   return report, apply_err
 end
 

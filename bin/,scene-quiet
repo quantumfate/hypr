@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Stand the scene engine down while something else works on its windows.
+#
+# A scene keeps its companions alive: close one and the next convergence opens
+# it again, which makes maintenance on those applications (wiping a browser
+# profile, swapping a profile's class) a race nobody wins. This pauses the
+# deciding, never the desk: windows stay where they are, modes still apply.
+#
+# The pause carries a deadline and expires on its own -- a desk that has
+# quietly stopped converging is worse than one that reopens a window.
+#
+#   ,scene-quiet on [seconds]   stand down (default 300, max 3600)
+#   ,scene-quiet off            converge again
+#   ,scene-quiet status         what is in force
+set -euo pipefail
+
+case "${1:-status}" in
+  on)
+    seconds="${2:-300}"
+    hyprctl eval "return tostring(require('hypr.events.scene').quiet($seconds))" >/dev/null
+    echo "scene engine standing down for ${seconds}s"
+    ;;
+  off)
+    hyprctl eval "require('hypr.events.scene').quiet(false) return 'x'" >/dev/null
+    echo "scene engine converging again"
+    ;;
+  status)
+    hyprctl eval "local u = require('hypr.events.scene').quiet_until()
+      local f = io.open('/tmp/scene-quiet.status', 'w')
+      f:write(u and ('standing down for ' .. (u - os.time()) .. 's more') or 'converging')
+      f:close() return 'x'" >/dev/null
+    cat /tmp/scene-quiet.status && echo
+    ;;
+  *)
+    sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

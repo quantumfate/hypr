@@ -169,35 +169,58 @@ local function tiles_of(targets)
   return tiles, by_address
 end
 
----The monitor a scene's targets stand on, as live geometry. Read from the
----compositor rather than the host data, since a dock is positioned inside its
----own output and needs that output's real size.
----@param targets table[]
+---Every tiled window's live rect, keyed by address — what the compositor
+---actually gave it, as opposed to the box the layout asked for.
+---@return table<string, Dock.Box>
+local function live_rects()
+  local rects = {}
+  for _, w in ipairs(hl.get_windows() or {}) do
+    local at, size = w.at, w.size
+    if w.address and at and size then
+      rects[w.address] = { x = at.x or at[1], y = at.y or at[2], w = size.x or size[1], h = size.y or size[2] }
+    end
+  end
+  return rects
+end
+
+-- Shared with the deck provider, which publishes docks the same way.
+M.live_rects = live_rects
+
+---The monitor a scene is DISPLAYED on right now, or nil.
+---
+---Deliberately not "the monitor this scene's windows belong to": a layout is
+---asked to recalculate workspaces nobody is looking at, and answering with
+---their monitor published a hidden scene's boxes over the map of the monitor
+---showing something else entirely — isles placed against a window that is
+---not on screen. A dock is only meaningful while its scene is visible, so
+---the question is which monitor has this workspace up, and a background
+---recalculate publishes nothing.
+---
+---`hl.get_monitors()` is the live API; `hl.monitors` is only the test stub's
+---field, and reading it first meant the publish found no monitor on a real
+---desk and quietly did nothing.
+---@param scene_name string the scene's name, which IS its workspace name
 ---@return table?
-local function monitor_of(targets)
-  local ws = targets[1] and targets[1].window and targets[1].window.workspace
-  local want = ws and ws.monitor and ws.monitor.name
-  -- `hl.get_monitors()` is the live API; `hl.monitors` is only the test
-  -- stub's field, and reading it first meant the publish found no monitor on
-  -- a real desk and quietly did nothing.
+local function monitor_of(scene_name)
   for _, monitor in ipairs(hl.get_monitors() or hl.monitors or {}) do
-    if monitor.name == want then
+    local active = monitor.active_workspace or monitor.activeWorkspace
+    local name = active and (active.name or active)
+    if scene_name and name == scene_name then
       return monitor
     end
   end
-  return (hl.get_monitors() or hl.monitors or {})[1]
+  return nil
 end
 
 ---Publish the scene's resolved docks for the monitor it was just placed on.
 ---@param scene Scene.Spec
 ---@param tiles Scene.Tile[]
 ---@param boxes Scene.Box[]
----@param targets table[]
-local function publish_docks(scene, tiles, boxes, targets)
+local function publish_docks(scene, tiles, boxes)
   if not scene.docks then
     return
   end
-  local monitor = monitor_of(targets)
+  local monitor = monitor_of(scene.name)
   if not monitor then
     return
   end
@@ -207,7 +230,47 @@ local function publish_docks(scene, tiles, boxes, targets)
     scene = scene,
     monitor = monitor,
     tiles = tiles,
-    boxes = boxes,
+    boxes = dock_publish.settled(boxes, live_rects()),
+    gaps_in = gaps_in or 0,
+    gaps_out = { top = top, right = right, bottom = bottom, left = left },
+    spec_lib = spec_lib,
+  })
+end
+
+---Publish the scene's dock map with no tile geometry: its `of = "screen"`
+---resolved against the monitor's own frame, its block-docked isles resting
+---until a real layout pass refines them. Wired to workspace arrival — the
+---arrival's own recalc is a focus dispatch, and an app re-activating in that
+---instant (linear is the live case) bounces focus before the recalc lands,
+---leaving the previous scene's dock docs standing under this one. This runs
+---synchronously in the arrival handler, before any activation race can start.
+---@param name string the scene's name, which IS its workspace name
+function M.publish_arrival(name)
+  local scene = (spec_lib.load())[name]
+  if not scene or not scene.docks then
+    return
+  end
+  -- Resolve the monitor through the workspace itself, not through whichever
+  -- monitor is currently active: the arrival handler can run after an app
+  -- re-activation bounced focus, and the workspace stands on its monitor
+  -- whatever the keyboard is doing.
+  local monitor
+  local ok, ws = pcall(hl.get_workspace, "name:" .. name)
+  if ok and ws and ws.monitor and ws.monitor.name then
+    monitor = ws.monitor
+  else
+    monitor = monitor_of(name)
+  end
+  if not monitor then
+    return
+  end
+  local gaps_in, gaps_out = gaps(scene)
+  local top, right, bottom, left = layout.sides(gaps_out)
+  dock_publish.publish({
+    scene = scene,
+    monitor = monitor,
+    tiles = {},
+    boxes = {},
     gaps_in = gaps_in or 0,
     gaps_out = { top = top, right = right, bottom = bottom, left = left },
     spec_lib = spec_lib,
@@ -223,6 +286,29 @@ end
 local function place(get_scenes, ctx)
   local targets = ctx.targets or {}
   if #targets == 0 then
+    -- A visible scene workspace with no tiled windows (empty or only floats)
+    -- must still publish its docks as resting, or the last layout pass's boxes
+    -- (from windows that have since left) stay in the geometry store and the
+    -- bar positions isles against phantom coordinates.
+    local scenes = get_scenes()
+    local active_ws = hl.get_active_workspace()
+    local scene = active_ws and active_ws.name and scenes[active_ws.name]
+    if scene and scene.docks then
+      local monitor = monitor_of(scene.name)
+      if monitor then
+        local gaps_in, gaps_out = gaps(scene)
+        local top, right, bottom, left = layout.sides(gaps_out)
+        dock_publish.publish({
+          scene = scene,
+          monitor = monitor,
+          tiles = {},
+          boxes = {},
+          gaps_in = gaps_in or 0,
+          gaps_out = { top = top, right = right, bottom = bottom, left = left },
+          spec_lib = spec_lib,
+        })
+      end
+    end
     return
   end
 
@@ -284,7 +370,7 @@ local function place(get_scenes, ctx)
   -- is the one pass that knows where they go. It writes to the `geometry`
   -- store and nowhere else -- never a place, never a dispatch, never a
   -- recalculate -- so a dock can't move the tile it docks to.
-  publish_docks(scene, tiles, boxes, targets)
+  publish_docks(scene, tiles, boxes)
 end
 
 ---@param scenes table<string, Scene.Spec>|fun(): table<string, Scene.Spec>

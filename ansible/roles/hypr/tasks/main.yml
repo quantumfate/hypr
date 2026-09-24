@@ -69,6 +69,21 @@
     state: directory
     mode: "0755"
 
+# Catppuccin wlogout icons are referenced by ,theme.sh's generated style.css.
+# They live outside the hypr config symlink because wlogout owns ~/.config/wlogout.
+- name: Ensure wlogout config directory exists
+  ansible.builtin.file:
+    path: "{{ ansible_facts.user_dir }}/.config/wlogout"
+    state: directory
+    mode: "0755"
+
+- name: Provision Catppuccin wlogout icons
+  ansible.builtin.git:
+    repo: https://github.com/catppuccin/wlogout.git
+    dest: "{{ ansible_facts.user_dir }}/.config/wlogout/catppuccin"
+    version: main
+    depth: 1
+
 - name: Manage the config directory
   block:
     - name: Check whether the config target exists

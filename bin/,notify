@@ -10,9 +10,9 @@
 #   ,notify <source-id> <summary> [body] [-u urgency]
 #
 # The source id is stable, kebab-case, and names the THING (linear-sync,
-# brightness), not the script that happened to send it — moving the code
-# does not change the routing. The category carries the domain when it has
-# one (x-hyprfocus.sync etc.), because categories are a route's second
+# display-brightness), not the script that happened to send it — moving the
+# code does not change the routing. The category carries the domain when it
+# has one (x-hyprfocus.sync etc.), because categories are a route's second
 # voice (family matching).
 #
 # Shell feedback answering a key press goes through Notify's own IPC (tier

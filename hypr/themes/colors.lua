@@ -17,18 +17,33 @@ local Store = require("hypr.lib.store")
 
 local PALETTES = { latte = true, frappe = true, macchiato = true, mocha = true }
 
+-- Roles measured to clear the accent-on-base contrast target. On the light
+-- latte palette lavender, peach and yellow (and any other pale role) fail
+-- against its near-white base, so only mauve and blue may stand in for
+-- "accent" there; the dark palettes pass every role, so nothing is restricted
+-- for them. The same set is pinned in bin/,theme.sh's `accent_role` and
+-- quickshell's Theme.qml, so the borders, the adapters and the bar cannot
+-- disagree about what a mode's declared role actually resolves to.
+local LATTE_PASSES = { mauve = true, blue = true }
+
 local M = {}
 
 -- Resolve the mode-scoped accent against an already-loaded palette table.
 -- A missing or malformed declaration entry silently falls back to the
 -- palette's own mauve, so a fresh desk or a declaration that has not yet
--- been edited is never broken.
+-- been edited is never broken. The palette name drives the contrast guard:
+-- on latte a declared role that fails the accent-on-base target is treated
+-- as missing, so mauve stands in rather than a border nobody can read.
+---@param palette_name string? the active palette's name; nil means no guard
 ---@param theme table the loaded palette module
 ---@param mode string
 ---@return string
-local function resolve_accent(theme, mode)
+local function resolve_accent(palette_name, theme, mode)
   local decl = Store.define("hyprfocus")
   local role = decl:get("modes", mode, "presentation", "accent_role")
+  if palette_name == "latte" and role and not LATTE_PASSES[role] then
+    role = nil
+  end
   if role and type(theme[role]) == "string" then
     return theme[role]
   end
@@ -53,7 +68,7 @@ function M.apply_colors(palette_name, mode)
   local theme = require("hypr.themes." .. palette_name)
 
   mode = mode or Store.define("focus"):get("mode") or "work"
-  local accent = resolve_accent(theme, mode)
+  local accent = resolve_accent(palette_name, theme, mode)
 
   hl.config({
     general = {

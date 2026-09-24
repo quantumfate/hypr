@@ -7,15 +7,19 @@
 local t = require("tests.harness")
 
 ---A trace.lua stub that records every emitted record instead of writing
----anything.
+---anything. Batch brackets are pass-throughs: the records are the contract,
+---their delivery grouping is not.
 ---@return table calls, table stub_module
 local function trace_stub()
   local calls = {}
-  return calls, {
-    emit = function(record)
-      calls[#calls + 1] = record
-    end,
-  }
+  return calls,
+    {
+      emit = function(record)
+        calls[#calls + 1] = record
+      end,
+      begin_batch = function() end,
+      end_batch = function() end,
+    }
 end
 
 t.describe("scene.lua wiring", function()

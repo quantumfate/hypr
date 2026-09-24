@@ -63,9 +63,9 @@ end
 ---
 ---A window carrying a `slot:<slot>` tag is claimed by the scene that declared
 ---that slot, never by another active scene's bare same-class block (LEO-412,
----the shared profile's desk: dofus, pokemon and media all name the profile
----class, and media's bare block must not swallow a window claimed for dofus or
----pokemon). The resolver keys a slot block as `class:slot`
+---the shared profile's desk: dofus and media name the profile class, and
+---media's bare block must not swallow a window claimed for dofus). The
+---resolver keys a slot block as `class:slot`
 ---(hypr/hyprfocus/resolve.lua); this is the runtime half of the same claim
 ---discipline.
 ---@param spec_by_scene table<string, Scene.Spec>

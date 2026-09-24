@@ -40,7 +40,7 @@ e2e_log "after reload: unchanged"
 # re-apply of the mode already running.
 hc eval "require('hypr.hyprfocus').enter('work')" >/dev/null || e2e_fail "enter work failed"
 wait_until 50 sh -c "jq -e '.mode == \"work\"' '$QF_STORE/focus.json'" >/dev/null || e2e_fail "pointer never named work"
-sleep 0.5
+wait_transition_settled || e2e_fail "transition to work never settled"
 
 hc eval "require('hypr.hyprfocus').enter('gaming')" >/dev/null || e2e_fail "enter gaming failed"
 wait_until 50 sh -c "jq -e '.mode == \"gaming\"' '$QF_STORE/focus.json'" >/dev/null || e2e_fail "pointer never named gaming"

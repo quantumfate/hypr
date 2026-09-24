@@ -8,7 +8,7 @@
 -- windows are HELD").
 local spec_lib = require("hypr.scene.spec")
 local deck = require("hypr.scene.deck")
-local deck_scroll = require("hypr.scene.deck_scroll")
+local deck_order = require("hypr.scene.deck_order")
 local scene_provider = require("hypr.scene.provider")
 local dock_publish = require("hypr.scene.dock_publish")
 
@@ -22,10 +22,14 @@ local NAME = "deck"
 -- declared so no mode can ever admit or withdraw it).
 local HOLD = "special:deck-hold"
 
----A gap value as one scalar: already a number, or a sided `Scene.CssGap`
----table's `left` (`deck.lua`'s `opts.gaps_out` is one symmetric number on
----every side, unlike `layout.lua`'s `sides`, which is why this collapses
----rather than passing the table through — see `deck.lua`'s module comment).
+-- Where the MODE parks a withdrawn scene's windows (hypr/hyprfocus/hold.lua).
+-- Named rather than required: the deck must not depend on the mode engine, it
+-- only has to recognise its holding place and keep its hands off.
+local HYPRFOCUS_HELD = "special:hyprfocus-held"
+
+---A gap value as one scalar: `gaps_in` has no directional meaning, and a
+---sided `Scene.CssGap` table (the way Hyprland marshals gaps) collapses to
+---its `left` so the deck's inter-column spacing stays a single number.
 ---@param value number|Scene.CssGap?
 ---@param fallback number
 ---@return number
@@ -41,12 +45,11 @@ end
 ---should reach into the other's internals for two lines of arithmetic): the
 ---scene's own declared `gaps_in`/`gaps_out` (LEO-397) win, then the host
 ---workspace-spec gaps (`conf/host.lua` resolves those from the monitor
----profile at load), then the compositor's global config, read live. Every
----rung collapses to one symmetric number via `scalar` — `deck.lua`'s
----`opts.gaps_out` is one number on every side, unlike `layout.lua`'s `sides`
----(see `deck.lua`'s module comment).
+---profile at load), then the compositor's global config, read live. `gaps_in`
+---collapses to a scalar (it is only the space between columns); `gaps_out`
+---is kept as a `Scene.CssGap` so top/bottom/sides are honoured separately.
 ---@param scene Scene.Spec
----@return number gaps_in, number gaps_out
+---@return number gaps_in, Scene.CssGap gaps_out
 local function gaps(scene)
   local function raw(key, fallback)
     local ok, value = pcall(hl.get_config, key)
@@ -63,9 +66,13 @@ local function gaps(scene)
     end
   end
   local global_in = scalar(raw("general:gaps_in", 0), 0)
-  local global_out = scalar(raw("general:gaps_out", 0), 0)
+  local global_out = raw("general:gaps_out", 0)
   local gaps_in = scalar(scene.gaps_in, scalar(spec_in, global_in))
-  local gaps_out = scalar(scene.gaps_out, scalar(spec_out, global_out))
+  -- `gaps_out` is directional: a bare number is uniform, a table names each
+  -- side. `deck.lua` now consumes it with `layout.sides`, same as the scene
+  -- layout, so an asymmetric outer gap (tighter top for the bar, say) no
+  -- longer collapses to the left value on every side.
+  local gaps_out = scene.gaps_out or spec_out or global_out
   return gaps_in, gaps_out
 end
 
@@ -81,7 +88,16 @@ local function member_tiles(spec)
   local tiles, workspace_of = {}, {}
   for _, w in ipairs(hl.get_windows() or {}) do
     local tile = scene_provider.window_tile(w)
-    if deck.column_for(spec, tile) then
+    local at = w.workspace and w.workspace.name
+    -- A member the MODE has parked is not this deck's to place. The engine
+    -- withdrew the whole scene and moved its windows to the mode's holding
+    -- place; a deck that still counted them asked the compositor to bring
+    -- them home, which put a withdrawn scene's windows back on the desk --
+    -- and the ones it wanted hidden went to the deck's own hold, a special
+    -- workspace the compositor then shows over whatever IS active. That is
+    -- the coding windows surfacing in a gaming mode. They come back when the
+    -- mode admits the scene again, through `hold.restore` and nothing else.
+    if at ~= HYPRFOCUS_HELD and deck.column_for(spec, tile) then
       tiles[#tiles + 1] = tile
       local ws = w.workspace
       if tile.address and ws and ws.name then
@@ -92,50 +108,26 @@ local function member_tiles(spec)
   return tiles, workspace_of
 end
 
----Every address each deck scene held on its last placement, so a window that
----has just arrived can be told apart from one deliberately scrolled out of
----view.
----@type table<string, table<string, true>>
-local seen = {}
-
 ---Put the hold workspace away if moving a member there pulled it into view.
 ---
 ---Moving a window to a special workspace makes the compositor show that
 ---special on the monitor, so a held member -- a window the deck means to be
 ---invisible -- ends up drawn over whatever workspace is active, including one
----belonging to another scene entirely. Deferred by a tick: a dispatch from
----inside the layout pass re-enters `recalculate`.
+---belonging to another scene entirely.
 local function hide_hold_if_shown()
-  local shown = false
-  for _, monitor in ipairs(hl.get_monitors() or {}) do
-    local special = monitor.specialWorkspace or monitor.special_workspace
-    local name = special and (special.name or special)
-    if name == HOLD then
-      shown = true
-    end
-  end
-  if not shown then
-    return
-  end
-  require("hypr.lib.hypr").oneshot(1, function()
-    hl.dispatch(hl.dsp.workspace.toggle_special(HOLD:gsub("^special:", "")))
-  end)
+  require("hypr.lib.nav").hide_special_if_shown(HOLD)
 end
 
----Drop a closed window from the membership record.
+---Drop a closed window's address from every recorded deck column.
 ---
----`seen` is what makes "new" mean "this scene has never placed this window";
----an address the compositor later hands to a different window would otherwise
----read as already-seen and its column would not scroll to it. Called from the
----`window.close` hook, which is the only event that can retire an address.
+---The persisted record (hypr/scene/deck_order.lua) is what makes "new" mean
+---"this column has never shown this window"; an address the compositor later
+---hands to a different window would otherwise read as already-recorded and
+---its column would not scroll to it. Called from the `window.close` hook,
+---which is the only event that can retire an address.
 ---@param address string?
 function M.forget(address)
-  if not address then
-    return
-  end
-  for _, members in pairs(seen) do
-    members[address] = nil
-  end
+  deck_order.forget(address)
 end
 
 ---The live monitor a deck scene's workspace stands on, for the dock publish.
@@ -148,7 +140,9 @@ local function monitor_of(scene_name)
       return monitor
     end
   end
-  return (hl.get_monitors() or hl.monitors or {})[1]
+  -- Same reason as the scene provider's: a mismatched monitor would publish
+  -- this scene's boxes under another output's name.
+  return nil
 end
 
 ---Publish where this scene's quickshell isles sit, off the boxes just placed.
@@ -157,6 +151,35 @@ end
 ---@param tiles Scene.Tile[]
 ---@param boxes Scene.Box[]
 ---@param gaps_in number
+---Park a deck member and, when it held the keyboard, hand the keyboard
+---back to the member the strip now shows. Parking the member that holds
+---focus drags focus into the hold with it (the compositor keeps the focused
+---window focused through the move); when that special is hidden a beat
+---later, Hyprland's own fallback drops the keyboard onto whatever window
+---was focused before the scroll — the other column, which read as
+---"scrolling swaps the focus". `shown_address` is the visible member this
+---pass is laying out; the one-shot lets the park land first.
+---@param address string
+---@param workspace_of table<string, string>
+---@param shown_address string?
+local function park_member(address, workspace_of, shown_address)
+  local at = workspace_of[address]
+  if not at or at == HOLD then
+    return
+  end
+  local active = hl.get_active_window()
+  hl.dispatch(hl.dsp.window.move({
+    window = "address:" .. address,
+    workspace = HOLD,
+    follow = false,
+  }))
+  if active and active.address == address and shown_address then
+    require("hypr.lib.hypr").oneshot(1, function()
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. shown_address }))
+    end)
+  end
+end
+
 ---@param gaps_out number|Scene.CssGap
 local function publish_docks(scene, scene_name, tiles, boxes, gaps_in, gaps_out)
   if not scene.docks then
@@ -171,7 +194,7 @@ local function publish_docks(scene, scene_name, tiles, boxes, gaps_in, gaps_out)
     scene = scene,
     monitor = monitor,
     tiles = tiles,
-    boxes = boxes,
+    boxes = dock_publish.settled(boxes, require("hypr.scene.provider").live_rects()),
     gaps_in = gaps_in or 0,
     gaps_out = { top = top, right = right, bottom = bottom, left = left },
     spec_lib = spec_lib,
@@ -187,50 +210,88 @@ end
 ---workspace, which is the bug this exists to stop. Opening a window is an
 ---implicit request to see it, so its column scrolls to it rather than hiding
 ---it. A window scrolled away by hand is untouched: it is not new.
+---
+---The persisted record (hypr/scene/deck_order.lua) plays the "seen" set, in
+---the order the column walks: an address is new when the column HAS a record
+---and this pass's stack (recorded order plus arrivals) does not list it. A
+---column with no record yet is all "never seen" but scrolls nothing — a
+---brand-new deck must not yank its first pass to a scrolled position, the
+---same reason the old session-only set skipped its first pass. Every pass
+---folds the merged order — recorded addresses in record order, arrivals
+---appended — back into the record, which prunes addresses of windows that
+---left without closing and makes "new" apply exactly once per window. The
+---prune skips members the MODE has parked on the holding place: they are not
+---gone, and pruning them made their homecoming read as a first arrival — the
+---column scrolled to the returning window and re-parked the one that had
+---been visible, leaving the record pointing at a hidden member.
 ---@param spec Deck.Spec
 ---@param scene_name string
 ---@param tiles Scene.Tile[]
-local function scroll_to_arrivals(spec, scene_name, tiles)
-  local previous = seen[scene_name]
-  -- Record EVERY member, not just the ones on the workspace. Recording only
-  -- the on-workspace ones meant a held member never entered the set, so it
-  -- read as new on the very next pass -- the column scrolled to it, which
-  -- held the other one, which then read as new in turn. The two swapped
-  -- places forever and the deck never settled. Membership is the right key:
-  -- "new" must mean "this scene has never placed this window", which happens
-  -- exactly once per window.
-  local current = {}
-  for _, tile in ipairs(tiles) do
-    if tile.address then
-      current[tile.address] = true
-    end
+---@param records table<integer, { order: string[], scroll: number? }> this
+---scene's persisted records, read by the caller
+---@param held table<string, boolean>? addresses the mode holds right now
+---@return table<integer, { order: string[], scroll: number? }> the records,
+---folded and persisted (dirty-guarded: an unchanged column is not written)
+local function scroll_to_arrivals(spec, scene_name, tiles, records, held)
+  held = held or {}
+  local order = {}
+  for column_order, record in pairs(records) do
+    order[column_order] = record.order
   end
-  seen[scene_name] = current
-  for order, stack in pairs(deck.stacks(spec, tiles)) do
-    for index, tile in ipairs(stack) do
-      -- An arrival is a member this pass has not seen before that is ALSO
-      -- sitting on the deck's own workspace. The workspace test is what makes
-      -- the very first pass correct: with no previous set every member looks
-      -- new, but a member already parked in `HOLD` is not on the workspace, so
-      -- only something that genuinely just opened qualifies. It also keeps a
-      -- reload from yanking a column off a position chosen by hand.
-      -- Deliberately NOT gated on the window being on the deck's workspace:
-      -- the pass that first sees a new window can run while the compositor is
-      -- still placing it, and the pass after that it has already been parked
-      -- in `HOLD` -- so it would never once qualify. Membership is enough,
-      -- since `seen` makes "new" mean "this scene has never placed it".
-      local unseen = tile.address and previous and not previous[tile.address]
-      if unseen then
-        deck_scroll.set(scene_name, order, index)
-        break
+  for column_order, stack in pairs(deck.stacks(spec, tiles, order)) do
+    local record = records[column_order]
+    local scroll
+    if record then
+      local listed = {}
+      for _, address in ipairs(record.order) do
+        listed[address] = true
+      end
+      for index, tile in ipairs(stack) do
+        -- An arrival is a member this pass records for the first time: the
+        -- record exists (this is not a brand-new column) and the address
+        -- sits beyond the recorded order — the merged stack carries it
+        -- because the window genuinely just opened. A member home from the
+        -- mode's holding place is still recorded (the merge below keeps it)
+        -- and therefore never reads as new.
+        if tile.address and not listed[tile.address] and not held[tile.address] then
+          scroll = index
+          break
+        end
       end
     end
+    local in_stack = {}
+    for _, tile in ipairs(stack) do
+      if tile.address then
+        in_stack[tile.address] = true
+      end
+    end
+    local merged = {}
+    local seen = {}
+    for _, address in ipairs(record and record.order or {}) do
+      -- Recorded members stay recorded while they exist somewhere: on the
+      -- deck, or parked by the mode. An address the compositor no longer
+      -- knows and the mode does not hold is a window that vanished without
+      -- a close event, and its slot is dropped (`M.forget` retires the ones
+      -- that closed properly).
+      if not seen[address] and (in_stack[address] or held[address]) then
+        seen[address] = true
+        merged[#merged + 1] = address
+      end
+    end
+    for _, tile in ipairs(stack) do
+      if tile.address and not seen[tile.address] then
+        seen[tile.address] = true
+        merged[#merged + 1] = tile.address
+      end
+    end
+    records[column_order] = deck_order.record(scene_name, column_order, merged, scroll or (record and record.scroll))
   end
+  return records
 end
 
 ---Deck-opted scenes only, keyed by workspace name — `deck.applies` is the
 ---one opt-in check (docs/deck.md), so a scene left on `layout = "scene"`
----(every real scene today) never reaches this provider at all.
+---never reaches this provider at all.
 ---@param scenes table<string, Scene.Spec>
 ---@return table<string, Scene.Spec>
 local function deck_scenes(scenes)
@@ -276,6 +337,21 @@ function M.register(scenes)
   })
 end
 
+---Split the persisted records into the two maps `deck.boxes` takes: the
+---recorded address list per column (strip order, which survives a reload)
+---and the recorded visible index per column.
+---@param records table<integer, { order: string[], scroll: number? }>
+---@return table<integer, string[]> order
+---@return table<integer, number?> scroll
+local function order_and_scroll(records)
+  local order, scroll = {}, {}
+  for column_order, record in pairs(records) do
+    order[column_order] = record.order
+    scroll[column_order] = record.scroll
+  end
+  return order, scroll
+end
+
 ---Place one deck scene's windows into `ctx`.
 ---
 ---Exposed rather than kept inside the registered layout because a deck
@@ -302,11 +378,24 @@ function M.place(scene, scene_name, ctx)
 
     local gaps_in, gaps_out = gaps(scene)
     local tiles, workspace_of = member_tiles(scene)
-    scroll_to_arrivals(scene, scene_name, tiles)
+    -- Members the mode holds right now: the record keeps their slots, so
+    -- their homecoming is a return to the recorded position, not an arrival
+    -- the column scrolls to.
+    local held = {}
+    for _, w in ipairs(hl.get_windows() or {}) do
+      local at = w.workspace and w.workspace.name
+      if at == HYPRFOCUS_HELD and w.address then
+        held[w.address] = true
+      end
+    end
+    local records = deck_order.get_all(scene_name)
+    records = scroll_to_arrivals(scene, scene_name, tiles, records, held)
+    local order, scroll = order_and_scroll(records)
     local boxes, hold = deck.boxes(scene, tiles, ctx.area, {
       gaps_in = gaps_in,
       gaps_out = gaps_out,
-      scroll = deck_scroll.get_all(scene_name),
+      order = order,
+      scroll = scroll,
     })
     for _, box in ipairs(boxes) do
       local target = by_address[box.address]
@@ -326,21 +415,7 @@ function M.place(scene, scene_name, ctx)
     end
 
     for _, address in ipairs(hold) do
-      -- Ask the COMPOSITOR where the window is, not this layout's target
-      -- list. A window can sit on the deck's workspace while the layout has
-      -- not adopted it -- moving one back from `HOLD` leaves it on the
-      -- workspace but absent from `ctx.targets` -- and gating on the target
-      -- list then skipped its move forever, stranding it as a full-width
-      -- overlay over the columns (verified live). A member already in `HOLD`,
-      -- or not yet anywhere, still needs no move.
-      local at = workspace_of[address]
-      if at and at ~= HOLD then
-        hl.dispatch(hl.dsp.window.move({
-          window = "address:" .. address,
-          workspace = HOLD,
-          follow = false,
-        }))
-      end
+      park_member(address, workspace_of, boxes[1] and boxes[1].address)
     end
 
     hide_hold_if_shown()
@@ -382,10 +457,12 @@ function M.reconcile(scene_name)
   end
   local tiles, workspace_of = member_tiles(scene)
   local gaps_in, gaps_out = gaps(scene)
+  local order, scroll = order_and_scroll(deck_order.get_all(scene_name))
   local boxes, hold = deck.boxes(scene, tiles, area, {
     gaps_in = gaps_in,
     gaps_out = gaps_out,
-    scroll = deck_scroll.get_all(scene_name),
+    order = order,
+    scroll = scroll,
   })
   -- Whether anything the deck wants shown is currently focused. Read BEFORE
   -- the moves below, because a window arriving does not change focus
@@ -418,11 +495,9 @@ function M.reconcile(scene_name)
     end)
   end
   for _, address in ipairs(hold) do
-    local at = workspace_of[address]
-    if at and at ~= HOLD then
-      hl.dispatch(hl.dsp.window.move({ window = "address:" .. address, workspace = HOLD, follow = false }))
-    end
+    park_member(address, workspace_of, boxes[1] and boxes[1].address)
   end
+  hide_hold_if_shown()
 end
 
 ---Register with whatever the host declares. Separate from `register` so
@@ -431,6 +506,9 @@ function M.attach()
   M.register(spec_lib.load)
 end
 
+-- Exported so the mode engine can find these windows: a deck member parked
+-- here still belongs to its scene, and a mode that withdraws that scene has to
+-- take them with it (hypr/hyprfocus/hold.lua).
 M.HOLD = HOLD
 
 return M

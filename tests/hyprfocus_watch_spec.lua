@@ -41,6 +41,8 @@ local function fresh(declaration, pointer)
   _G.hl = stub
   for _, mod in ipairs({
     "hypr.lib.store",
+    "hypr.lib.hypr",
+    "hypr.lib.transition",
     "hypr.lib.notify",
     "hypr.hyprfocus.hold",
     "hypr.hyprfocus.binds",
@@ -110,13 +112,15 @@ end
 
 t.describe("the watcher", function()
   t.it("converges when the shell edits the pointer without asking the compositor", function()
-    local _, hyprfocus, watch, stores, rules = fresh(DECLARATION)
+    local stub, hyprfocus, watch, stores, rules = fresh(DECLARATION)
     watch.tick()
+    stub:drain()
     t.eq("neutral", hyprfocus.last_applied(), "the first tick converges on the pointer")
 
     -- What Focus.set does: a pointer edit and nothing else.
     stores.focus = { mode = "game" }
     local applied_now = watch.tick()
+    stub:drain()
     t.eq("game", applied_now)
     t.eq("game", hyprfocus.last_applied())
     t.eq(false, rules.code.enabled)
@@ -126,6 +130,7 @@ t.describe("the watcher", function()
   t.it("does not re-apply when the pointer matches what is running", function()
     local stub, hyprfocus, watch = fresh(DECLARATION, { mode = "game" })
     watch.tick()
+    stub:drain()
     local before = #stub.dispatched
     local applied_now = watch.tick()
     t.eq(nil, applied_now, "no mode was applied again")
@@ -134,7 +139,7 @@ t.describe("the watcher", function()
   end)
 
   t.it("tries again the next tick when an apply fails, instead of drifting", function()
-    local _, hyprfocus, watch, stores = fresh(DECLARATION)
+    local stub, hyprfocus, watch, stores = fresh(DECLARATION)
     -- A declaration-less store breaks resolution; the tick records no mode.
     stores.hyprfocus = nil
     local applied_now, err = watch.tick()
@@ -146,14 +151,18 @@ t.describe("the watcher", function()
     stores.hyprfocus = DECLARATION
     stores.focus = { mode = "game" }
     applied_now = watch.tick()
+    stub:drain()
     t.eq("game", applied_now)
   end)
 
   t.it("hands the services half to the command line as well", function()
     -- Convergence is end to end: the watcher mirrors what a keyboard enter
     -- does, including the CLI's half of the transition.
+    -- The CLI half is spawned from the settle callback, so let the transition
+    -- timers run before checking.
     local stub, _, watch = fresh(DECLARATION, { mode = "game" })
     watch.tick()
+    stub:drain()
     local spawned = false
     for _, d in ipairs(stub.dispatched) do
       if d.name == "dsp.exec_cmd" and tostring(d.args[1]):match("hyprfocus apply game") then
@@ -187,10 +196,20 @@ t.describe("the watcher", function()
     local stub, hyprfocus, watch = fresh(DECLARATION, { mode = "game" })
     t.eq(0, #stub.timers, "no timer chain — idle desks pay stats, not ticks")
     watch.attach()
-    t.ok(#stub.timers == 0, "no timers were armed")
+    -- The mode transition arms one-shots only (the animation bracket's
+    -- settle plus its failsafe, LEO-423), never a repeating clock.
+    local repeating = 0
+    for _, timer in ipairs(stub.timers) do
+      if timer.opts and timer.opts.type ~= "oneshot" then
+        repeating = repeating + 1
+      end
+    end
+    t.eq(0, repeating, "no repeating timer was armed")
+    t.ok(#stub.timers <= 2, "at most the transition's one-shot settle and failsafe")
     local handler = stub.event_handlers["workspace.active"]
     t.ok(handler and #handler >= 1, "workspace.active triggers convergence")
-    -- The load-time convergence ran the pointer's mode once.
+    -- The load-time convergence ran the pointer's mode once (after its lead).
+    stub:drain()
     t.eq("game", hyprfocus.last_applied())
   end)
 end)
@@ -240,24 +259,28 @@ t.describe("a gaming -> neutral -> gaming round trip", function()
     }
     compositor(stub, windows)
     watch.attach()
+    stub:drain()
     t.eq("game", hyprfocus.last_applied())
     t.eq(HELD_BOTH, where(windows))
     t.eq(false, rules.code.enabled)
 
     stores.focus = { mode = "neutral" }
     t.eq("neutral", watch.tick())
+    stub:drain()
     t.eq(BACK, where(windows))
     t.eq(true, rules.code.enabled)
     t.eq({}, stores["hyprfocus-held"].windows, "nothing left in the record")
 
     stores.focus = { mode = "game" }
-    local report = hyprfocus.converge("game")
+    -- `apply` rather than `converge`: the report is what this asserts, and a
+    -- genuine transition defers its report (LEO-423).
+    local report = hyprfocus.apply("game")
     t.eq(HELD_BOTH, where(windows))
     t.eq(0, report.unreachable)
     t.eq({ ["0x1"] = "code", ["0x2"] = "code" }, stores["hyprfocus-held"].windows, "every held window has its origin")
 
     stores.focus = { mode = "neutral" }
-    report = hyprfocus.converge("neutral")
+    report = hyprfocus.apply("neutral")
     t.eq(BACK, where(windows))
     t.eq(2, report.windows_restored)
     t.eq(0, report.unreachable)

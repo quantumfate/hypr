@@ -5,18 +5,21 @@ this document now describes the `flip` presentation, not a layout a scene
 opts into.** `hypr/scene/deck.lua` implements the pure decision;
 `hypr/scene/deck_provider.lua` registers it with the compositor
 (`hl.layout.register("deck", ...)`, mirroring `hypr/scene/provider.lua`) and
-dispatches the hold/return moves it reports; `hypr/scene/deck_scroll.lua`
-holds the session-only scroll index; `hypr/lib/nav.lua`/`hypr/binds.lua` map
-`mod+h/l` across columns and `mod+j/k` to scroll within one. That code
-predates the decision this document now records and still speaks of `deck`
-as a scene-level `layout` choice; [columns.md](columns.md)'s §12 is the
-concrete map for turning it into the `flip` presentation module described
-below. Still true of the live desk: no real scene declares `layout =
-"deck"` — every workspace behaves exactly as it did before any of this
-landed. Read [scenes.md](scenes.md) and [columns.md](columns.md) first —
-columns.md is the architecture of record for what a column is and how it is
-sized; this document only describes what happens _inside_ a column whose
-declared `presentation` is `flip`.
+dispatches the hold/return moves it reports; `hypr/scene/deck_order.lua`
+holds the persisted order and scroll index per column; `hypr/lib/nav.lua`/
+`hypr/binds.lua` map `mod+h/l` across columns and `mod+ctrl+j/k` to scroll
+within one. That code predates the decision this document now records and
+still speaks of `deck` as a scene-level `layout` choice;
+[columns.md](columns.md)'s §12 is the concrete map for turning it into the
+`flip` presentation module described below. On the live desk the `code`
+and `media` scenes already opt into `layout = "deck"` (quickshell's
+`assets/hyprfocus.default.json` seeds them; the running store keeps what it
+has), so this is no longer speculative wiring — the persistent strip this
+document describes is what those two workspaces behave like today. Read
+[scenes.md](scenes.md) and [columns.md](columns.md) first — columns.md is
+the architecture of record for what a column is and how it is sized; this
+document only describes what happens _inside_ a column whose declared
+`presentation` is `flip`.
 
 ## `flip` is a presentation, not a layout
 
@@ -150,12 +153,19 @@ one thing the same way — the fold does not invent a second grouping rule
 either.
 
 A per-workspace, per-column **scroll index** (1-based, which thing is
-visible) is the only state `flip` adds, and it is session-only — the same
-lifetime as `hypr/scene/order.lua`'s tile-swap override, never persisted,
-dropped on reload. `M.clamp_scroll` re-derives a valid index every pass
-against the column's current thing count, so a window closing mid-column
-can never strand the scroll position past the end (mirrors the reachability
-guarantees the rest of the scene engine already gives — see
+visible) and the column's **thing order** are the state `flip` adds, and
+they persist — `hypr/scene/deck_order.lua` mirrors the rest of the desk's
+store discipline instead of `hypr/scene/order.lua`'s tile-swap override,
+whose lifetime is session-only and which is dropped on reload (the
+"Fall-through" row below keeps the two distinct). Because window addresses
+survive a compositor reload, the strip comes back in the order the user
+built it, and the visible thing stays the one chosen by hand. Refusing to
+persist was the older choice's only virtue — fewer writes — and it bought
+none of that: the index was gone on every reload. `M.clamp_scroll`
+re-derives a valid index every pass against the column's current thing
+count, so a window closing mid-column can never strand the stored position
+past the end (mirrors the reachability guarantees the rest of the scene
+engine already gives — see
 [desktop-model.md](desktop-model.md#transitions), "scrolling through the
 slot updates recency"). A `flip` column that folds into another column
 (columns.md §3) keeps its own scroll index as dead state until the fold
@@ -331,9 +341,13 @@ config.primary_mod .. " + j/k"`, i.e. `SUPER+CTRL+J/K`) is the proposed
   scope for this document (docs-only, no Lua touched here) — recorded so
   the wiring chunk implements exactly this, not a fresh decision.
 
-None of the above is implemented yet: `hypr/lib/nav.lua` and
-`hypr/binds.lua` are unchanged by this chunk. This section records the
-intended mapping for the chunk that does wire binds.
+Of the above, the `mod+ctrl+j/k` pair is wired: `hypr/binds.lua`'s
+`scroll_deck_column` binds `SUPER+CTRL+J/K` to step the focused column's
+strip one thing, persist the new index (`hypr/scene/deck_order.lua`), move
+the target home, and focus it. The rest of this section — crossing into a
+`flip` column focusing its visible thing, and folding `mod+shift+j/k` into
+the group submap — is not wired yet; the note is recorded here so a later
+chunk implements exactly this, not a fresh decision.
 
 ## Bound
 
@@ -364,21 +378,28 @@ performed:
   to); every held address still tiled here gets moved to `HOLD`.
 - The hold area is one shared special workspace, `special:deck-hold`
   (`deck_provider.HOLD`) — never declared, so no mode can admit or withdraw
-  it, the same shape `hypr/hyprfocus/hold.lua`'s `HELD` uses. Per-scene
-  holding was the open question this document left; one shared area was
-  simpler and nothing today needs the split.
-- `hypr/scene/deck_scroll.lua` is the session-only scroll index, keyed by
-  scene name then column order, mirroring `hypr/scene/order.lua` exactly
-  (never touches `$QF_STORE`, dropped on reload).
-- `hypr/lib/nav.lua`'s `M.deck_tile_order(spec, tiles, scroll)` turns a
+  it, the same shape `hypr/hyprfocus/hold.lua`'s `HELD` uses. It is silent:
+  held windows cannot take focus or respond to activation requests, and if the
+  special workspace ever becomes visible it is put away automatically.
+  Per-scene holding was the open question this document left; one shared area
+  was simpler and nothing today needs the split.
+- `hypr/scene/deck_order.lua` is the persisted per-column state — the
+  strip's thing-address order and the visible index, keyed by scene name
+  then column order, written to `$QF_STORE/deck-order.json` and
+  dirty-guarded so a no-op never bumps the file's mtime. It owes the
+  session-only `hypr/scene/order.lua` tile-swap override nothing but its
+  keying shape; the deck strip is the user's arrangement and must survive a
+  reload.
+- `hypr/lib/nav.lua`'s `M.deck_tile_order(spec, tiles, records)` turns a
   deck's columns into `Nav.Tile`s the existing `M.decide` already knows how
   to walk — a column is a tile, same as a `stack` block or group, so
   `mod+h/l` needed no new decision, only a new way to build the tile list.
-  Each tile also carries `plain` (arrival order, untouched) and `column`
-  (its order), which `hypr/binds.lua`'s `mod+j/k` deck branch uses with the
-  existing `M.window_neighbor` to compute the next visible member, store the
-  new index, move it home, and focus it — the executor's job per "Why hidden
-  windows are HELD" above, not a second navigation path.
+  Each tile also carries `plain` (recorded order, arrivals appended) and
+  `column` (its order), which `hypr/binds.lua`'s `mod+ctrl+j/k` deck branch
+  uses with the existing `M.window_neighbor` to compute the next visible
+  member, store the new index, move it home, and focus it — the executor's
+  job per "Why hidden windows are HELD" above, not a second navigation
+  path.
 - `mod+shift+h/l` and `mod+shift+j/k` stay unassigned for a deck scene, as
   this document already said — `hypr/binds.lua`'s swap/move-in-group
   handlers now check `deck.applies(scene)` and no-op rather than
@@ -396,7 +417,8 @@ performed:
   a sandboxed fixture scene only — `tests/e2e/fixtures/hyprfocus.json`'s
   `deck-test`, `conf/hosts/e2e.lua`'s workspace 4): three windows placed on a
   one-column deck leave exactly one tiled on the workspace and two on
-  `special:deck-hold`; flipping (`mod+j/k`'s bind body, driven via `hc eval`
+  `special:deck-hold`; flipping (`mod+ctrl+j/k`'s `scroll_deck_column` bind
+  body, driven via `hc eval`
   the same way `60_navigation.sh` does — `hq key` does not fire this
   config's Lua-closure binds in this sandbox) changes which one is tiled,
   the other two stay held, and focus lands on exactly the window the flip
@@ -410,25 +432,22 @@ performed:
 
 **Superseded by this revision**: the `mod+j/k` deck branch described just
 above — scrolling on `mod+j/k` — is the pre-correction wiring and is what
-the "Navigation" section above now overrides. Nothing in this bullet list
-has actually changed (docs-only chunk, no Lua touched), so the live desk
-still behaves exactly as this section describes; the wiring chunk that
-implements the "Navigation" section's `mod+ctrl+j/k` pair is what retires
-this bullet's `mod+j/k` behaviour, not this document by itself.
+the "Navigation" section above now overrides. The pair that replaced it,
+`mod+ctrl+j/k` (`scroll_deck_column` in `hypr/binds.lua`, persisting via
+`hypr/scene/deck_order.lua`), has since landed — this bullet's `mod+j/k`
+behaviour is retired by that wiring, not by this document alone.
 
 ## Next chunk
 
 - The merge columns.md §12 describes: `hypr/scene/deck.lua` →
   `hypr/scene/flip.lua`, `hypr/scene/layout.lua` → `hypr/scene/stack.lua`,
   the two providers merging into one that reads `presentation` per
-  resolved column, `deck_scroll.lua` → `scroll.lua`.
+  resolved column, `deck_order.lua` → `scroll.lua`.
 - `presentation = "flip"` on an actual column (`code`'s project column,
   once LEO-308/311 land) replacing today's fixed blocks.
 - Structured logging events (`arrange`/`flip_scroll`, `arrange`/`flip_hold`)
   once LEO-352 lands a writer; until then the executor still only dispatches
   the moves the pure functions decide.
-- Wire `mod+ctrl+j/k` to scroll the strip and retire the `mod+j/k` deck
-  branch, per the "Navigation" section's correction above.
 - Move `mod+shift+j/k` (move-in-group) into the group submap, freeing the
   root chord, per the same section — `mod+shift+h/l` for a `flip` column
   (column reorder) is still not decided.
@@ -492,9 +511,10 @@ their output instead of recomputing it:
   presentation does not invent its own thing-order.
 
 What a presentation module _does_ own, and is the only genuinely new
-surface a fourth layout adds: its own presentation-specific session state
-(the way `flip` alone needs a scroll index — a hypothetical grid
-presentation might need a 2D cursor instead) and its own `M.boxes` framing
+surface a fourth layout adds: its own presentation-specific state in the
+user's control architecture (the way `flip` alone has a persisted scroll
+index and thing order — a hypothetical grid presentation might need a 2D
+cursor instead) and its own `M.boxes` framing
 of `members` inside the column's given `width`/`x_offset` (the way `flip`
 shows one at a time and `stack` shows all of them vertically split). That
 is deliberately the entire cost of a fourth layout: one module implementing

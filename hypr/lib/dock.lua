@@ -28,6 +28,8 @@ local M = {}
 ---@field region Dock.Box?
 ---@field anchor { x: number, y: number }?
 ---@field grow ("up"|"down"|"left"|"right")?
+---@field edge Dock.Edge? the gutter the isle stands in
+---@field align ("start"|"center"|"end")? where the anchor sits ALONG the edge
 ---@field orientation ("horizontal"|"vertical")?
 ---@field state "docked"|"fallback"|"resting"|"hidden"
 
@@ -161,40 +163,62 @@ local function default_orientation(edge)
   return "horizontal"
 end
 
----The region/anchor/grow for one resolved edge dock: the gutter between
----`target`'s edge and the monitor's own, minus `standoff` (the scene's
----`gaps_in`, kept clear next to the window). The region spans the target's
----full length on that edge; `align` places the anchor point — the corner
----touching the window, which is where the isle grows away from — within it.
+---The region/anchor/grow for one resolved edge dock.
+---
+---The gutter is the band between the monitor's edge and the target's, and
+---the pass that calls this holds both boxes — so the band is MEASURED, never
+---re-derived from the gap ladder, whose answer is not the geometry the
+---compositor actually tiled (the two were ~14px apart on a real desk, and
+---the isles sat exactly that far off).
+---
+---A WINDOW target is hugged (docs/scenes.md): the isle's growth corner sits
+---on the target's edge, less `standoff` (the scene's `gaps_in`), and grows
+---AWAY from the window into the gutter. So the isle follows its block on
+---both axes — a scene with a deeper top gap carries the isle down with it,
+---which standing every isle on the screen edge instead could never do.
+---
+---A SCREEN target uses the monitor minus the outer gap as a virtual window,
+---so a fallback dock hugs the inner edge of the gap and grows into the gap
+---rather than sitting hard against the screen edge.
 ---@param edge Dock.Edge
 ---@param target Dock.Box
 ---@param monitor Dock.Box
----@param standoff number
+---@param standoff number the scene's `gaps_in`, spent between isle and window
 ---@param align "start"|"center"|"end"
----@param gaps_out table<Dock.Edge, number>
+---@param is_screen boolean the target IS the monitor
 ---@return Dock.Box region, { x: number, y: number } anchor, "up"|"down"|"left"|"right" grow
-local function edge_geometry(edge, target, monitor, standoff, align, gaps_out)
-  local thickness = math.max((gaps_out[edge] or 0) - standoff, 0)
+local function edge_geometry(edge, target, monitor, standoff, align)
   local region, anchor, grow, cross_origin, cross_size, cross_is_x
 
   if edge == "top" then
-    region = { x = target.x, y = monitor.y, w = target.w, h = thickness }
-    anchor = { x = target.x, y = target.y - standoff }
-    grow, cross_origin, cross_size, cross_is_x = "up", target.x, target.w, true
+    -- The gutter reaches from the screen edge to the target's edge; the isle
+    -- hugs the target and grows away from it (up into the gap). A screen target
+    -- uses the same model, with the content area as the virtual window.
+    local inner = target.y
+    region = { x = target.x, y = monitor.y, w = target.w, h = math.max(inner - monitor.y, 0) }
+    anchor = { x = target.x, y = inner - standoff }
+    grow = "up"
+    cross_origin, cross_size, cross_is_x = target.x, target.w, true
   elseif edge == "bottom" then
-    local y = target.y + target.h + standoff
-    region = { x = target.x, y = y, w = target.w, h = thickness }
-    anchor = { x = target.x, y = y }
-    grow, cross_origin, cross_size, cross_is_x = "down", target.x, target.w, true
+    local edge_y = monitor.y + monitor.h
+    local inner = target.y + target.h
+    region = { x = target.x, y = inner, w = target.w, h = math.max(edge_y - inner, 0) }
+    anchor = { x = target.x, y = inner + standoff }
+    grow = "down"
+    cross_origin, cross_size, cross_is_x = target.x, target.w, true
   elseif edge == "left" then
-    region = { x = monitor.x, y = target.y, w = thickness, h = target.h }
-    anchor = { x = target.x - standoff, y = target.y }
-    grow, cross_origin, cross_size, cross_is_x = "left", target.y, target.h, false
+    local inner = target.x
+    region = { x = monitor.x, y = target.y, w = math.max(inner - monitor.x, 0), h = target.h }
+    anchor = { x = inner - standoff, y = target.y }
+    grow = "left"
+    cross_origin, cross_size, cross_is_x = target.y, target.h, false
   else -- right
-    local x = target.x + target.w + standoff
-    region = { x = x, y = target.y, w = thickness, h = target.h }
-    anchor = { x = x, y = target.y }
-    grow, cross_origin, cross_size, cross_is_x = "right", target.y, target.h, false
+    local edge_x = monitor.x + monitor.w
+    local inner = target.x + target.w
+    region = { x = inner, y = target.y, w = math.max(edge_x - inner, 0), h = target.h }
+    anchor = { x = inner + standoff, y = target.y }
+    grow = "right"
+    cross_origin, cross_size, cross_is_x = target.y, target.h, false
   end
 
   local point
@@ -215,20 +239,40 @@ end
 
 ---The box a dock's `of` names, or nil when it names a tile that is not
 ---placed right now (an absent block/slot/class — collapse territory).
+---A `screen` target is the monitor minus the scene's outer gap, so a fallback
+---dock with no window still sits inside the gap rather than hard against the
+---screen edge.
 ---@param of string
----@param ctx { monitor: Dock.Box, targets: table<string, Dock.Box> }
+---@param ctx { monitor: Dock.Box, targets: table<string, Dock.Box>, gaps_out: table<Dock.Edge, number> }
 ---@return Dock.Box? box, boolean is_screen
 local function target_box(of, ctx)
   if of == "screen" then
-    return ctx.monitor, true
+    local g = ctx.gaps_out or {}
+    local left = g.left or 0
+    local top = g.top or 0
+    local right = g.right or 0
+    local bottom = g.bottom or 0
+    return {
+      x = ctx.monitor.x + left,
+      y = ctx.monitor.y + top,
+      w = ctx.monitor.w - left - right,
+      h = ctx.monitor.h - top - bottom,
+    },
+      true
   end
   return ctx.targets[of], false
 end
 
 ---Resolve one dock-spec chain level. `stepped_down` is true once resolution
----has left the isle's own first-choice spec (a declared `fallback`, or the
----ladder's implicit "same anchor on screen"), which is what separates
----`"docked"` from `"fallback"` in the published state.
+---has left the isle's own first-choice spec (a declared `fallback`), which is
+---what separates `"docked"` from `"fallback"` in the published state.
+---
+---The ladder has exactly two rungs: the isle's own declaration (its target,
+---then any declared `fallback` chain), then resting. There is no implicit
+---"same anchor on screen" rung — an isle only ever deviates from resting
+---through its own declaration, so two isles on one workspace cannot end up in
+---different failure modes (one hugging a window gutter, one squeezed into the
+---screen gap).
 ---@param entry Dock.Spec|false|nil
 ---@param ctx table
 ---@param claimed table<string, boolean>
@@ -244,17 +288,13 @@ local function resolve_chain(entry, ctx, claimed, stepped_down)
 
   ---A step-down that still needs to happen once we know why: the target is
   ---absent, both candidate gutters are inter-window, or the region this
-  ---entry resolved to is already claimed. All three collapse the same way.
+  ---entry resolved to is already claimed. All three collapse the same way:
+  ---down the declared fallback chain, or to rest.
   local function step_down()
     if entry.fallback ~= nil then
       return resolve_chain(entry.fallback, ctx, claimed, true)
     end
-    if entry.of == "screen" then
-      -- Already the ladder's last rung and it still failed (a claimed
-      -- region with nothing left to try) -- nothing further to collapse to.
-      return nil
-    end
-    return resolve_chain({ at = entry.at, of = "screen", orientation = entry.orientation }, ctx, claimed, true)
+    return nil
   end
 
   local target, is_screen = target_box(entry.of, ctx)
@@ -287,8 +327,12 @@ local function resolve_chain(entry, ctx, claimed, stepped_down)
   local standoff = is_screen and 0 or (ctx.gaps_in or 0)
   local region, anchor, grow
   if resolved_edge then
-    region, anchor, grow =
-      edge_geometry(resolved_edge, target, ctx.monitor, standoff, resolved_align, ctx.gaps_out or {})
+    -- A window target is hugged: the growth corner sits on the window's
+    -- edge, less the scene's `gaps_in`, and the isle grows away from it into
+    -- the gutter -- so the isle follows its block down a deeper gap instead
+    -- of staying pinned to the screen edge on every scene. A `screen` target
+    -- hugs the monitor-minus-gap box the same way, with no standoff.
+    region, anchor, grow = edge_geometry(resolved_edge, target, ctx.monitor, standoff, resolved_align)
   else
     -- Pure center: no gutter to grow into, so the isle rests on the
     -- target's own box (screen for a HUD-style center dock).
@@ -297,7 +341,14 @@ local function resolve_chain(entry, ctx, claimed, stepped_down)
     grow = "down"
   end
 
-  local region_key = entry.of .. "@" .. (resolved_edge or "center")
+  -- What a second isle may not take is the same SPOT, not the same gutter.
+  -- A top gutter with one isle at its left end and another at its right is
+  -- the shape every scene declares (`bar.center` left of `bar.clock`, both
+  -- on the same block's top edge); keying the claim on the gutter alone
+  -- refused the second one and sent it down the ladder every time. The
+  -- alignment is what separates two isles sharing an edge, so it belongs in
+  -- the key.
+  local region_key = entry.of .. "@" .. (resolved_edge or "center") .. "@" .. (resolved_align or "center")
   if claimed[region_key] then
     return step_down()
   end
@@ -307,6 +358,20 @@ local function resolve_chain(entry, ctx, claimed, stepped_down)
     region = region,
     anchor = anchor,
     grow = grow,
+    -- Which SIDE of the isle the anchor point is. `grow` alone cannot say:
+    -- it names the axis the isle extends along, and for a top gutter that
+    -- leaves the anchor free to be the isle's left edge (`top-left`), its
+    -- centre (`top-center`) or its right edge (`top-right`). Publishing only
+    -- the point meant the consumer read every anchor as a left edge, so a
+    -- right-aligned isle started where it should have ended and was shoved
+    -- to the screen edge by the bounds clamp.
+    align = resolved_align or "center",
+    -- Which gutter this is. The consumer needs it to know which END of the
+    -- region the window stands at, and neither `grow` nor `anchor` can say:
+    -- a hugged window dock and an inward `screen` dock on the same edge grow
+    -- in opposite directions. An isle too big for its gutter is pinned by
+    -- the edge it must not cover, which is that end.
+    edge = resolved_edge,
     orientation = entry.orientation or default_orientation(resolved_edge),
     state = stepped_down and "fallback" or "docked",
   }

@@ -232,6 +232,93 @@ t.describe("strays", function()
   end)
 end)
 
+t.describe("arrival dock publish", function()
+  local SCENES = {
+    {
+      default_name = "logs",
+      docks = {
+        ["bar.center"] = { at = "top-center", of = "screen" },
+        ["bar.clock"] = { at = "top-right", of = "screen" },
+      },
+    },
+    {
+      default_name = "code",
+      docks = {
+        ["bar.workspaces"] = { at = "top-left", of = "block:1" },
+      },
+      blocks = { { classes = { "Kitty-Main" }, order = 1 } },
+    },
+  }
+
+  local function geometry()
+    return package.loaded["hypr.lib.store"].define().get().docks or {}
+  end
+
+  -- A store stub that answers get("docks") and shallow-merges set(), the two
+  -- calls dock_publish.publish makes.
+  local function store_stub(keyed)
+    local doc = { base = { scenes = keyed } }
+    return {
+      define = function()
+        return {
+          get = function(_, key)
+            if key == nil then
+              return doc
+            end
+            return doc[key]
+          end,
+          set = function(_, patch)
+            for k, v in pairs(patch) do
+              doc[k] = v
+            end
+          end,
+        }
+      end,
+    }
+  end
+
+  local function fresh_arrival(scene_name)
+    local stub = require("tests.hl_stub").new()
+    _G.hl = stub
+    stub.monitors =
+      { { name = "DP-9", x = 0, y = 0, width = 2560, height = 1440, active_workspace = { name = scene_name } } }
+    local keyed = {}
+    for _, raw in ipairs(SCENES) do
+      keyed[raw.default_name] = raw
+    end
+    package.loaded["hypr.lib.store"] = store_stub(keyed)
+    _G.config = { host = { workspaces = { workspace_specs = {} } } }
+    for _, mod in ipairs({
+      "hypr.scene.spec",
+      "hypr.scene.layout",
+      "hypr.scene.provider",
+      "hypr.scene.dock_publish",
+    }) do
+      package.loaded[mod] = nil
+    end
+    local provider = require("hypr.scene.provider")
+    provider.attach()
+    return provider
+  end
+
+  t.it("publishes the scene's map with no layout pass at all", function()
+    local provider = fresh_arrival("logs")
+    provider.publish_arrival("logs")
+
+    local docks = geometry()["DP-9"] or {}
+    t.eq("docked", (docks["bar.center"] or {}).state, "the screen-frame isle resolves against the monitor alone")
+    t.eq("docked", (docks["bar.clock"] or {}).state)
+  end)
+
+  t.it("rests block-docked isles until a real pass refines them", function()
+    local provider = fresh_arrival("code")
+    provider.publish_arrival("code")
+
+    local docks = geometry()["DP-9"] or {}
+    t.eq("resting", (docks["bar.workspaces"] or {}).state, "no boxes yet: the isle rests, it does not guess")
+  end)
+end)
+
 t.describe("edges", function()
   t.it("does nothing with no targets", function()
     local _, provider = fresh({ CODE })

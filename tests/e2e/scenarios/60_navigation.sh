@@ -115,6 +115,7 @@ hc keyword monitor "HEADLESS-2,1280x720@60,1280x0,1" >/dev/null
 
 hc eval "require('hypr.hyprfocus').enter('neutral')" >/dev/null || e2e_fail "enter neutral failed"
 wait_until 50 sh -c "jq -e '.mode == \"neutral\"' '$QF_STORE/focus.json'" || e2e_fail "pointer never named neutral"
+wait_transition_settled || e2e_fail "transition to neutral never settled"
 
 go_workspace grouped
 spawn_test_window e2e-grp-a

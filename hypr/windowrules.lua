@@ -16,6 +16,18 @@ windowrule.tag_props({
   { initial_class = "(" .. apps.media_browser.class .. ")" },
 }, "+media-browser")
 
+windowrule.tag_props({
+  { initial_class = "(" .. apps.dofus_browser.class .. ")" },
+}, "+dofus-browser")
+
+windowrule.tag_props({
+  { initial_class = "(" .. apps.pokemon_left_browser.class .. ")" },
+}, "+pokemon-left-browser")
+
+windowrule.tag_props({
+  { initial_class = "(" .. apps.pokemon_right_browser.class .. ")" },
+}, "+pokemon-right-browser")
+
 -- Terminals are deliberately absent here: a terminal opens on the workspace you
 -- launched it from. Pinning them to `code` made a second project window
 -- impossible to keep anywhere else. `,proj.sh` places its own windows instead,
@@ -131,6 +143,24 @@ windowrule.tag_set_effects("exclude-from-screenshare", {
 
 windowrule.tag_set_effects("media-browser", {
   static = { workspace = "name:media" },
+})
+
+-- The dofus browser has its own profile, so its class is its own and the pin
+-- needs no claim to undo it: it lands on the gaming workspace and stays.
+windowrule.tag_set_effects("dofus-browser", {
+  static = { workspace = "name:dofus" },
+})
+
+-- The pokemon desk's two named profiles are one browser each, with their own
+-- classes. Like dofus's, each class is its own scope and the pin needs no
+-- claim to undo it: both land on the pokemon workspace where their slot
+-- blocks wait.
+windowrule.tag_set_effects("pokemon-left-browser", {
+  static = { workspace = "name:pokemon" },
+})
+
+windowrule.tag_set_effects("pokemon-right-browser", {
+  static = { workspace = "name:pokemon" },
 })
 
 -- The nested e2e host models the shared-profile desk (LEO-412): the fixture's
@@ -396,6 +426,21 @@ hl.window_rule({
   suppress_event = "maximize",
 })
 
+-- Focus-specific shadow: the global shadow is subtle, but it must only lift
+-- the currently focused window. A dynamic rule keyed on the `focus` match
+-- disables the shadow for everything else, so inactive sheets stay flat and
+-- the active one reads as the one on top.
+hl.window_rule({
+  name = "focused-shadow",
+  match = { focus = true },
+  no_shadow = false,
+})
+hl.window_rule({
+  name = "unfocused-no-shadow",
+  match = { focus = false },
+  no_shadow = true,
+})
+
 -- The scene layer's rules come last: `group` is decided by the scene that
 -- names the class (hypr/scene/compile.lua), and a later rule is the one that
 -- stands. Emitting here — rather than where the scenes are read — keeps every
@@ -405,6 +450,23 @@ require("hypr.scene.compile").emit(require("hypr.scene.spec").load())
 -- Shelves last, so their workspace effect wins over any earlier class rule.
 local drawer = require("hypr.lib.drawer")
 drawer.rules(drawer.load())
+
+-- Hidden holding places stay silent. A window parked on one of these special
+-- workspaces is intentionally out of sight; it must not ask for focus or
+-- respond to activation requests, and if the special workspace itself becomes
+-- visible it is put away by the runtime callers that park windows here.
+hl.window_rule({
+  name = "hyprfocus-held-silence",
+  match = { workspace = "special:hyprfocus-held" },
+  no_focus = true,
+  suppress_event = "activate activatefocus",
+})
+hl.window_rule({
+  name = "deck-hold-silence",
+  match = { workspace = "special:deck-hold" },
+  no_focus = true,
+  suppress_event = "activate activatefocus",
+})
 
 -- Nested Hyprland instances started by the e2e harness (tests/e2e/hq) open as
 -- an `aquamarine` window. Keep them small, floating in a corner and out of

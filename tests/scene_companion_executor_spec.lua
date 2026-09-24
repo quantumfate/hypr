@@ -40,8 +40,9 @@ local SINGLE = {
 }
 
 ---@param scenes table
+---@param active string[]? scene names the running mode admits (default: both)
 ---@return table calls, table stub, table[] windows
-local function fresh_scene(scenes)
+local function fresh_scene(scenes, active)
   local calls = {}
   package.loaded["hypr.lib.trace"] = {
     emit = function(record)
@@ -64,13 +65,20 @@ local function fresh_scene(scenes)
     end,
   }
 
+  local desk_scenes = {}
+  for _, name in ipairs(active or { "spawner", "single" }) do
+    desk_scenes[#desk_scenes + 1] = { name = name }
+  end
   package.loaded["hypr.hyprfocus"] = {
     applied_desk = function()
-      return { scenes = { { name = "spawner" }, { name = "single" } } }
+      return { scenes = desk_scenes }
     end,
     apply_bindings = function() end,
     active = function() end,
     replace = function() end,
+    applying = function()
+      return false
+    end,
   }
 
   for _, mod in ipairs({
@@ -152,6 +160,65 @@ local function close_dispatches(stub)
   end
   return out
 end
+
+---@param stub table
+---@return string? the last dsp.focus window selector, if any
+local function last_focus_target(stub)
+  local target
+  for _, action in ipairs(stub.dispatched) do
+    if action.name == "dsp.focus" then
+      target = action.args[1] and action.args[1].window
+    end
+  end
+  return target
+end
+
+---@param stub table
+local function fire_focus_return_timers(stub)
+  for _, timer in ipairs(stub.timers) do
+    if timer.opts.timeout == 50 then
+      timer.cb()
+    end
+  end
+end
+
+t.describe("the mode-apply suspension", function()
+  t.it("never closes a companion while an apply is mid-shuffle", function()
+    -- The apply parks a scene's members on the holding place in phases; an
+    -- event landing between phases judged presence against the outgoing
+    -- mode's admitted set and closed the code scene's browser while its
+    -- members were merely parked. Convergence is suspended for the whole
+    -- apply; the apply itself reconverges when its phases are done.
+    local _, stub, windows = fresh_scene({ spawner = SPAWNER })
+    package.loaded["hypr.hyprfocus"].applying = function()
+      return true
+    end
+    local member = win(windows, { address = "0xa1", class = "e2e-member", ws = "spawner" })
+    open(stub, member)
+    local companion = win(windows, { address = "0xb1", class = "e2e-companion", ws = "spawner" })
+    open(stub, companion)
+
+    close(stub, member)
+
+    t.eq(0, #close_dispatches(stub), "the parked member's companion is not killed")
+  end)
+
+  t.it("the apply's reconverge respawns what the shuffle suspended", function()
+    local _, stub, windows = fresh_scene({ spawner = SPAWNER })
+    local member = win(windows, { address = "0xa1", class = "e2e-member", ws = "spawner" })
+    open(stub, member)
+
+    -- Back from gaming: the member was restored to its scene, the companion
+    -- did not survive the shuffle. The apply's own reconverge — not a later,
+    -- unrelated event — is what brings it back.
+    stub.get_windows = function()
+      return { member }
+    end
+    require("hypr.events.scene").reconverge()
+
+    t.eq(1, #spawn_commands(stub), "the restored scene's companion spawns again")
+  end)
+end)
 
 t.describe("companion executor", function()
   t.it("fills the cap one spawn per convergence, never overshooting", function()
@@ -238,5 +305,81 @@ t.describe("companion executor", function()
     close(stub, companion)
     t.eq(2, #spawn_commands(stub), "the scene refills while a member still stands")
     t.eq(0, #close_dispatches(stub), "closing a companion never closes the member")
+  end)
+
+  t.it("a scene the running mode does not admit never converges its companions", function()
+    -- The leak that put a code-scene browser on dofus: a withdrawn scene's
+    -- spawn fired anyway (LEO-423).
+    local _, stub, windows = fresh_scene({ spawner = SPAWNER }, { single = true })
+    local member = win(windows, { address = "0xa1", class = "e2e-member", ws = "spawner" })
+    open(stub, member)
+    t.eq(0, #spawn_commands(stub), "a withdrawn scene's companion is not spawned")
+  end)
+
+  t.it("returns focus to the member that spawned a companion", function()
+    local _, stub, windows = fresh_scene({ single = SINGLE })
+    local member = win(windows, { address = "0xa1", class = "e2e-member", ws = "single" })
+    stub.get_active_window = function()
+      return member
+    end
+    open(stub, member)
+    t.eq(1, #spawn_commands(stub), "the member maps one companion spawn")
+
+    -- The companion maps and steals focus; a 50 ms timer arms to return it.
+    local companion = win(windows, { address = "0xb1", class = "e2e-companion", ws = "single" })
+    stub.get_active_window = function()
+      return companion
+    end
+    open(stub, companion)
+    fire_focus_return_timers(stub)
+
+    t.eq("address:0xa1", last_focus_target(stub), "focus returns to the member that triggered the spawn")
+  end)
+
+  t.it("does not return focus when the source member is no longer on the workspace", function()
+    local _, stub, windows = fresh_scene({ single = SINGLE })
+    local member = win(windows, { address = "0xa1", class = "e2e-member", ws = "single" })
+    stub.get_active_window = function()
+      return member
+    end
+    open(stub, member)
+
+    local companion = win(windows, { address = "0xb1", class = "e2e-companion", ws = "single" })
+    -- Move the member to another workspace before the companion's open timer fires.
+    member.workspace = { id = 9, name = "elsewhere" }
+    stub.get_active_window = function()
+      return companion
+    end
+    open(stub, companion)
+    fire_focus_return_timers(stub)
+
+    t.eq(nil, last_focus_target(stub), "focus is not returned when the source left the workspace")
+  end)
+
+  t.it("inherits the spawn source through a cap-fill chain", function()
+    local _, stub, windows = fresh_scene({ spawner = SPAWNER })
+    local member = win(windows, { address = "0xa1", class = "e2e-member", ws = "spawner" })
+    stub.get_active_window = function()
+      return member
+    end
+    open(stub, member)
+
+    -- The first companion maps and steals focus; the second is spawned before
+    -- the first restore fires, so the source must be inherited.
+    local c1 = win(windows, { address = "0xb1", class = "e2e-companion", ws = "spawner" })
+    stub.get_active_window = function()
+      return c1
+    end
+    open(stub, c1)
+    t.eq(2, #spawn_commands(stub), "the chain spawned a second companion")
+
+    local c2 = win(windows, { address = "0xb2", class = "e2e-companion", ws = "spawner" })
+    stub.get_active_window = function()
+      return c2
+    end
+    open(stub, c2)
+    fire_focus_return_timers(stub)
+
+    t.eq("address:0xa1", last_focus_target(stub), "the inherited source is the original member")
   end)
 end)

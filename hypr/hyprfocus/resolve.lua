@@ -248,7 +248,7 @@ function M.validate(declaration, mode)
       for _, class in ipairs(block.classes or {}) do
         -- A slot-bearing block (LEO-364) claims the launch-identity tag, not
         -- the bare class, so it keys separately: two scenes sharing a class
-        -- (dofus and pokemon, both `zen-twilight-media`) stay unflagged once a
+        -- (dofus and media, both `zen-twilight-media`) stay unflagged once a
         -- slot disambiguates one side.
         local key = block.slot and (class .. ":" .. block.slot) or class
         local owner = claimed_by[key]
@@ -266,10 +266,11 @@ function M.validate(declaration, mode)
   end
 
   -- `main` (LEO-400) names the scene this mode calls home -- the fallback a
-  -- reload restore or a fresh mode entry lands on. Optional for now (a
-  -- pre-LEO-400 declaration has none), but when present it must be one of
-  -- THIS mode's own admitted scenes: naming one the mode does not list would
-  -- make the fallback itself unreachable.
+  -- reload restore or a fresh mode entry lands on. Every shipped mode and the
+  -- seed declare it; when present it must be one of THIS mode's own admitted
+  -- scenes, or the fallback itself would be unreachable. Making it mandatory
+  -- for every declaration is a resolver contract change (LEO-423 follow-up):
+  -- it must land in the Python CLI and the shared conformance fixtures too.
   if spec.main ~= nil and not listed[spec.main] then
     return refusal(mode, "unknown_main", ("main '%s' is not one of this mode's own scenes"):format(tostring(spec.main)))
   end

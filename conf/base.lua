@@ -50,7 +50,12 @@ local geometry_profiles = {
   [require("hypr.lib.profile").DESK_DUAL] = {
     gaps_by_monitor = {
       primary = { gaps_in = 20, gaps_out = { top = 12, right = 30, bottom = 15, left = 30 } },
-      secondary = { gaps_in = 48, gaps_out = { top = 12, right = 64, bottom = 64, left = 64 } },
+      -- The secondary's isles dock to its screen frame (logs, media,
+      -- steam-games all declare `of = "screen"`), and a screen-frame isle
+      -- lives IN the top gutter: 12 was thinner than the isle itself, so the
+      -- clamp sat it flush against the screen edge. 56 gives the gutter room
+      -- for the isle plus its own clearance, in rhythm with the 64 sides.
+      secondary = { gaps_in = 48, gaps_out = { top = 56, right = 64, bottom = 64, left = 64 } },
     },
   },
   [require("hypr.lib.profile").LAPTOP_SOLO] = {
@@ -78,6 +83,26 @@ return {
   ---@type table<string, AppScope>
   apps = {
     media_browser = { cmd = "zen-twilight -P Media --name zen-twilight-media", class = "zen-twilight-media" },
+    -- Dofus gets a profile of its own, not a second window of the Media one.
+    -- A profile is one instance and an instance is one WM_CLASS: `--name`
+    -- only applies to the launch that STARTS the profile, so every window of
+    -- a shared profile carries the same class however it was launched, and
+    -- the scenes could only tell two of them apart by a slot tag they had to
+    -- win a race to stamp. A separate profile makes the class the answer.
+    dofus_browser = { cmd = "zen-twilight -P Dofus --name zen-twilight-dofus", class = "zen-twilight-dofus" },
+    -- The pokemon desk owns two named browser profiles, one per column. Each
+    -- is its own instance and its own WM_CLASS, so the scene's two slot
+    -- blocks claim by class directly — the same reason dofus gets a profile
+    -- of its own — instead of two windows of a shared profile racing to stamp
+    -- a slot.
+    pokemon_left_browser = {
+      cmd = "zen-twilight -P pokemon-left --name zen-twilight-pokemon-left",
+      class = "zen-twilight-pokemon-left",
+    },
+    pokemon_right_browser = {
+      cmd = "zen-twilight -P pokemon-right --name zen-twilight-pokemon-right",
+      class = "zen-twilight-pokemon-right",
+    },
     main_browser = { cmd = "zen-twilight", class = "zen-twilight" },
     dev_browser = { cmd = "firefox-developer-edition", class = "firefox-developer-edition" },
     terminal = { cmd = "kitty --class Kitty-Main", class = "Kitty-Main" },

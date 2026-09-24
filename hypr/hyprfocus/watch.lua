@@ -25,6 +25,13 @@ local M = {}
 --- The last error text notified, so a persistent failure reports once instead
 --- of buzzing every event; a changed text notifies again.
 local notified_err = nil
+--- A tick skipped mid-apply retries after this long. The skip drops the
+--- event, but not the drift that caused it: a timed mode expiring into
+--- `previous` or a shell pointer write lands while the apply is running, and
+--- the next event may never come (the settle's focus can be a no-op). One
+--- armed retry at a time; it re-arms itself while the apply is still going.
+local retry_timer = nil
+local RETRY_MS = 200
 --- Apply the pointer's mode if it differs from the runtime's last application.
 --- Converge, not enter: the pointer was written by whoever asked (it may
 --- carry an expiry or provenance we must not clobber), and both halves still
@@ -35,6 +42,12 @@ function M.tick()
   -- An apply's own moves raise these events; converging from inside it
   -- would nest a second apply into the first.
   if hyprfocus.applying() then
+    if not retry_timer then
+      retry_timer = require("hypr.lib.hypr").oneshot(RETRY_MS, function()
+        retry_timer = nil
+        M.tick()
+      end)
+    end
     return nil, nil
   end
   local pointer_mode = hyprfocus.active()

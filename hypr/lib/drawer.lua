@@ -150,6 +150,72 @@ function M.exempt(w, drawers)
   return false
 end
 
+-- A shelf is a fixed fraction of the monitor showing it. One source for the
+-- rule and the runtime fit, so the two cannot drift.
+local WIDTH_FRACTION = 0.6
+local HEIGHT_FRACTION = 0.7
+
+---The absolute size a shelf should take on `monitor`.
+---@param monitor { width: integer, height: integer }
+---@return integer width, integer height
+function M.fit_size(monitor)
+  return math.floor((monitor.width or 0) * WIDTH_FRACTION + 0.5),
+    math.floor((monitor.height or 0) * HEIGHT_FRACTION + 0.5)
+end
+
+---The live window a drawer holds, or nil when it is not running.
+---@param drawer Drawer
+---@param windows table[] `hl.get_windows()` result
+---@return table? `hl.get_windows()` entry
+function M.window_for(drawer, windows)
+  for _, w in ipairs(windows or {}) do
+    if M.class_matches(drawer, w.class) then
+      return w
+    end
+  end
+  return nil
+end
+
+---The monitor currently showing `drawer`'s special workspace, or nil when it
+---is not shown anywhere.
+---@param drawer Drawer
+---@param monitors table[] `hl.get_monitors()` result
+---@return table?
+local function showing_monitor(drawer, monitors)
+  local special = "special:" .. M.workspace(drawer)
+  for _, m in ipairs(monitors or {}) do
+    if require("hypr.lib.nav").special_workspace(m) == special then
+      return m
+    end
+  end
+  return nil
+end
+
+---Size and center a drawer's window against the monitor currently showing its
+---shelf.
+---
+---The window rule's `monitor_w`/`monitor_h` are resolved once, at map time, and
+---a special has no monitor until it is *shown*: an app that opened while one
+---monitor was focused keeps that monitor's size when its shelf is later shown
+---on a different one — the smaller screen wearing the larger screen's size
+---(LEO-370/LEO-423). This is the runtime correction. It is a no-op when the
+---drawer has no window or its shelf is not showing, so it is safe to call
+---after any show path.
+---@param drawer Drawer
+function M.fit(drawer)
+  local w = M.window_for(drawer, hl.get_windows() or {})
+  if not w or not w.address then
+    return
+  end
+  local monitor = showing_monitor(drawer, hl.get_monitors() or {})
+  if not monitor then
+    return
+  end
+  local width, height = M.fit_size(monitor)
+  hl.dispatch(hl.dsp.window.resize({ window = "address:" .. w.address, x = width, y = height }))
+  hl.dispatch(hl.dsp.window.center({ window = "address:" .. w.address }))
+end
+
 ---The output an owned drawer's active owner scene stands on in the active
 ---desk, and that scene's name — nil, nil when the desk admits none of its
 ---owner scenes (a different mode is active), or when the drawer is global.
@@ -258,7 +324,7 @@ end
 local function drawer_shown(drawer, monitors, output)
   local special = "special:" .. M.workspace(drawer)
   for _, m in ipairs(monitors or {}) do
-    if (not output or m.name == output) and m.specialWorkspace and m.specialWorkspace.name == special then
+    if (not output or m.name == output) and require("hypr.lib.nav").special_workspace(m) == special then
       return true
     end
   end
@@ -400,6 +466,11 @@ function M.press(drawer)
     if not d.reason then
       emit_drawer_event(drawer, "toggle", ("drawer %s toggled"):format(drawer.id))
     end
+    -- After the special has had a tick to land on its monitor, size the window
+    -- to that monitor — it may have opened on another (LEO-423).
+    require("hypr.lib.hypr").oneshot(50, function()
+      M.fit(drawer)
+    end)
   end
 end
 
@@ -462,8 +533,13 @@ function M.rules(drawers)
       match = { initial_class = drawer.class },
       workspace = "special:" .. M.workspace(drawer) .. " silent",
       float = true,
-      size = { "monitor_w * 0.6", "monitor_h * 0.7" },
+      size = { ("monitor_w * %s"):format(WIDTH_FRACTION), ("monitor_h * %s"):format(HEIGHT_FRACTION) },
       center = true,
+      -- A shelf is a dependency the desk opens for you, never a window that
+      -- pulls input focus: launching Signal in the background must not take the
+      -- user off the scene they are on (LEO-299/LEO-423).
+      no_initial_focus = true,
+      suppress_event = "activate activatefocus",
     })
   end
 
@@ -482,6 +558,11 @@ function M.rules(drawers)
     end
     if d.toggle then
       hl.dispatch(hl.dsp.workspace.toggle_special(d.toggle))
+      -- The window has just landed; size it to the monitor now showing the
+      -- shelf, which need not be the one it was routed on (LEO-423).
+      require("hypr.lib.hypr").oneshot(50, function()
+        M.fit(drawer)
+      end)
     end
   end)
 end

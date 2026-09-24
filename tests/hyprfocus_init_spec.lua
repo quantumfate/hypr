@@ -304,8 +304,12 @@ t.describe("entering a mode", function()
   t.it("hands the services half to the command line", function()
     -- The compositor cannot stop a systemd unit, so a mode change that only
     -- did its own half would leave the desk describing a mode it is not in.
+    -- The CLI half is spawned from the settle callback, so let the transition
+    -- timers run before checking.
     local stub, hyprfocus = fresh(DECLARATION)
     hyprfocus.enter("game")
+    stub:drain()
+    print("EXEC_CMDS:", require("hypr.lib.json").encode(stub.exec_cmds))
     local spawned = false
     for _, d in ipairs(stub.dispatched) do
       if d.name == "dsp.exec_cmd" and tostring(d.args[1]):match("hyprfocus apply game") then
@@ -326,9 +330,56 @@ t.describe("entering a mode", function()
   end)
 
   t.it("applies this runtime's half", function()
-    local _, hyprfocus, rules = fresh(DECLARATION)
+    local stub, hyprfocus, rules = fresh(DECLARATION)
     hyprfocus.enter("game")
+    stub:drain()
     t.eq(false, rules.code.enabled)
+  end)
+
+  t.it("re-lands on main while bring-up keeps stealing focus, and stops once it holds", function()
+    -- A service the CLI half started can map seconds after the settle and
+    -- take focus on open; the single quiet check this used to get was gone
+    -- before obsidian ever mapped. A few bounded checks re-land while the
+    -- pulls keep arriving.
+    local declaration = {
+      version = 3,
+      base = DECLARATION.base,
+      modes = {
+        game = {
+          name = "Gaming",
+          main = "gaming",
+          scenes = { { name = "gaming", monitor = "primary" }, { name = "logs", monitor = "secondary" } },
+        },
+      },
+    }
+    local stub, hyprfocus = fresh(declaration)
+    stub.get_active_workspace = function()
+      return { name = "logs" } -- the thief that never lets go
+    end
+    hyprfocus.enter("game")
+    stub:drain()
+    local lands = 0
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.focus" and d.args[1] and d.args[1].workspace == "name:gaming" then
+        lands = lands + 1
+      end
+    end
+    t.ok(lands >= 2, "the landing plus re-asserts against a persistent thief, got " .. lands)
+
+    -- The positive control: focus that stayed on main is left alone.
+    local stub2, hyprfocus2 = fresh(declaration)
+    stub2.get_active_workspace = function()
+      return { name = "gaming" }
+    end
+    hyprfocus2.enter("game")
+    stub2:drain()
+    local lands2 = 0
+    for _, d in ipairs(stub2.dispatched) do
+      if d.name == "dsp.focus" and d.args[1] and d.args[1].workspace == "name:gaming" then
+        lands2 = lands2 + 1
+      end
+    end
+    t.eq(1, lands2, "a desk that held main is not disturbed")
   end)
 end)
 

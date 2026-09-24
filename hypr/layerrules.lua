@@ -159,3 +159,19 @@ hl.layer_rule({
 -- Fallback for any quickshell surface that doesn't set its own namespace: a
 -- gentle fade instead of the old blanket "no animations".
 hl.layer_rule({ match = { namespace = "^(quickshell)$" }, animation = "fade" })
+
+-- Mode transition scrim (LEO-423): a full-screen frost the shell fades over a
+-- mode apply. The compositor suspends its own animations for the apply, and
+-- the shell's QML fade is unaffected by that; the rule only frosts the scrim,
+-- so what shows through reads as one soft change instead of a swipe.
+--
+-- The scrim paints opaque, so the whole screen is covered. No `order` here:
+-- pinned live, the fork's layer `order` rule pushes this surface BELOW the
+-- Top level (the bar read straight through it), which is the opposite of what
+-- it was added for — plain Overlay stacking already puts the scrim above the
+-- bar and every window.
+hl.layer_rule({
+  match = { namespace = "quickshell-transition" },
+  blur = true,
+  ignore_alpha = 0.2,
+})

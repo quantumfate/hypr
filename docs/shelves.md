@@ -38,6 +38,15 @@ declaration, not host Lua.
   Rules are registered last in `hypr/windowrules.lua` so they win. The special
   workspace naming (`shelf-<id>`) is unchanged from before the declaration
   moved here, so a live desk's already-routed windows need no migration.
+- **Sizing on show:** the rule's `monitor_w`/`monitor_h` are resolved once, at
+  map time, and a special has no monitor until it is _shown_ — so an app that
+  opened while one monitor was focused kept that monitor's size when its shelf
+  was later shown on another (the smaller screen wearing the larger screen's
+  size). `hypr/lib/drawer.lua`'s `M.fit` re-sizes and recenters the window
+  against the monitor actually showing the shelf, on every show path. Shelf
+  rules also carry `no_initial_focus` and `suppress_event = "activate
+activatefocus"`: a drawer is a dependency the desk opens for you, never a
+  window that pulls input focus.
 - **Key press:** if a window of the class exists, toggle its shelf; otherwise
   launch the app (`uwsm app --`, LEO-363: every drawer launch routes through
   `uwsm`; the Ankama launcher's command still goes through Lutris, taken

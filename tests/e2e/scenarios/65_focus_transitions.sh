@@ -26,7 +26,7 @@ enter_mode() {
         e2e_fail "enter $1 failed"
     wait_until 50 sh -c "jq -e --arg m '$1' '.mode == \$m' '$QF_STORE/focus.json'" ||
         e2e_fail "pointer never named $1"
-    sleep 0.3
+    wait_transition_settled || e2e_fail "transition to $1 never settled"
 }
 
 # Every test window sits on an existing workspace, and the held set on
@@ -74,7 +74,16 @@ wait_until 50 sh -c "jq -e '.mode == \"study\" and .previous == \"work\"' '$QF_S
     e2e_fail "pointer did not record the timed mode with previous=work: $(cat "$QF_STORE/focus.json")"
 # hyprfocus.enter converged on the timed mode itself (it is not expired at
 # entry time, only its `until` stamp already is): study's scene set applied,
-# so loose/aside are held right now.
+# so loose/aside are held right now. Assert when the apply's holds have
+# landed — not after the full settle, whose main-scene focus fires the
+# watcher's expiry tick that converges the desk back to `previous` below.
+study_holds_landed() {
+    hc -j clients | jq -e '
+        [ .[] | select(.workspace.name == "special:hyprfocus-held") | .class ] |
+        sort | join(",") == "e2e-aside,e2e-tile"' >/dev/null
+}
+wait_until 150 study_holds_landed ||
+    e2e_fail "study's holds never landed: $(clients | jq -c 'map({class, ws: .workspace.name})')"
 assert_state study "e2e-aside,e2e-tile"
 
 # effective_mode reads `until` as already past, so the next convergence tick

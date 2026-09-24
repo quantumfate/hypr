@@ -125,15 +125,11 @@ previous_fingerprint() { # $1 = name
 
 # Which projects the dashboard is about.
 #
-# `,proj.sh list` knows every project tms can open, which is not the same
-# question: it includes an Obsidian vault, a home directory, a config dir and
-# every nvim plugin checkout. A dashboard listing those is noise around the few
-# repositories that actually hold the desk together.
-#
-# projects.json is that shorter list. It carries no paths on purpose — tms stays
-# the one place that knows where a project lives — so this intersects the two:
-# names from the store, paths from tms. With no store, everything tms knows is
-# still better than nothing.
+# `,proj.sh list` knows every project the store curates. projects.json is
+# that list already — names and paths both live there now — so this
+# intersection keeps the rows the store still names (a name `,proj.sh` no
+# longer lists drops out here) and falls back to the plain list when the
+# store is missing or unreadable.
 tracked_projects() {
     local store="${QF_STORE:-$QF_ROOT/projects.json}"
     if [ ! -f "$store" ]; then

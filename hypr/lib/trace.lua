@@ -72,19 +72,11 @@ local function field_name(key)
   return name
 end
 
----Write one decision record to the journal. `record.stage` and
----`record.event` are required (they name the log line); every other field is
----optional and only written when present, so callers can pass a partial
----record without a nil check at every field.
----@param record table decision record (docs/lifecycle.md Part B field list)
-function M.emit(record)
-  if type(record) ~= "table" or not record.stage or not record.event then
-    return
-  end
-  if not hl or not hl.dispatch or not hl.dsp or not hl.dsp.exec_cmd then
-    return -- no compositor to hand the spawn to: no-op, never error
-  end
-
+---The journald stdin lines for one record, terminated by the blank line that
+---ends a structured entry.
+---@param record table
+---@return string[]
+local function record_lines(record)
   local message = ("%s.%s %s %s")
     :format(record.stage, record.event, record.decision or "", record.reason or "")
     :gsub("%s+$", "")
@@ -97,12 +89,76 @@ function M.emit(record)
   end
   lines[#lines + 1] = "MESSAGE=" .. message
   lines[#lines + 1] = "" -- structured stdin entries end with a blank line
+  return lines
+end
 
+---@param lines string[]
+local function spawn(lines)
   local payload = base64(table.concat(lines, "\n"))
   local cmd = ("sh -c 'echo %s | base64 -d | logger --journald'"):format(payload)
   pcall(function()
     hl.dispatch(hl.dsp.exec_cmd(cmd))
   end)
+end
+
+-- Batching for watchdog-bounded contexts: an `hl.timer` callback is killed
+-- after 50ms on this build (spiked live, "execution timed out in hl.timer
+-- callback"), and a mode apply emitting ~20 records spends 30ms+ of that on
+-- fork/exec if each dispatches its own logger. `begin_batch` queues records
+-- instead; `end_batch` flushes the queue as ONE spawn carrying every record,
+-- entries blank-line separated, so the journal still gets one entry per
+-- decision. Emits outside a batch dispatch immediately, as before. Not
+-- re-entrant: one batch at a time, bracketed by the caller (a mode apply).
+local batching = false
+---@type table[]
+local queue = {}
+
+---Write one decision record to the journal. `record.stage` and
+---`record.event` are required (they name the log line); every other field is
+---optional and only written when present, so callers can pass a partial
+---record without a nil check at every field.
+---@param record table decision record (docs/lifecycle.md Part B field list)
+function M.emit(record)
+  if type(record) ~= "table" or not record.stage or not record.event then
+    return
+  end
+  if batching then
+    queue[#queue + 1] = record
+    return
+  end
+  if not hl or not hl.dispatch or not hl.dsp or not hl.dsp.exec_cmd then
+    return -- no compositor to hand the spawn to: no-op, never error
+  end
+  spawn(record_lines(record))
+end
+
+---Start queueing records instead of dispatching them. Pair with `end_batch`.
+function M.begin_batch()
+  batching = true
+end
+
+---Flush every queued record and resume immediate dispatch. `logger
+---`--journald` reads ONE structured entry per invocation (spiked live: the
+---second entry of a multi-entry stdin is silently dropped), so the batch
+---spawns one shell that pipes each record to its own logger — the compositor
+---pays for a single fork either way, the record spawns happen off-thread.
+function M.end_batch()
+  local records = queue
+  queue = {}
+  batching = false
+  if not hl or not hl.dispatch or not hl.dsp or not hl.dsp.exec_cmd then
+    return
+  end
+  local pipes = {}
+  for _, record in ipairs(records) do
+    local payload = base64(table.concat(record_lines(record), "\n"))
+    pipes[#pipes + 1] = ("echo %s | base64 -d | logger --journald"):format(payload)
+  end
+  if #pipes > 0 then
+    pcall(function()
+      hl.dispatch(hl.dsp.exec_cmd(("sh -c '%s'"):format(table.concat(pipes, "; "))))
+    end)
+  end
 end
 
 return M

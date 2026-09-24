@@ -30,10 +30,29 @@ t.describe("dock.resolve: where an isle lands", function()
       dock.resolve({ ["bar.left"] = { at = "top-left", of = "block:1" } }, ctx({ ["block:1"] = SOLO }, { SOLO }))
     local isle = out["bar.left"]
     t.eq("docked", isle.state)
+    -- The isle hugs the window and grows away from it, so its position
+    -- follows the block on BOTH axes: a scene with a deeper top gap carries
+    -- the isle down with it (docs/scenes.md "Docks").
     t.eq("up", isle.grow, "it grows away from the window, never into it")
-    t.eq(SOLO.x, isle.anchor.x, "flush with the window's left edge")
+    t.eq(SOLO.x, isle.anchor.x, "lined up with the window's left edge")
     t.eq(SOLO.y, isle.anchor.y, "sitting on the window's top edge")
     t.eq(0, isle.region.y, "the gutter reaches the screen edge")
+    t.eq(SOLO.y, isle.region.h, "and runs all the way to the window")
+  end)
+
+  t.it("publishes which side of the isle the anchor is, not only the point", function()
+    -- `grow` names the axis the isle extends along; along the EDGE the anchor
+    -- may be the isle's start, middle or end. Without this the consumer read
+    -- every anchor as a left edge, so a right-aligned isle ran off the screen.
+    local docks = {
+      ["bar.a"] = { at = "top-left", of = "block:1" },
+      ["bar.b"] = { at = "top-center", of = "block:1" },
+      ["bar.c"] = { at = "top-right", of = "block:1" },
+    }
+    local out = dock.resolve(docks, ctx({ ["block:1"] = SOLO }, { SOLO }))
+    t.eq("start", out["bar.a"].align)
+    t.eq("center", out["bar.b"].align)
+    t.eq("end", out["bar.c"].align)
   end)
 
   t.it("centres the anchor along the edge for a -center anchor", function()
@@ -42,11 +61,24 @@ t.describe("dock.resolve: where an isle lands", function()
     t.eq(SOLO.x + SOLO.w / 2, out["bar.center"].anchor.x)
   end)
 
-  t.it("stands the isle off the window by gaps_in, thinning the gutter by the same", function()
-    local out =
-      dock.resolve({ ["bar.left"] = { at = "top-left", of = "block:1" } }, ctx({ ["block:1"] = SOLO }, { SOLO }, 12))
-    t.eq(SOLO.y - 12, out["bar.left"].anchor.y, "the standoff is the scene's own inner gap")
-    t.eq(48, out["bar.left"].region.h, "the gutter is the outer gap minus that standoff")
+  t.it("stands the isle off the window by gaps_in", function()
+    local inset =
+      dock.resolve({ ["bar.a"] = { at = "top-left", of = "block:1" } }, ctx({ ["block:1"] = SOLO }, { SOLO }, 12))
+    t.eq(SOLO.y - 12, inset["bar.a"].anchor.y, "the standoff is the scene's own inner gap")
+    -- The whole gutter is still published: an isle standing in it has to
+    -- clear both ends, and thinning the band by the standoff handed it every
+    -- pixel of slack on one side.
+    t.eq(SOLO.y, inset["bar.a"].region.h, "screen edge to window edge, whole")
+  end)
+
+  t.it("measures the gutter off the placed box, never off the declared gap", function()
+    -- The gap ladder's answer and the geometry the compositor actually tiled
+    -- were ~14px apart on a real desk, and the isles sat exactly that far off.
+    -- The pass holds both boxes, so the gutter is a measurement, not a guess.
+    local low = { x = 60, y = 200, w = 880, h = 540 }
+    local out = dock.resolve({ ["bar.a"] = { at = "top-left", of = "block:1" } }, ctx({ ["block:1"] = low }, { low }))
+    t.eq(200, out["bar.a"].region.h, "the window sits 200 below the screen edge, so the gutter is 200")
+    t.eq(low.y, out["bar.a"].anchor.y, "and the isle hangs off the window's own edge")
   end)
 
   t.it("takes its orientation from the edge it docks to", function()
@@ -96,24 +128,51 @@ t.describe("dock.resolve: collapse and the fallback ladder", function()
       dock.resolve({ ["bar.a"] = { at = "middle-right", of = "block:1" } }, ctx({ ["block:1"] = LEFT }, { LEFT }))
     t.eq("docked", out["bar.a"].state)
     t.eq(LEFT.x + LEFT.w, out["bar.a"].anchor.x, "it follows the window's own edge")
+    t.eq(LEFT.x + LEFT.w, out["bar.a"].region.x, "in the band that reaches the screen")
   end)
 
-  t.it("an absent target steps down to the declared fallback", function()
+  t.it("an absent target steps down to the declared fallback while the scene has windows", function()
     local out = dock.resolve(
       { ["bar.a"] = { at = "top-left", of = "block:9", fallback = { at = "top-left", of = "screen" } } },
-      ctx({}, {})
+      ctx({}, { SOLO })
     )
     t.eq("fallback", out["bar.a"].state)
-    t.eq(MONITOR.x, out["bar.a"].anchor.x)
+    t.eq(GAPS.left, out["bar.a"].anchor.x)
+    t.eq(GAPS.top, out["bar.a"].anchor.y)
+    t.eq("up", out["bar.a"].grow)
   end)
 
-  t.it("an absent target with no declared fallback takes the same anchor on screen", function()
-    -- The ladder's implicit tail: declared fallback, then this, then resting.
-    -- It still reports `fallback`, so the consumer animates the snap when the
-    -- window it was waiting for finally opens.
-    local out = dock.resolve({ ["bar.a"] = { at = "middle-right", of = "block:9" } }, ctx({}, {}))
+  t.it("an absent target with no declared fallback rests", function()
+    -- The ladder is the isle's own declaration, then resting. An isle whose
+    -- target is gone never invents an anchor the scene did not declare —
+    -- that is what used to put one isle on a window gutter and its neighbour
+    -- flush into the screen gap on the same workspace.
+    local out = dock.resolve({ ["bar.a"] = { at = "middle-right", of = "block:9" } }, ctx({}, { SOLO }))
+    t.eq("resting", out["bar.a"].state)
+    t.eq(nil, out["bar.a"].anchor)
+  end)
+
+  t.it("an empty scene rests block-anchored isles, docked only where screen was declared", function()
+    -- No tiles placed at all: a block target names nothing, so the isle
+    -- rests — unless the isle's own declaration names the screen frame
+    -- (directly or as its declared fallback), which is an explicit anchor.
+    local out = dock.resolve({
+      ["bar.a"] = { at = "top-left", of = "block:1", fallback = { at = "top-left", of = "screen" } },
+      ["bar.b"] = { at = "top-right", of = "block:2" },
+    }, ctx({}, {}))
     t.eq("fallback", out["bar.a"].state)
-    t.eq(MONITOR.w, out["bar.a"].anchor.x, "docked to the screen's own right edge")
+    t.eq(GAPS.left, out["bar.a"].anchor.x)
+    t.eq(GAPS.top, out["bar.a"].anchor.y)
+    t.eq("resting", out["bar.b"].state)
+    t.eq(nil, out["bar.b"].anchor)
+  end)
+
+  t.it("an isle declared directly against `screen` still docks on an empty scene", function()
+    -- `of = "screen"` as the first choice is not a fallback: it asked for the
+    -- screen frame on purpose, windows or none.
+    local out = dock.resolve({ ["bar.a"] = { at = "top-left", of = "screen" } }, ctx({}, {}))
+    t.eq("docked", out["bar.a"].state)
+    t.eq(GAPS.left, out["bar.a"].anchor.x)
   end)
 
   t.it("a withheld isle publishes `hidden`, which is not the same as resting", function()
@@ -137,7 +196,7 @@ t.describe("dock.resolve: the side-leading corners", function()
   t.it("right-top stands in the right gutter, aligned to the window's top", function()
     local out =
       dock.resolve({ ["bar.a"] = { at = "right-top", of = "block:1" } }, ctx({ ["block:1"] = SOLO }, { SOLO }))
-    t.eq("right", out["bar.a"].grow)
+    t.eq("right", out["bar.a"].grow, "away from the window, into the right gutter")
     t.eq(SOLO.y, out["bar.a"].anchor.y)
   end)
 
@@ -149,7 +208,7 @@ t.describe("dock.resolve: the side-leading corners", function()
       ctx({ ["block:1"] = LEFT }, { LEFT, RIGHT })
     )
     t.eq("docked", out["bar.a"].state)
-    t.eq("down", out["bar.a"].grow)
+    t.eq("down", out["bar.a"].grow, "the bottom gutter, away from the window")
   end)
 end)
 
@@ -164,12 +223,54 @@ t.describe("dock.resolve: two isles, one gutter", function()
     t.eq("fallback", out["bar.b"].state)
     t.eq("down", out["bar.b"].grow, "the loser took its own fallback, not the winner's spot")
   end)
+
+  t.it("two ends of the same gutter are two spots, and both dock", function()
+    -- The shape every scene declares: the media isle at the left of a
+    -- block's top gutter, the clock at its right. Keying the claim on the
+    -- gutter alone made the clock lose this race in every scene, so it never
+    -- once docked where it was declared.
+    local docks = {
+      ["bar.center"] = { at = "top-left", of = "block:1" },
+      ["bar.clock"] = { at = "top-right", of = "block:1" },
+    }
+    local out = dock.resolve(docks, ctx({ ["block:1"] = SOLO }, { SOLO }))
+    t.eq("docked", out["bar.center"].state)
+    t.eq("docked", out["bar.clock"].state, "the other end of the gutter is free")
+    t.eq(SOLO.x, out["bar.center"].anchor.x)
+    t.eq(SOLO.x + SOLO.w, out["bar.clock"].anchor.x, "aligned to the window's right edge")
+  end)
 end)
 
 t.describe("dock.resolve: bounds", function()
-  t.it("every published box is monitor-local, so a layer surface can use it as-is", function()
+  t.it("a screen dock respects the outer gap instead of hugging the monitor edge", function()
     local out = dock.resolve({ ["bar.a"] = { at = "top-left", of = "screen" } }, ctx({}, {}))
-    t.eq(0, out["bar.a"].region.x)
-    t.eq(0, out["bar.a"].anchor.x)
+    t.eq(GAPS.left, out["bar.a"].region.x)
+    t.eq(GAPS.left, out["bar.a"].anchor.x)
+    t.eq(GAPS.top, out["bar.a"].anchor.y)
+    t.eq(GAPS.top, out["bar.a"].region.h)
+    t.eq("up", out["bar.a"].grow, "grows away from the content area into the gap")
+  end)
+
+  t.it("a screen dock grows into the gap from the content edge", function()
+    local out = dock.resolve({ ["bar.a"] = { at = "top-right", of = "screen" } }, ctx({}, {}))
+    t.eq("up", out["bar.a"].grow)
+    t.eq(GAPS.top, out["bar.a"].anchor.y)
+    t.eq(MONITOR.w - GAPS.right, out["bar.a"].anchor.x)
+    t.eq(GAPS.top, out["bar.a"].region.h)
+  end)
+
+  t.it("a screen dock's band is the gap, not the distance to a tile", function()
+    -- The screen target is the monitor minus the outer gap, so tiles inside
+    -- the content area do not shorten the band; the isle stays in the gap.
+    local out = dock.resolve({ ["bar.a"] = { at = "top-left", of = "screen" } }, ctx({}, { SOLO }))
+    t.eq(GAPS.top, out["bar.a"].region.h)
+    t.eq(GAPS.top, out["bar.a"].anchor.y)
+  end)
+
+  t.it("the inward gutter of a bottom/right screen dock sits inside the gap", function()
+    local out = dock.resolve({ ["bar.a"] = { at = "middle-right", of = "screen" } }, ctx({}, { SOLO }))
+    t.eq("right", out["bar.a"].grow, "grows away from the content area into the right gap")
+    t.eq(MONITOR.w - GAPS.right, out["bar.a"].region.x, "the band starts at the inner edge of the right gap")
+    t.eq(GAPS.right, out["bar.a"].region.w)
   end)
 end)

@@ -230,9 +230,13 @@ end
 ---with the shown member would break that stepping.
 ---@param spec Scene.Spec deck spec (`columns` normalized by hypr/scene/spec.lua)
 ---@param tiles Scene.Tile[] every window subscribed to spec's columns, any workspace
----@param scroll table<integer, integer> column order -> 1-based shown index
+---@param records table<integer, { order: string[], scroll: number? }> the
+---persisted records per column (hypr/scene/deck_order.lua): the strip is
+---walked in the recorded order so navigation follows the arrangement the
+---user built it into, and the recorded scroll is the entered column's
+---already-shown member
 ---@return (Nav.Tile|{ plain: string[], column: integer })[]
-function M.deck_tile_order(spec, tiles, scroll)
+function M.deck_tile_order(spec, tiles, records)
   local deck = require("hypr.scene.deck")
   local columns = {}
   for _, c in ipairs(spec.columns or {}) do
@@ -241,7 +245,11 @@ function M.deck_tile_order(spec, tiles, scroll)
   table.sort(columns, function(a, b)
     return a.order < b.order
   end)
-  local stacks = deck.stacks(spec, tiles)
+  local order = {}
+  for column_order, record in pairs(records) do
+    order[column_order] = record.order
+  end
+  local stacks = deck.stacks(spec, tiles, order)
   local out = {}
   for _, column in ipairs(columns) do
     local representatives = layout.collapse_groups(stacks[column.order] or {})
@@ -250,7 +258,8 @@ function M.deck_tile_order(spec, tiles, scroll)
       plain[#plain + 1] = rep.address
     end
     if #plain > 0 then
-      local index = deck.clamp_scroll(scroll[column.order], #plain)
+      local record = records[column.order]
+      local index = deck.clamp_scroll(record and record.scroll or nil, #plain)
       local shown = plain[index]
       local addresses = { shown }
       for _, address in ipairs(plain) do
@@ -381,6 +390,35 @@ function M.is_ignored(ignored, name)
   return false
 end
 
+---The special workspace a monitor is currently showing, or nil. The Lua
+---monitor object spells it `active_special_workspace`; older shapes used
+---`specialWorkspace`, so both are read (the wrong one silently hid the special
+---from every caller — shelf sizing, the ignored-monitor relocation).
+---@param monitor table?
+---@return string? the special's name, `special:` prefix included
+function M.special_workspace(monitor)
+  local special = monitor and (monitor.active_special_workspace or monitor.specialWorkspace)
+  return special and special.name or nil
+end
+
+---Hide a special workspace if any monitor is currently showing it.
+---Moving a window to a special can make the compositor show that special on
+---the monitor; for hidden holding places that is a visible bug. The toggle is
+---deferred by a tick so a caller inside a layout pass or move handler does not
+---re-enter its own callback.
+---@param special string full workspace name with `special:` prefix
+function M.hide_special_if_shown(special)
+  local prefix = string.match(special, "^special:(.*)$") or special
+  for _, monitor in ipairs(hl.get_monitors() or {}) do
+    if M.special_workspace(monitor) == special then
+      require("hypr.lib.hypr").oneshot(1, function()
+        hl.dispatch(hl.dsp.workspace.toggle_special(prefix))
+      end)
+      return
+    end
+  end
+end
+
 ---Monitors minus the ignored ones, order kept.
 ---@generic T: { name: string }
 ---@param monitors T[]
@@ -409,6 +447,25 @@ function M.target_monitor(ignored, name, primary)
   return name
 end
 
+---The monitor focus should return to after a special was relocated off an
+---ignored monitor: the monitor the user was already on, when it is usable and
+---not the primary the relocation flashed through. Nil when there is nothing to
+---restore (the user was on the ignored monitor itself, or on the primary), so
+---the relocation is never followed by a pointless focus dispatch.
+---@param ignored string[]?
+---@param before string? the focused monitor when the relocation started
+---@param primary string?
+---@return string?
+function M.restore_after_relocate(ignored, before, primary)
+  if not before or before == primary then
+    return nil
+  end
+  if M.is_ignored(ignored, before) then
+    return nil
+  end
+  return before
+end
+
 ---What keeps the desk off ignored monitors, as dispatch-shaped actions:
 ---
 ---  * `{ show = "<special name without prefix>" }` for a special shown on an
@@ -430,7 +487,7 @@ function M.off_ignored(ignored, primary, monitors, w)
   end
   local primary_workspace = M.workspace_on(monitors, primary)
   for _, m in ipairs(monitors or {}) do
-    local special = m.specialWorkspace and m.specialWorkspace.name
+    local special = M.special_workspace(m)
     if M.is_ignored(ignored, m.name) and special and special ~= "" then
       actions[#actions + 1] = { show = (string.gsub(special, "^special:", "")) }
     end

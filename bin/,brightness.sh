@@ -37,7 +37,7 @@ save_brightness() {
 }
 
 notify_user() {
-    ,notify brightness -u low "$(get_icon)   $(get_brightness)%"
+    ,notify display-brightness "$(get_icon)   $(get_brightness)%" "" -u low
 }
 
 inc_brightness() {

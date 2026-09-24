@@ -1,6 +1,12 @@
 hl.config({
   cursor = {
     no_warps = true,
+    -- The granular warp switches this build reads; `no_warps` alone left the
+    -- pointer able to follow an explicit monitor focus. A focus change the
+    -- user did not ask for must not drag the pointer to another monitor.
+    warp_on_change_workspace = 0,
+    warp_on_toggle_special = 0,
+    warp_on_monitor_change = 0,
   },
 
   binds = {
@@ -38,17 +44,26 @@ hl.config({
       popups_ignorealpha = 0.2,
     },
 
-    -- No shadows anywhere. The border is what separates a window from the
-    -- wallpaper, and a shadow only added weight -- doubly so on a deck, where
-    -- members stand at the same box and every hidden one cast its own.
+    -- A focused window gets a small drop shadow so it reads as the sheet that
+    -- is currently lifted toward the user. The border still carries the accent;
+    -- the shadow is only there to separate the active window from a matching
+    -- wallpaper or from other sheets. Unfocused windows keep the shadow off via
+    -- a dynamic rule, so the lift is focus-specific rather than global weight.
     shadow = {
-      enabled = false,
+      enabled = true,
+      range = 10,
+      render_power = 2,
+      color = "rgba(00000033)",
+      offset = { 0, 3 },
     },
   },
 
   general = {
-    -- The edge is what makes it read as a sheet, so it stays crisp and single.
-    border_size = 1,
+    -- Focus is elevation, not an edge: the shadow above is the one active
+    -- indicator, so the border carries no paint at all (size 0). The border
+    -- also feeds the geometry the bar mirrors (`hypr/lib/geometry.lua` folds
+    -- `general.border_size`), so it stays a config value, not a hardcode.
+    border_size = 0,
     -- Separation, not decoration. This is only the boot-time / no-override
     -- default (conf/base.lua's `default_gaps`, the one place gap numbers are
     -- declared) -- every monitor role gets its own, wider, entry in

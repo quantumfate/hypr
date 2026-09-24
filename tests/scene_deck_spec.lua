@@ -44,6 +44,48 @@ t.describe("column_for", function()
   end)
 end)
 
+t.describe("stacks: the recorded order leads the strip", function()
+  local spec = {
+    columns = {
+      { order = 1, classes = { "Kitty%-Main" } },
+    },
+  }
+
+  t.it("with no recorded order every tile stays in arrival order", function()
+    local stacks = deck.stacks(spec, { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main") })
+    t.eq("a", stacks[1][1].address)
+    t.eq("b", stacks[1][2].address)
+  end)
+
+  t.it("a recorded order leads and unrecorded arrivals append", function()
+    -- The reload re-enumerates windows in arrival order; the record is the
+    -- user's arrangement and must win. A window the record never named — one
+    -- that genuinely just opened — joins the tail.
+    local stacks = deck.stacks(
+      spec,
+      { tile("a", "Kitty%-Main"), tile("b", "Kitty%-Main"), tile("c", "Kitty%-Main") },
+      { [1] = { "b", "a" } }
+    )
+    t.eq("b", stacks[1][1].address)
+    t.eq("a", stacks[1][2].address)
+    t.eq("c", stacks[1][3].address)
+  end)
+
+  t.it("a recorded address no longer present is skipped, never kept", function()
+    -- The record prunes on close (`deck_order.forget`); if it ever lags, a
+    -- stale address must not hold a phantom place in the strip.
+    local stacks = deck.stacks(spec, { tile("b", "Kitty%-Main") }, { [1] = { "a", "b" } })
+    t.eq(1, #stacks[1])
+    t.eq("b", stacks[1][1].address)
+  end)
+
+  t.it("an empty order table behaves like no record at all", function()
+    local stacks = deck.stacks(spec, { tile("b", "Kitty%-Main"), tile("a", "Kitty%-Main") }, { [1] = {} })
+    t.eq("b", stacks[1][1].address)
+    t.eq("a", stacks[1][2].address)
+  end)
+end)
+
 t.describe("boxes: column widths", function()
   t.it("splits declared shares like scene blocks", function()
     local spec = {
@@ -78,6 +120,24 @@ t.describe("boxes: column widths", function()
     t.eq(300, by.a.w)
     t.eq(300, by.b.w)
     t.eq(300, by.c.w)
+  end)
+end)
+
+t.describe("boxes: gaps", function()
+  t.it("honours an asymmetric CssGap on each side separately", function()
+    local spec = {
+      columns = {
+        { order = 1, classes = { "A" } },
+      },
+    }
+    local boxes = deck.boxes(spec, { tile("a", "A") }, AREA, {
+      gaps_in = 0,
+      gaps_out = { top = 10, right = 40, bottom = 40, left = 40 },
+    })
+    t.eq(40, boxes[1].x, "left gap is applied")
+    t.eq(10, boxes[1].y, "top gap is applied, not the left value")
+    t.eq(820, boxes[1].w, "width shrinks by left + right")
+    t.eq(550, boxes[1].h, "height shrinks by top + bottom")
   end)
 end)
 

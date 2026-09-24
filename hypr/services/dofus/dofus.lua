@@ -145,10 +145,10 @@ dofus_bind(
   on_dofus
 )
 
--- The Dofus submap hosts management actions (launching, renaming, swap toggle,
--- opening the team UI) plus store and roster queries — nothing you need
--- mid-fight, so no more team submaps and no team selection here (the UI owns
--- that).
+-- The Dofus submap hosts management actions (launching, renaming, settings
+-- copy, swap toggle, opening the team UI) plus store and roster queries —
+-- nothing you need mid-fight, so no more team submaps and no team selection
+-- here (the UI owns that).
 submap.tree({
   name = "dofus",
   desc = "Dofus",
@@ -219,6 +219,19 @@ submap.tree({
           ipc.class_of(name)
         end
       end,
+    },
+    {
+      key = "p",
+      desc = "Copy settings to all accounts",
+      -- A held floating terminal, not a silent exec: the per-account copy log is
+      -- the point, and `,copy-settings.sh` toasts the outcome once when it's
+      -- done. BETA + EXPERIMENTAL by default; run the engine by hand for other
+      -- channel flags.
+      action = hl.dsp.exec_cmd(
+        ("uwsm app -- %s --title 'Dofus settings copy' --hold -e ,copy-settings.sh"):format(
+          config.apps.terminal_float.cmd
+        )
+      ),
     },
     {
       key = "r",

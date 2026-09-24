@@ -46,7 +46,7 @@ wait_until 50 above_cap || e2e_fail "hand-opened excess vanished: $(companion_co
 close_all_members() {
     local a
     for a in $(clients | jq -r '.[] | select(.class == "e2e-member") | .address'); do
-        hc dispatch "hl.dsp.window.close(\"address:$a\")" >/dev/null
+        hc dispatch "hl.dsp.window.close({ window = \"address:$a\" })" >/dev/null
     done
     test "$(member_count)" -eq 0
 }

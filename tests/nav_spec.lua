@@ -424,7 +424,7 @@ t.describe("nav.deck_tile_order", function()
       tile("a", "Kitty-Main"),
       tile("b", "Kitty-Main"),
       tile("c", "zen"),
-    }, { [1] = 2 })
+    }, { [1] = { order = { "a", "b" }, scroll = 2 } })
     t.eq(2, #tiles)
     t.eq("deck:1", tiles[1].key)
     t.eq({ "b", "a" }, tiles[1].addresses)
@@ -443,8 +443,22 @@ t.describe("nav.deck_tile_order", function()
     local tiles = nav.deck_tile_order(SPEC, {
       tile("a", "Kitty-Main"),
       tile("b", "Kitty-Main"),
-    }, { [1] = 99 })
+    }, { [1] = { order = { "a", "b" }, scroll = 99 } })
     t.eq({ "b", "a" }, tiles[1].addresses)
+  end)
+
+  t.it("the recorded order leads the strip, re-enumeration order appended", function()
+    -- A reload hands the windows back in arrival order, but the recorded
+    -- order is the user's arrangement: the strip walks it first, and a
+    -- genuinely new member (absent from the record) joins the tail.
+    local tiles = nav.deck_tile_order(SPEC, {
+      tile("a", "Kitty-Main"),
+      tile("b", "Kitty-Main"),
+      tile("d", "Kitty-Main"),
+    }, { [1] = { order = { "b", "a" }, scroll = 1 } })
+    t.eq({ "b", "a", "d" }, tiles[1].plain)
+    t.eq({ "b", "a", "d" }, tiles[1].addresses)
+    t.eq(1, tiles[1].column)
   end)
 
   t.it("composes with nav.decide across columns like scene tiles do", function()
@@ -461,6 +475,79 @@ t.describe("nav.deck_tile_order", function()
     })
     t.eq("window", action.kind)
     t.eq("c", action.address)
+  end)
+end)
+
+t.describe("nav.restore_after_relocate", function()
+  t.it("returns the monitor the user was on when it is usable", function()
+    t.eq("DP-2", nav.restore_after_relocate({ "HDMI-A-1" }, "DP-2", "DP-1"))
+  end)
+
+  t.it("restores nothing when the user was already on the primary", function()
+    t.eq(nil, nav.restore_after_relocate({ "HDMI-A-1" }, "DP-1", "DP-1"))
+  end)
+
+  t.it("restores nothing when the focused monitor was the ignored one", function()
+    t.eq(nil, nav.restore_after_relocate({ "HDMI-A-1" }, "HDMI-A-1", "DP-1"))
+  end)
+
+  t.it("restores nothing when no monitor was focused", function()
+    t.eq(nil, nav.restore_after_relocate({ "HDMI-A-1" }, nil, "DP-1"))
+  end)
+end)
+
+t.describe("nav.special_workspace", function()
+  t.it("reads the special from the live monitor shape", function()
+    t.eq(
+      "special:shelf-signal",
+      nav.special_workspace({ active_special_workspace = { name = "special:shelf-signal" } })
+    )
+  end)
+
+  t.it("also reads the older specialWorkspace shape", function()
+    t.eq("special:shelf-signal", nav.special_workspace({ specialWorkspace = { name = "special:shelf-signal" } }))
+  end)
+
+  t.it("is nil when no special is shown", function()
+    t.eq(nil, nav.special_workspace({ name = "DP-1" }))
+    t.eq(nil, nav.special_workspace(nil))
+  end)
+end)
+
+t.describe("nav.hide_special_if_shown", function()
+  local function fire_timers(stub)
+    for _, timer in ipairs(stub.timers) do
+      timer.cb()
+    end
+  end
+
+  t.it("toggles the special away when it is shown", function()
+    local stub = require("tests.hl_stub").new()
+    stub.monitors = { { name = "DP-1", specialWorkspace = { name = "special:hyprfocus-held" } } }
+    _G.hl = stub
+    nav.hide_special_if_shown("special:hyprfocus-held")
+    fire_timers(stub)
+    t.eq(1, #stub.dispatched)
+    t.eq("dsp.workspace.toggle_special", stub.dispatched[1].name)
+    t.eq({ "hyprfocus-held" }, stub.dispatched[1].args)
+  end)
+
+  t.it("does nothing when the special is not shown", function()
+    local stub = require("tests.hl_stub").new()
+    stub.monitors = { { name = "DP-1", specialWorkspace = { name = "" } } }
+    _G.hl = stub
+    nav.hide_special_if_shown("special:hyprfocus-held")
+    fire_timers(stub)
+    t.eq(0, #stub.dispatched)
+  end)
+
+  t.it("dispatches the toggle without the special: prefix", function()
+    local stub = require("tests.hl_stub").new()
+    stub.monitors = { { name = "DP-1", active_special_workspace = { name = "special:hyprfocus-held" } } }
+    _G.hl = stub
+    nav.hide_special_if_shown("special:hyprfocus-held")
+    fire_timers(stub)
+    t.eq("hyprfocus-held", stub.dispatched[1].args[1])
   end)
 end)
 

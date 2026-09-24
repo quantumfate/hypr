@@ -79,27 +79,47 @@ Token-saving guidance for agents:
 
 ## Scenarios
 
-| Script                       | Checks                                                                                                                                                                              | Eval |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `00_boot.sh`                 | boots under the e2e host; no shell/uwsm launch                                                                                                                                      | no   |
-| `10_group.sh`                | two group-block windows form one group                                                                                                                                              | no   |
-| `20_float_strays.sh`         | `strays = "float"` floats an unmatched window                                                                                                                                       | no   |
-| `30_shelf_silent.sh`         | a shelf class routes to its special without showing it                                                                                                                              | no   |
-| `40_mode_roundtrip.sh`       | work/gaming (+ neutral hop) round trips keep every window reachable                                                                                                                 | yes  |
-| `50_headless_output.sh`      | a headless secondary output takes its scene; removal                                                                                                                                | no   |
-| `60_navigation.sh`           | mod+h/l/j/k across tiles, into/out of a group, onto an empty monitor                                                                                                                | yes  |
-| `65_focus_transitions.sh`    | work→study→gaming→work, timed expiry falls back to `previous`, neutral recovery — held sets and pointer fields at each step                                                         | yes  |
-| `70_boot_pointer.sh`         | boot: a stale pointer lands on `work`; an unexpired timed mode survives a restart                                                                                                   | no   |
-| `75_undeclared_workspace.sh` | a window on a workspace the host never declared moves to its monitor's own                                                                                                          | no   |
-| `80_collect_home.sh`         | a claimed window standing elsewhere is re-homed to its scene, focus unmoved                                                                                                         | no   |
-| `90_live_gaps.sh`            | editing `conf/base.lua` gap numbers + reload applies them live (general + scene rule gaps)                                                                                          | no   |
-| `90_deck.sh`                 | deck layout: exactly one member visible, flip changes it and follows focus                                                                                                          | yes  |
-| `95_whichkey.sh`             | submap enter/leave against `hypr/lib/submap.lua`+`whichkey.lua`: enter is a real submap event, exit unwinds a nested chain and dismisses, a withheld tree never appears in the dump | yes  |
-| `95_project_group.sh`        | `,proj.sh open` groups a project's real kitty windows on `code`; reopen refocuses/completes; last-window-close ends it                                                              | no   |
-| `97_bar_truth.sh`            | the REAL bar (not the `qs` stub): workspace rows populate, active row follows a same-monitor switch, compositor truth after a cross-monitor switch                                  | no   |
+| Script                         | Checks                                                                                                                                                                              | Eval |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `00_boot.sh`                   | boots under the e2e host; no shell/uwsm launch                                                                                                                                      | no   |
+| `10_group.sh`                  | two group-block windows form one group                                                                                                                                              | no   |
+| `20_float_strays.sh`           | `strays = "float"` floats an unmatched window                                                                                                                                       | no   |
+| `30_shelf_silent.sh`           | a shelf class routes to its special without showing it                                                                                                                              | no   |
+| `40_mode_roundtrip.sh`         | work/gaming (+ neutral hop) round trips keep every window reachable                                                                                                                 | yes  |
+| `50_headless_output.sh`        | a headless secondary output takes its scene; removal                                                                                                                                | no   |
+| `60_navigation.sh`             | mod+h/l/j/k across tiles, into/out of a group, onto an empty monitor                                                                                                                | yes  |
+| `65_focus_transitions.sh`      | work→study→gaming→work, timed expiry falls back to `previous`, neutral recovery — held sets and pointer fields at each step                                                         | yes  |
+| `67_transition_focus_guard.sh` | a window opening mid-transition stays unfocused behind the veil; the bracket's no_focus guard holds the landing                                                                     | yes  |
+| `70_boot_pointer.sh`           | boot: a stale pointer lands on `work`; an unexpired timed mode survives a restart                                                                                                   | no   |
+| `75_undeclared_workspace.sh`   | a window on a workspace the host never declared moves to its monitor's own                                                                                                          | no   |
+| `80_collect_home.sh`           | a claimed window standing elsewhere is re-homed to its scene, focus unmoved                                                                                                         | no   |
+| `85_companion_cap.sh`          | a companion spawn past a block's `max_spawns` is capped, not spawned                                                                                                                | no   |
+| `86_launch_claim.sh`           | a claimed launch is stowed and tracked wherever the shared profile's pin landed it                                                                                                  | no   |
+| `90_live_gaps.sh`              | editing `conf/base.lua` gap numbers + reload applies them live (general + scene rule gaps)                                                                                          | no   |
+| `90_deck.sh`                   | deck layout: exactly one member visible, flip changes it and follows focus                                                                                                          | yes  |
+| `91_scene_gaps_reload.sh`      | a scene's own declared gaps beat the host profile; a store edit reaches the desk with no `hyprctl reload`                                                                           | no   |
+| `92_bar_gap_publish.sh`        | the bar's opt-in gap is the distance to the scene's outermost VISIBLE window, not the layout's box                                                                                  | no   |
+| `95_whichkey.sh`               | submap enter/leave against `hypr/lib/submap.lua`+`whichkey.lua`: enter is a real submap event, exit unwinds a nested chain and dismisses, a withheld tree never appears in the dump | yes  |
+| `95_project_group.sh`          | `,proj.sh open` groups a project's real kitty windows on `code`; reopen refocuses/completes; last-window-close ends it                                                              | no   |
+| `96_focus_reload.sh`           | a reload never moves focus; a mode's declared `main` scene is the fallback at session start / fresh entry, never a pull-back                                                        | yes  |
+| `96_project_scope.sh`          | `,proj.sh open` with a declared scope spawns the scope's own command into the group; rerun refocuses instead of respawning; resolution matches the focused window                   | yes  |
+| `97_bar_truth.sh`              | the REAL bar (not the `qs` stub): workspace rows populate, active row follows a same-monitor switch, compositor truth after a cross-monitor switch                                  | no   |
+| `97_code_deck.sh`              | the `code` scene's own deck shape — a project column (one Hyprland group per project) beside a browser column                                                                       | yes  |
+| `97_project_picker.sh`         | `,proj.sh pick` floats a project-classed picker on `code` outside every project group; the picker's own close does not steal focus back from the choice                             | no   |
+| `98_project_focus_binds.sh`    | the `p`/`n`/`r` project binds resolve the focused project's live nvim/run window via `hypr/lib/project.lua` and focus it                                                            | yes  |
 
 A scenario is a script that sources `lib.sh`, calls `e2e_start`, and exits
 non-zero on failure (`e2e_fail`). Each gets its own nested compositor.
+
+**Boot focus.** When the boot transition settles, `focus_mode_entry`
+(`hypr/hyprfocus/init.lua`) lands on the mode's declared `main` scene and
+re-asserts that landing at +1.2s/+3s/+6s: each check yanks focus back to
+`main` whenever the active workspace is not main, and nothing gives it back.
+A scenario that opens a project on another workspace inside that window has
+its focus stolen out from under it, so focus-sensitive scenarios call
+`wait_boot_focus_quiet` right after `e2e_start` (it waits the series out from
+the settle `e2e_start` already stalls on). Scenarios that only spawn and
+count windows never need it.
 
 ## Real bar (`E2E_REAL_BAR=1`, `97_bar_truth.sh`)
 

@@ -147,17 +147,20 @@ applied and the pointer is not written.
 is explicit. `barred` and `spawn.class` are not claims. Overlapping regexes
 (`steam_app` vs `steam_app_\d+`) are not detected.
 
-`dofus`, `pokemon` and `media` all use `zen-twilight-media` (the shared Media
-profile); grouping and block matching are already scoped to a window's own
-workspace (`hypr/scene/grouping.lua`), so this alone is not a conflict. What
-blinds a block to a _specific_ window of the class — pokemon's left/right
-media browsers, or dofus's claimed browser vs media's unpinned tile — is
-identity stamped at launch (LEO-364, LEO-412): each block declares `classes
-= { "zen-twilight-media" }` plus a distinct `slot` (`dofus/browser`,
-`pokemon/chat`, `pokemon/stream`); `hypr/scene/identify.lua` stamps
+`dofus` and `media` both use `zen-twilight-media` (the shared Media profile);
+grouping and block matching are already scoped to a window's own workspace
+(`hypr/scene/grouping.lua`), so this alone is not a conflict. What blinds a
+block to a _specific_ window of the class — dofus's claimed browser vs
+media's unpinned tile — is identity stamped at launch (LEO-364, LEO-412):
+each block declares `classes = { "zen-twilight-media" }` plus a distinct
+`slot` (`dofus/browser`, `media/...`); `hypr/scene/identify.lua` stamps
 `slot:<slot>` on the first still-unslotted live window of that class on the
 workspace, in block declaration order, once per
-`window.open`/`window.move_to_workspace`.
+`window.open`/`window.move_to_workspace`. `pokemon` used to share the same
+profile and did exactly this; it now names two profiles of its own
+(`-P pokemon-left`/`-P pokemon-right`, classes
+`zen-twilight-pokemon-left`/`-right` — see `conf/base.lua`), one per column,
+so its slot blocks claim by class directly and no race remains there.
 
 ### Gaming
 
@@ -279,13 +282,29 @@ away stays where you put it until the next open or mode apply.
 A slot-tagged window is claimed only by the scene that declares that exact
 slot (`home.claim` reads the tag, the same `class:slot` keying the resolver
 uses): a bare block never swallows another scene's claimed window — media's
-`zen-twilight-media` tile cannot take dofus's or pokemon's slotted ones, and
-a window whose slot scene is inactive stays put (context survives a reload).
-Tagless windows keep the ordinary class-wide search.
+`zen-twilight-media` tile cannot take dofus's slotted one, and a window
+whose slot scene is inactive stays put (context survives a reload). Tagless
+windows keep the ordinary class-wide search.
 
 ## Companions
 
-`spawn` on a member: open the companion when the first match maps; close it when the last leaves. Example: `zen-twilight-media` (the shared Media profile) beside the Dofus group — the member's open spawns it, and a launch-intent claim sends it home to the `dofus/browser` slot even when a pin rule first lands it elsewhere. A hand-opened window of the class is never part of this: no armed intent, no claim.
+`spawn` on a member: open the companion when the first match maps; close it when the last leaves. Only a scene the **running mode admits** converges its companions: a withdrawn scene's spawn used to fire anyway, opening its browser onto whatever workspace was focused — the code scene's `zen-twilight` landing on dofus as a floating stray. And never **while a mode apply is mid-shuffle**: the apply parks and restores members in phases, and a convergence racing it judged presence against the outgoing mode's admitted set — which closed this same browser while its members were merely being parked on the holding place. The per-event convergence is suspended for the apply's duration; the apply reconverges every admitted scene once its phases are done, so a companion whose members come back comes back with them, deterministically at the end of the shuffle. A profile is one instance and an instance is one WM_CLASS (`--name` applies only to the launch that STARTS the profile), so two scenes sharing one profile can only tell their windows apart by a slot tag stamped in a race the mapping order decides: give a scene that needs its own window its own profile. `pokemon` did share the Media profile and used slots for exactly that reason; it now names two profiles of its own (`-P pokemon-left`/`-P pokemon-right`), so its flanking blocks claim by class and no race remains. A hand-opened window of the class is never part of this: no armed intent, no claim.
+
+A member the deck has scrolled out of view still counts as a member: it
+stands on the deck's hold, not on the scene's workspace, and reading it as
+gone made a scroll look like the last member leaving — which closed the
+companion, and scrolling back spawned another.
+
+A parked window of the companion class is **adopted**, not duplicated. A
+launcher sharing one profile hands back the window it already has rather than
+opening a second one when that window is parked out of sight (verified live:
+a second `--new-window` against the shared zen profile, whose only window sat
+on a special workspace, opened nothing). So when the mode's holding place
+already holds one of the class, the scene takes it over — slot stamped, hold
+record released — instead of asking for a spawn that would never arrive. The
+scene it was held for is withdrawn by definition, and its own convergence
+opens one when a mode admits it again: by then this window stands on a
+visible workspace, where a second one does open.
 
 `max_spawns` (default 1) caps how many of the companion class the engine
 keeps alive while the block has members. The count is derived from live
@@ -303,9 +322,18 @@ negative, fractional) falls back to 1 in `hypr/scene/spec.lua`, the same
 shape as a half-declared spawn being dropped: a bad value never refuses the
 whole scene.
 
+`auto_start` (default false) on a spawn keeps the companion alive whenever the
+running mode admits the scene, even before the member window has opened and
+after the last member has closed. The companion is spawned onto the scene's
+workspace as soon as the scene becomes active, and it is only closed when the
+scene is withdrawn (not while the scene is merely empty). Use it when the scene
+expects the companion to be present by default — for example, Dofus's browser
+profile, where the game client should always land to the left of an already-open
+browser tile.
+
 Launch intent rides the same pending marker (LEO-412). The spawn executor
 arms one marker per decision — keyed `workspace:class`, one spawn in flight —
-and `arm_launch` (a scene binding like pokemon's media key) arms the same
+and `arm_launch` (a scene binding like pokemon's left/right keys) arms the same
 key for a user-initiated launch. Whoever answers the launch, the open step
 claims it (consuming the marker, stamping the launching scene's first free
 slot via `hypr/scene/identify.lua` `assign_for`) before `home` sends it to
@@ -350,21 +378,42 @@ screen's, never between two windows. The dominant axis is the anchor's first
 word, switched to the other one when the named gutter faces another window and
 the other faces the screen. The second word aligns the isle along the edge.
 The corner touching the window is its growth corner: an isle grows away from
-the window, never into it. Standoff from the window is the scene's `gaps_in`;
-the gutter's thickness is the resolved `gaps_out` for that side, less that
-standoff.
+the window, never into it. Standoff from the window is the scene's `gaps_in`,
+so the isle follows its block on both axes — a scene with a deeper gap carries
+the isle with it.
+
+The gutter is **measured**, not derived from the gap ladder: the publishing
+pass holds both boxes and the compositor's own geometry is the only answer to
+"where is the edge I am lining up with" (a placed box and the window standing
+in it differ by the border and inner gap). The whole gutter is published, not
+the gutter less the standoff.
+
+`of = "screen"` is the one target with no window to hug: that isle stands on
+the monitor's own edge and grows inward, over the band measured to the nearest
+tile — the declared outer gap is 12px on the secondary against a 54px isle,
+which is no band at all.
 
 When a dock cannot be honoured — the target is absent, or both candidate
-gutters face another window — it steps down: the declared `fallback` chain,
-then the same anchor on `screen`, then `resting` (the isle's own default
-position). Two isles claiming one region resolve by isle id: the first keeps
-it, the second walks its own ladder. So a second window opening beside the
-first never inherits the first's dock, and the association stays legible.
+gutters face another window — it steps down the declared `fallback` chain and,
+when that is empty, rests: the isle's own default position. **An isle only ever
+deviates from resting through its own declaration.** There is no implicit
+"same anchor on `screen`" rung: without one, two isles on the same workspace
+cannot end up in different failure modes (one hugging a live window gutter,
+its neighbour squeezed flush into the screen gap) — the inconsistency the old
+ladder produced. A scene with no live windows therefore rests every
+block-anchored isle; an isle declared directly against `of = "screen"` is not
+a fallback and still docks — it asked for the screen frame on purpose. The
+shipped scenes declare no screen fallbacks: isles dock to the block they name,
+or rest. Two isles claiming one region resolve by isle id: the first keeps it,
+the second walks its own ladder. So a second window opening beside the first
+never inherits the first's dock, and the association stays legible.
 
 `hypr/lib/dock.lua` decides all of this as arithmetic over the boxes the
 layout just placed. `hypr/scene/dock_publish.lua` writes the result to the
 `geometry` store (`docks.<monitor>.<isle id>` = `{ region, anchor, grow,
-orientation, state }`, monitor-local) from the tail of a layout pass — both
+align, edge, orientation, state }`, monitor-local — `align` says which part of
+the isle the anchor point is, `edge` which gutter it stands in, so the consumer
+knows which end of the region the window is at) from the tail of a layout pass — both
 the scene and deck providers — and only when the resolved map changed. That
 tail is read-only by construction: it places nothing and dispatches nothing,
 so a dock can never move the tile it hangs off. A scene edit drops the
@@ -427,17 +476,18 @@ the contract below is the schema it edits against.
 
 ### Block fields
 
-| Field     | Type                                                       | Meaning                                                                                                  |
-| --------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `classes` | string[]                                                   | literal class or Lua pattern, in window-rule grammar                                                     |
-| `group`   | boolean                                                    | one Hyprland group containing only these classes                                                         |
-| `order`   | integer                                                    | left-to-right tile sequence                                                                              |
-| `share`   | number?                                                    | fraction of the tiled span this block holds                                                              |
-| `guard`   | `"barred"` \| `"deny"`                                     | how a non-group block resists grouping                                                                   |
-| `spawn`   | `{ class: string, command: string, max_spawns?: number }`? | companion window lifecycle; `max_spawns` (default 1) caps how many of                                    |
-|           |                                                            | `class` the engine keeps alive while members stand — the engine never                                    |
-|           |                                                            | creates more than n, it never closes what it did not spawn                                               |
-| `slot`    | string?                                                    | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
+| Field     | Type                                                                             | Meaning                                                                                                  |
+| --------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `classes` | string[]                                                                         | literal class or Lua pattern, in window-rule grammar                                                     |
+| `group`   | boolean                                                                          | one Hyprland group containing only these classes                                                         |
+| `order`   | integer                                                                          | left-to-right tile sequence                                                                              |
+| `share`   | number?                                                                          | fraction of the tiled span this block holds                                                              |
+| `guard`   | `"barred"` \| `"deny"`                                                           | how a non-group block resists grouping                                                                   |
+| `spawn`   | `{ class: string, command: string, max_spawns?: number, auto_start?: boolean }`? | companion window lifecycle; `max_spawns` (default 1) caps how many of                                    |
+|           |                                                                                  | `class` the engine keeps alive while members stand, and `auto_start` keeps it alive whenever the scene   |
+|           |                                                                                  | is active, even with no member present — the engine never creates more than n and never closes what      |
+|           |                                                                                  | it did not spawn                                                                                         |
+| `slot`    | string?                                                                          | identity suffix (LEO-364): claims a `classes` window only once it carries the Hyprland tag `slot:<slot>` |
 
 ### Solo centring (LEO-421)
 
@@ -469,7 +519,9 @@ secondary monitor (`is_primary` in `Scene.LayoutOpts`, read off
 `barred`, and is not already floating → `float`. Its executor in
 `hypr/events/scene.lua`, on `window.open`/`window.move_to_workspace`,
 dispatches `hl.dsp.window.float({ window = "address:"..a })` — address-targeted,
-no focus-dance, no loop, no timer — and logs `arrange`/`stray_float`. A
+no focus-dance, no loop — then, one tick later, resizes it to a fraction of its
+monitor (`strays.fit_size`) and centers it, so a floated tile does not keep the
+whole screen's box or sit half off it. It logs `arrange`/`stray_float`. A
 `barred` class or a block member is left exactly as it is; the same
 reasoning as `grouping.lua`'s eject case does not apply here, since a stray
 that already floats has nothing to correct.
@@ -502,13 +554,14 @@ ambiguity (the follow-up issue wires this to `identify.ambiguous`);
 `spec.ambiguous_classes(spec)` is a static validator over the declaration
 itself, listing every class entry claimed by more than one block — this stays
 a class-only check, so it still flags a shared `classes` entry even when
-distinct `slot`s disambiguate it live. The shipped defaults have exactly one:
-`zen-twilight-media` in the `pokemon` scene's flanking media blocks (by design —
-the same class fills both the left and right slot). A block with `slot` set
-is excluded from `block_candidates`/`block_for` until the window carries the
-Hyprland tag `slot:<slot>` (`spec.slot_candidates(spec, class)` returns the
-declared pool regardless); `hypr/scene/identify.lua` is what stamps it
-(LEO-364, "Window identity" in desktop-model.md).
+distinct `slot`s disambiguate it live. The shared profiles today pair dofus
+and media via one `zen-twilight-media` entry each, single-claimed per scene;
+pokemon used to declare the class in both flanking blocks and no longer does
+(it names a distinct profile per column — see `conf/base.lua`). A block with
+`slot` set is excluded from `block_candidates`/`block_for` until the window
+carries the Hyprland tag `slot:<slot>` (`spec.slot_candidates(spec, class)`
+returns the declared pool regardless); `hypr/scene/identify.lua` is what
+stamps it (LEO-364, "Window identity" in desktop-model.md).
 
 ### Workspace selects its scene
 

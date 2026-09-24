@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # LEO-349: the deck layout wired to the compositor. A sandboxed fixture scene
-# only (tests/e2e/fixtures/hyprfocus.json's "deck-test", conf/hosts/e2e.lua's
-# workspace 4) — no real scene declares `layout = "deck"` yet.
+# (tests/e2e/fixtures/hyprfocus.json's "deck-test", conf/hosts/e2e.lua's
+# workspace 4) — the live code/media scenes are deck too, but only the e2e
+# host's fixture is a stable, self-contained one to drive here.
 #
 # `hq key` does not fire this config's Lua-closure keybinds in this sandbox
 # (see tests/e2e/scenarios/60_navigation.sh's header), so this drives the
@@ -31,7 +32,7 @@ scroll() {
     run_lua "
 local nav = require('hypr.lib.nav')
 local deck = require('hypr.scene.deck')
-local deck_scroll = require('hypr.scene.deck_scroll')
+local deck_order = require('hypr.scene.deck_order')
 local scene_spec = require('hypr.scene.spec')
 local scene_provider = require('hypr.scene.provider')
 local scene = scene_spec.load()['deck-test']
@@ -41,14 +42,17 @@ for _, w in ipairs(hl.get_windows() or {}) do
   if deck.column_for(scene, tile) then tiles[#tiles + 1] = tile end
 end
 local w = hl.get_active_window()
-local dtiles = nav.deck_tile_order(scene, tiles, deck_scroll.get_all(scene.name))
+local dtiles = nav.deck_tile_order(scene, tiles, deck_order.get_all(scene.name))
 local index = nav.tile_index(dtiles, w.address)
 local tile = dtiles[index]
 local target = nav.window_neighbor(tile.plain, w.address, '$1')
+if not target and #tile.plain > 1 then
+  target = '$1' == 'next' and tile.plain[1] or tile.plain[#tile.plain]
+end
 if target then
   local new_index
   for i, a in ipairs(tile.plain) do if a == target then new_index = i end end
-  deck_scroll.set(scene.name, tile.column, new_index)
+  deck_order.set_scroll(scene.name, tile.column, new_index)
   hl.dispatch(hl.dsp.window.move({ window = 'address:' .. target, workspace = 'name:' .. scene.name, follow = false }))
   hl.dispatch(hl.dsp.focus({ window = 'address:' .. target }))
 end

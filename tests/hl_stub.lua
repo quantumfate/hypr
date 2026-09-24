@@ -36,6 +36,7 @@ function M.new(stub_opts)
   hl.workspace_rules = {}
   hl.timers = {}
   hl.event_handlers = {}
+  hl.clock = 0
 
   -- Submap nesting during config evaluation: hl.define_submap's callback runs
   -- immediately (that's how the real API registers a submap's binds), so a
@@ -126,15 +127,46 @@ function M.new(stub_opts)
   end
 
   function hl.timer(cb, opts)
-    local handle = { cb = cb, opts = opts }
+    local timeout = (opts and opts.timeout) or 0
+    local handle = {
+      cb = cb,
+      opts = opts,
+      fire_at = hl.clock + timeout,
+      enabled = true,
+    }
     function handle:set_enabled(v)
       self.enabled = v
     end
     function handle:set_timeout(ms)
       self.opts.timeout = ms
+      self.fire_at = hl.clock + ms
     end
     hl.timers[#hl.timers + 1] = handle
     return handle
+  end
+
+  ---Run every pending timer in order of its scheduled fire time, advancing a
+  --virtual clock so callbacks that arm new timers schedule them relative to the
+  --moment they were armed. Disabled timers are skipped, and each timer only
+  --fires once.
+  function hl.drain()
+    while true do
+      local best_i, best_at = nil, math.huge
+      for i, t in ipairs(hl.timers) do
+        if t.enabled ~= false and not t._fired and t.fire_at < best_at then
+          best_i, best_at = i, t.fire_at
+        end
+      end
+      if not best_i then
+        break
+      end
+      local t = hl.timers[best_i]
+      t._fired = true
+      hl.clock = t.fire_at
+      if t.cb then
+        t.cb()
+      end
+    end
   end
 
   function hl.get_current_submap()

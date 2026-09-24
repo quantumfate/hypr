@@ -13,6 +13,10 @@ if ! command -v kitty >/dev/null 2>&1; then
 fi
 
 e2e_start
+# The boot's main landing re-checks steal focus for a few seconds after the
+# settle (lib.sh's wait_boot_focus_quiet); project work that asserts focus
+# must not race them.
+wait_boot_focus_quiet
 
 PROJECT_DIR="$E2E_ROOT/focus-repo"
 mkdir -p "$PROJECT_DIR"
@@ -22,10 +26,14 @@ JSON
 
 proj_clients() { clients | jq -c '[.[] | select(.class == "Proj-focustest")]'; }
 class_count() { [ "$(proj_clients | jq 'length')" = "$1" ]; }
+slot_tags_match() { [ "$(proj_clients | jq -r '[.[].tags[]? | select(startswith("slot:"))] | sort | join(",")')" = "$1" ]; }
 focused_is() { [ "$(hc -j activewindow | jq -r '.address')" = "$1" ]; }
 
 ,proj.sh open focustest >/dev/null 2>&1
 wait_until 100 class_count 3 || e2e_fail "focustest did not spawn its template: $(proj_clients)"
+# The addresses below are read via slot tags; `stamp_slot` lands each tag a
+# beat after its window maps, so wait for all three before reading.
+wait_until 100 slot_tags_match "slot:nvim,slot:run,slot:zsh" || e2e_fail "focustest windows never got their role tags: $(proj_clients)"
 
 nvim_addr=$(proj_clients | jq -r '.[] | select(.tags[]? == "slot:nvim") | .address')
 run_addr=$(proj_clients | jq -r '.[] | select(.tags[]? == "slot:run") | .address')

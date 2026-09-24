@@ -33,7 +33,7 @@ pactl subscribe 2>/dev/null | while read -r line; do
         sleep 0.5
         new_label=$(get_label)
         if [[ -n "$new_label" && "$new_label" != "$current_label" ]]; then
-            ,notify audio-device -i audio-card -t 3000 "" "Switched to $new_label"
+            ,notify audio-device "" "Switched to $new_label"
             current_label="$new_label"
         fi
         ;;

@@ -30,7 +30,7 @@ require() {
         local msg="recclip: missing required command(s): ${missing[*]}"
         echo "$msg" >&2
         command -v notify-send >/dev/null 2>&1 &&
-            ,notify recclip -u critical "Recording copied" "$msg" || true
+            ,notify screen-recorder "Recording copied" "$msg" -u critical || true
         exit 127
     fi
 }
@@ -116,7 +116,7 @@ copy_to_clipboard() {
     echo "recclip: saved $file"
     echo "recclip: copied to clipboard (paste as file)"
     command -v notify-send >/dev/null &&
-        ,notify recclip "" "Recording copied to clipboard"$'\n'"$file" || true
+        ,notify screen-recorder "" "Recording copied to clipboard"$'\n'"$file" || true
 }
 
 args=("${target[@]}" -k h264 -f 60 -cursor yes)
@@ -131,6 +131,6 @@ echo "$rpid" >"$pidfile"
 trap 'rm -f "$pidfile"; copy_to_clipboard' EXIT
 
 command -v notify-send >/dev/null &&
-    ,notify recclip "" "Recording started — run recclip again to stop" || true
+    ,notify screen-recorder "" "Recording started — run recclip again to stop" || true
 
 wait "$rpid" || true

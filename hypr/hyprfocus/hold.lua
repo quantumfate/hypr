@@ -15,6 +15,7 @@
 -- mode could withdraw would strand exactly the windows it exists to protect.
 local store = require("hypr.lib.store")
 local drawer = require("hypr.lib.drawer")
+local nav = require("hypr.lib.nav")
 
 local M = {}
 
@@ -81,7 +82,7 @@ end
 ---@param address string
 ---@param workspace string
 local function move(address, workspace)
-  hl.dispatch(hl.dsp.window.move({
+  local result = hl.dispatch(hl.dsp.window.move({
     window = "address:" .. address,
     workspace = workspace,
     -- The user did not ask to go anywhere. A following move drags them to
@@ -89,6 +90,21 @@ local function move(address, workspace)
     -- across the desk once per window.
     follow = false,
   }))
+  -- A refused move is reported on screen by the compositor and nowhere else,
+  -- which leaves a mode swap "erroring" with nothing in the record to say
+  -- which window or where. The decision log is the one place that can answer
+  -- that, so a refusal lands there too.
+  if type(result) == "table" and result.ok == false then
+    require("hypr.lib.trace").emit({
+      stage = "admit",
+      event = "hold_move_refused",
+      decision = "refuse",
+      reason = "the compositor refused the move to " .. tostring(workspace),
+      workspace = workspace,
+      trace = address,
+      address = address,
+    })
+  end
 end
 
 ---Drop records for addresses no live window carries. Addresses are reused,
@@ -117,6 +133,59 @@ local function live_windows()
   return live
 end
 
+---The deck's own parking workspace, or nil where the deck is not loaded.
+---
+---A deck scene hides the members its columns are not scrolled to on a special
+---workspace of its own. Those windows still belong to the scene, but they do
+---not STAND on its workspace, so a hold that only swept the named workspace
+---walked straight past them: the mode withdrew the scene, its visible windows
+---were parked, and the hidden ones stayed behind on a special nothing in the
+---mode engine manages — coding windows surfacing in a gaming mode that never
+---admitted them.
+---@return string?
+local function deck_hold()
+  local ok, deck_provider = pcall(require, "hypr.scene.deck_provider")
+  return ok and deck_provider.HOLD or nil
+end
+
+---The scene that declares `w` today, or nil. A held window's origin is a
+---FACT ABOUT THE PAST: it records where the window stood when a mode took it
+---away, and a declaration edited in between (a scene given its own browser
+---profile, say) can leave that origin a workspace whose blocks no longer name
+---the class. Restoring it there anyway puts an undeclared window on a managed
+---workspace, where the stray policy floats it -- a second browser window
+---sprawling over the scene that just opened its own, which is exactly what it
+---looked like on the desk.
+---@param w HL.Window
+---@return string?
+local function declared_home(w)
+  local ok, spec_lib = pcall(require, "hypr.scene.spec")
+  if not ok then
+    return nil
+  end
+  for name, scene in pairs(spec_lib.load() or {}) do
+    if spec_lib.block_for(scene, w.class, w.tags) then
+      return name
+    end
+  end
+  return nil
+end
+
+---Whether `w` is one of `workspace`'s own windows, by the scene declaration
+---that names the workspace. Used only for windows found on the deck's hold:
+---anywhere else, standing on the workspace IS the answer.
+---@param w HL.Window
+---@param workspace string
+---@return boolean
+local function belongs_to(w, workspace)
+  local ok, spec_lib = pcall(require, "hypr.scene.spec")
+  if not ok then
+    return false
+  end
+  local scene = (spec_lib.load() or {})[workspace]
+  return scene ~= nil and spec_lib.block_for(scene, w.class, w.tags) ~= nil
+end
+
 ---Park every window standing on `workspace`.
 ---
 ---A window standing on a named workspace is not held, whatever the record
@@ -131,13 +200,16 @@ function M.hold(workspace)
   local moved = {}
   for _, w in ipairs(hl.get_windows() or {}) do
     local ws = w.workspace
-    if ws and ws.name == workspace and w.address and not drawer.exempt(w, drawers()) then
+    local name = ws and ws.name
+    local mine = name == workspace or (name == deck_hold() and belongs_to(w, workspace))
+    if mine and w.address and not drawer.exempt(w, drawers()) then
       recorded[w.address] = workspace
       move(w.address, HELD)
       moved[#moved + 1] = w.address
     end
   end
   remember(recorded)
+  nav.hide_special_if_shown(HELD)
   return #moved, moved
 end
 
@@ -168,11 +240,16 @@ function M.restore(workspace)
         remaining[address] = origin
       end
     elseif live[address] and not drawer.exempt(live[address], drawers()) then
-      move(address, "name:" .. origin)
+      -- Where it belongs NOW, which is the origin unless the declaration
+      -- moved the class out from under it while it was held.
+      local w = live[address]
+      local home = declared_home(w)
+      move(address, "name:" .. ((home == nil or home == origin) and origin or home))
       moved[#moved + 1] = address
     end
   end
   remember(remaining)
+  nav.hide_special_if_shown(HELD)
   return #moved, moved
 end
 
@@ -281,6 +358,23 @@ function M.adopt(address, workspace)
   end
   local recorded = origins()
   recorded[address] = workspace
+  remember(recorded)
+end
+
+---Forget one address without moving it: another scene has taken the window
+---over (a companion adoption, hypr/scene/companion.lua). Leaving the record
+---would have a later mode "restore" a window that now belongs somewhere else,
+---yanking it off the desk it is standing on.
+---@param address string?
+function M.release(address)
+  if not address then
+    return
+  end
+  local recorded = origins()
+  if recorded[address] == nil then
+    return
+  end
+  recorded[address] = nil
   remember(recorded)
 end
 

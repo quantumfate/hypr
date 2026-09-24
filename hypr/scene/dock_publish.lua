@@ -88,6 +88,35 @@ function M.targets(scene, tiles, boxes, spec_lib)
   return targets
 end
 
+---Overlay each placed box with the rect its window actually occupies.
+---
+---A layout `place()` is a REQUEST. What the compositor finally gives the
+---window is that box adjusted by its own inner gap and border, and the two
+---differ by tens of pixels — on this desk a deck column's box was 21px wider
+---per side than the window standing in it. An isle docked to the box was
+---therefore docked to an edge nothing was drawn at, on every axis at once.
+---The window's own rect is the only geometry that answers "where is the edge
+---I am lining up with", so it wins wherever it is known; a window the
+---compositor has not reported yet keeps its placed box.
+---@param boxes Scene.Box[] the boxes this pass placed
+---@param rects table<string, Dock.Box>? address -> the window's live rect
+---@return Scene.Box[]
+function M.settled(boxes, rects)
+  if not rects then
+    return boxes or {}
+  end
+  local out = {}
+  for _, box in ipairs(boxes or {}) do
+    local live = box.address and rects[box.address]
+    if live then
+      out[#out + 1] = { address = box.address, x = live.x, y = live.y, w = live.w, h = live.h }
+    else
+      out[#out + 1] = box
+    end
+  end
+  return out
+end
+
 ---Resolve and publish one scene's docks for one monitor.
 ---
 ---Coordinates are monitor-local, because a layer surface is positioned within
@@ -140,6 +169,33 @@ function M.publish(opts)
   local published = geometry_store:get("docks") or {}
   published[monitor.name] = resolved
   geometry_store:set({ docks = published })
+end
+
+---Drop the published docks of every monitor not named in `keep`.
+---
+---A dock map is written from the tail of a layout pass, so a monitor whose
+---workspace stops declaring docks -- or stops having tiles at all -- never
+---writes again and its last map stands forever. That stale map is not merely
+---old: it is another scene's boxes under this monitor's name, so the isles it
+---describes sit wherever that other monitor's windows were. Sweeping on a
+---workspace switch is what retires it.
+---@param keep table<string, boolean> monitor names whose docks still stand
+function M.sweep(keep)
+  local published = geometry_store:get("docks")
+  if type(published) ~= "table" then
+    return
+  end
+  local dropped = false
+  for name in pairs(published) do
+    if not keep[name] then
+      published[name] = nil
+      last[name] = nil
+      dropped = true
+    end
+  end
+  if dropped then
+    geometry_store:set({ docks = published })
+  end
 end
 
 ---Forget what was published, so the next pass writes again. The scene

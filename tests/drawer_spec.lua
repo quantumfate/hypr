@@ -215,3 +215,65 @@ t.describe("drawer admission", function()
     t.ok(binds.size("shelf") > 0, "signal stays in the shelf tree")
   end)
 end)
+
+t.describe("drawer shelf fit (LEO-423)", function()
+  local drawer = require("hypr.lib.drawer")
+
+  t.it("fit_size is the declared fraction of the showing monitor", function()
+    local width, height = drawer.fit_size({ width = 5120, height = 1440 })
+    t.eq(3072, width)
+    t.eq(1008, height)
+  end)
+
+  t.it("window_for answers the drawer's live window, or nil", function()
+    local w = { address = "0x1", class = "signal" }
+    t.eq(w, drawer.window_for(SIGNAL, { { address = "0x0", class = "kitty" }, w }))
+    t.eq(nil, drawer.window_for(SIGNAL, { { address = "0x0", class = "kitty" } }))
+  end)
+
+  t.it("fit resizes and centers the shelf on the monitor showing it", function()
+    local stub = require("tests.hl_stub").new()
+    _G.hl = stub
+    stub.get_windows = function()
+      return { { address = "0x1", class = "signal", workspace = { name = "special:shelf-signal" } } }
+    end
+    stub.get_monitors = function()
+      return { { name = "DP-2", width = 2560, height = 1440, specialWorkspace = { name = "special:shelf-signal" } } }
+    end
+
+    drawer.fit(SIGNAL)
+
+    t.eq(2, #stub.dispatched)
+    t.eq("dsp.window.resize", stub.dispatched[1].name)
+    t.eq({ window = "address:0x1", x = 1536, y = 1008 }, stub.dispatched[1].args[1])
+    t.eq("dsp.window.center", stub.dispatched[2].name)
+  end)
+
+  t.it("fit is a no-op when the shelf is not showing", function()
+    local stub = require("tests.hl_stub").new()
+    _G.hl = stub
+    stub.get_windows = function()
+      return { { address = "0x1", class = "signal" } }
+    end
+    stub.get_monitors = function()
+      return { { name = "DP-2", width = 2560, height = 1440 } }
+    end
+
+    drawer.fit(SIGNAL)
+
+    t.eq(0, #stub.dispatched)
+  end)
+
+  t.it("the rule carries the same fractions and never takes initial focus", function()
+    local stub = require("tests.hl_stub").new()
+    _G.hl = stub
+
+    drawer.rules({ SIGNAL })
+
+    local rule = stub.window_rules[1]
+    t.eq("monitor_w * 0.6", rule.size[1])
+    t.eq("monitor_h * 0.7", rule.size[2])
+    t.eq(true, rule.no_initial_focus)
+    t.eq("activate activatefocus", rule.suppress_event)
+  end)
+end)

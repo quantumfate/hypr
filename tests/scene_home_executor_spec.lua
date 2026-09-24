@@ -58,6 +58,9 @@ local function fresh_scene()
     apply_bindings = function() end,
     active = function() end,
     replace = function() end,
+    applying = function()
+      return false
+    end,
   }
 
   for _, mod in ipairs({

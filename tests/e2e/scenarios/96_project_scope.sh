@@ -12,6 +12,10 @@ if ! command -v kitty >/dev/null 2>&1; then
 fi
 
 e2e_start
+# The boot's main landing re-checks steal focus for a few seconds after the
+# settle (lib.sh's wait_boot_focus_quiet); project work that asserts focus
+# must not race them.
+wait_boot_focus_quiet
 
 PROJECT_DIR="$E2E_ROOT/scope-repo"
 mkdir -p "$PROJECT_DIR"
@@ -21,11 +25,11 @@ JSON
 
 proj_clients() { clients | jq -c '[.[] | select(.class == "Proj-scoped")]'; }
 class_count() { [ "$(proj_clients | jq 'length')" = "$1" ]; }
-tags_match() { [ "$(proj_clients | jq -r '[.[].tags[]?] | sort | join(",")')" = "$1" ]; }
+slot_tags_match() { [ "$(proj_clients | jq -r '[.[].tags[]? | select(startswith("slot:"))] | sort | join(",")')" = "$1" ]; }
 
 ,proj.sh open scoped >/dev/null 2>&1
 wait_until 100 class_count 3 || e2e_fail "scoped project did not spawn its template: $(proj_clients)"
-wait_until 100 tags_match "slot:nvim,slot:run,slot:zsh" || e2e_fail "template windows never got their role tags: $(proj_clients)"
+wait_until 100 slot_tags_match "slot:nvim,slot:run,slot:zsh" || e2e_fail "template windows never got their role tags: $(proj_clients)"
 e2e_log "PASS: open spawns the declared-scope project's plain template"
 
 # Resolution: hypr/lib/project.lua reads whichever window is focused right
@@ -55,7 +59,7 @@ e2e_log "PASS: focus-nvim resolution matches the live nvim-tagged window"
 hc dispatch "hl.dsp.focus({ window = \"address:$zsh_addr\" })" >/dev/null
 ,proj.sh scope test >/dev/null 2>&1
 wait_until 100 class_count 4 || e2e_fail "declared scope never spawned: $(proj_clients)"
-wait_until 100 tags_match "slot:nvim,slot:run,slot:test,slot:zsh" || e2e_fail "scope window never got its role tag: $(proj_clients)"
+wait_until 100 slot_tags_match "slot:nvim,slot:run,slot:test,slot:zsh" || e2e_fail "scope window never got its role tag: $(proj_clients)"
 one_group() {
     proj_clients | jq -e '
       . as $w

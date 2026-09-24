@@ -42,6 +42,7 @@ test:
 	./tests/hyprfocus_log_test.sh
 	./tests/hyprfocus_units_test.sh
 	./tests/notify_source_test.sh
+	./tests/zen_dispatcher_test.sh
 	./bin/,hyprfocus conform tests/fixtures/hyprfocus/resolver
 
 # End-to-end scenarios in a nested Hyprland (needs a Wayland session; never

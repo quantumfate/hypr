@@ -13,6 +13,8 @@ local M = {}
 ---@field max_spawns number how many of `class` the engine keeps alive while
 ---the block has members (never fewer than 1; a cap only constrains what the
 ---engine itself opens, not what already exists)
+---@field auto_start boolean? if true, keep the companion alive whenever this
+---scene is active, even when no member window is currently present
 
 ---@class Scene.Block
 ---@field classes string[] literal class or Lua pattern, as windowrules.lua matches
@@ -20,7 +22,9 @@ local M = {}
 ---@field order integer position in the left-to-right tile sequence
 ---@field share number? fraction of the workspace's tiled span this block holds
 ---@field guard "barred"|"deny" how a non-group block resists being grouped
----@field spawn Scene.Companion? the companion window this block's presence keeps alive
+---@field spawns Scene.Companion[]? the companion windows this block's
+---presence keeps alive — one per class, the singular declaration folded in
+---by `normalize_spawns`
 ---@field slot string? identity suffix (LEO-364): with this set, the block only
 ---claims a window of `classes` that already carries the Hyprland tag
 ---`slot:<slot>` — `hypr/scene/identify.lua` is what stamps it, at launch, on
@@ -88,6 +92,50 @@ local function normalize_max_spawns(value)
     return n
   end
   return 1
+end
+
+---One declared companion, whole or not at all: a block naming the window it
+---opens by humming is worse than one the user opens by hand. The cap
+---defaults to 1 (today's behaviour) and normalizes like every other numeric:
+---out-of-range values fall back, never refuse the scene.
+---@param raw unknown
+---@return Scene.Companion?
+local function normalize_spawn(raw)
+  if type(raw) ~= "table" or not raw.class or not raw.command then
+    return nil
+  end
+  return {
+    class = raw.class,
+    command = raw.command,
+    max_spawns = normalize_max_spawns(raw.max_spawns),
+    auto_start = raw.auto_start == true,
+  }
+end
+
+---A block's declared companions as one list: the singular `spawn` and the
+---plural `spawns` fold here, so a consumer reads one shape — a list of the
+---per-class companions the block keeps alive while any of its members
+---stands. The singular stays valid; `spawns` just lets one block name
+---several different companion classes from the same presence (a console and
+---each of its browsers, say). Entries are dropped whole when bad, never a
+---scene refused.
+---@param block table
+---@return Scene.Companion[]?
+local function normalize_spawns(block)
+  local out = {}
+  local single = normalize_spawn(block.spawn)
+  if single then
+    out[#out + 1] = single
+  end
+  if type(block.spawns) == "table" then
+    for _, raw in ipairs(block.spawns) do
+      local entry = normalize_spawn(raw)
+      if entry then
+        out[#out + 1] = entry
+      end
+    end
+  end
+  return #out > 0 and out or nil
 end
 
 ---Log one dropped dock entry — same shape as a half-declared `spawn` (the
@@ -160,15 +208,10 @@ local function normalize(name, raw)
       -- additionally refuses a deliberate group toggle, for a tile whose
       -- whole job is to be a fixed region beside a group.
       guard = block.guard == "deny" and "deny" or "barred",
-      -- A companion is declared whole or not at all: a block naming the
-      -- window it opens by humming is worse than one the user opens by hand.
-      -- The cap defaults to 1 (today's behaviour) and normalizes like every
-      -- other numeric: out-of-range values fall back, never refuse the scene.
-      spawn = (type(block.spawn) == "table" and block.spawn.class and block.spawn.command) and {
-        class = block.spawn.class,
-        command = block.spawn.command,
-        max_spawns = normalize_max_spawns(block.spawn.max_spawns),
-      } or nil,
+      -- The companions this block's presence keeps alive, per the fold above:
+      -- a block may declare one (`spawn`) or several (`spawns`), and every
+      -- consumer reads the one list.
+      spawns = normalize_spawns(block),
       slot = type(block.slot) == "string" and block.slot or nil,
     }
   end

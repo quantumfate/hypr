@@ -94,13 +94,20 @@ end)
 
 t.describe("spawn normalization (LEO-411)", function()
   ---@param spawn table|nil
+  ---@param spawns table|nil
   ---@return table scene
-  local function store_with(spawn)
+  local function store_with(spawn, spawns)
     define_store({
       gaming = {
         name = "gaming",
         blocks = {
-          { classes = { "Dofus.x64" }, group = true, order = 1, spawn = spawn },
+          {
+            classes = { "Dofus.x64" },
+            group = true,
+            order = 1,
+            spawn = spawn,
+            spawns = spawns,
+          },
           { classes = { "zen-twilight-media" }, order = 2, guard = "deny" },
         },
         barred = {},
@@ -113,24 +120,47 @@ t.describe("spawn normalization (LEO-411)", function()
 
   t.it("carries a declared max_spawns through", function()
     local spec = store_with({ class = "zen-twilight-media", command = "zen-twilight ...", max_spawns = 3 })
-    t.eq(3, spec.blocks[1].spawn.max_spawns)
+    t.eq(3, spec.blocks[1].spawns[1].max_spawns)
   end)
 
   t.it("defaults max_spawns to 1 when omitted", function()
     local spec = store_with({ class = "zen-twilight-media", command = "zen-twilight ..." })
-    t.eq(1, spec.blocks[1].spawn.max_spawns)
+    t.eq(1, spec.blocks[1].spawns[1].max_spawns)
   end)
 
   t.it("falls out-of-range max_spawns back to 1 rather than refusing the scene", function()
     for _, bad in ipairs({ 0, -3, 2.5, "nope", nil }) do
       local spec = store_with({ class = "zen-twilight-media", command = "zen-twilight ...", max_spawns = bad })
-      t.eq(1, spec.blocks[1].spawn.max_spawns, "max_spawns=" .. tostring(bad))
+      t.eq(1, spec.blocks[1].spawns[1].max_spawns, "max_spawns=" .. tostring(bad))
     end
   end)
 
   t.it("a half-declared spawn is still dropped whole", function()
     local spec = store_with({ class = "zen-twilight-media", max_spawns = 3 })
-    t.eq(nil, spec.blocks[1].spawn)
+    t.eq(nil, spec.blocks[1].spawns)
+  end)
+
+  t.it("folds a singular spawn and a spawns list into the one array", function()
+    local spec = store_with({ class = "zen-twilight-media", command = "one" }, {
+      { class = "zen-twilight-chat", command = "two" },
+      { class = "zen-twilight-stream", command = "three" },
+    })
+    t.eq(3, #spec.blocks[1].spawns)
+    t.eq("one", spec.blocks[1].spawns[1].command)
+    t.eq("two", spec.blocks[1].spawns[2].command)
+    t.eq("three", spec.blocks[1].spawns[3].command)
+    for _, entry in ipairs(spec.blocks[1].spawns) do
+      t.eq(1, entry.max_spawns)
+    end
+  end)
+
+  t.it("drops a bad entry from a spawns list without refusing the scene", function()
+    local spec = store_with(nil, {
+      { class = "zen-twilight-chat", command = "two" },
+      { class = "zen-twilight-stream" },
+    })
+    t.eq(1, #spec.blocks[1].spawns)
+    t.eq("zen-twilight-chat", spec.blocks[1].spawns[1].class)
   end)
 end)
 

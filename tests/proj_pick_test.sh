@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Functional tests for `,proj.sh`: no tmux, no sockets — a
-# project is a set of kitty windows Hyprland groups by class. This replaces
-# the tmux-session-era version of this test: `pick`/`open` now spawn kitty
-# windows directly and the project list comes from the store, so the fakes
-# below are `hyprctl` (window state + dispatch), `kitty` (spawns are just
-# logged + registered), `fzf` (a scripted pick) and `nvim` (a graceful-quit
-# stand-in using a real AF_UNIX socket, so the `-S` check in `,proj.sh`
-# exercises the real code path). Real `jq`/`fd`/`python3` are used — nothing
-# else reaches outside PATH.
+# A scratch desk, a fake project, and a PATH holding only the real tools the
+# script needs (jq, python3, …) plus fakes for the four things a real
+# desktop would supply: `kitty` (spawns are just logged + registered),
+# `fzf` (a scripted pick), `hyprctl` (window state + dispatch) and `nvim`
+# (a graceful-quit stand-in using a real AF_UNIX socket, so the `-S` check
+# in `,proj.sh` exercises the real code path).
 
 set -euo pipefail
 
@@ -64,8 +61,9 @@ count_lines() { # $1 = file -> 0 for a missing/empty file
 }
 
 # A scratch desk, a fake project, and a PATH holding only the real tools the
-# script needs (fd, jq, python3, …) plus fakes for the four things a real
-# desktop would supply: `kitty`, `fzf`, `hyprctl` and `nvim`.
+# script needs (jq, awk, python3, …) plus fakes for the four things a real
+# desktop would supply: `kitty`, `fzf`, `hyprctl` and `nvim`. The store is
+# populated through `,proj.sh add` — the deliberate gesture — never a scan.
 setup() {
     ROOT=$(mktemp -d)
     export XDG_STATE_HOME="$ROOT/state"
@@ -73,19 +71,15 @@ setup() {
     export XDG_RUNTIME_DIR="$ROOT/run"
     export XDG_CONFIG_HOME="$ROOT/config"
     export QF_STORE="$XDG_STATE_HOME/quantum-store"
-    mkdir -p "$XDG_STATE_HOME" "$XDG_CACHE_HOME" "$XDG_RUNTIME_DIR" \
-        "$QF_STORE" "$XDG_CONFIG_HOME/tms"
+    mkdir -p "$XDG_STATE_HOME" "$XDG_CACHE_HOME" \
+        "$XDG_RUNTIME_DIR" "$QF_STORE"
 
     PROJDIR="$ROOT/repos/demo"
-    mkdir -p "$PROJDIR/.git"
-    cat >"$XDG_CONFIG_HOME/tms/config.toml" <<EOF
-excluded_dirs = [".git"]
-bookmarks = ["$PROJDIR"]
-EOF
+    mkdir -p "$PROJDIR"
 
     FAKEBIN="$ROOT/bin"
     mkdir -p "$FAKEBIN"
-    for tool in fd jq awk sed grep cut sort tr mktemp stat date cksum paste wc \
+    for tool in fd jq awk sed grep cut sort tr head mktemp stat date cksum paste wc \
         mkdir cat mv rm touch readlink basename dirname tty pgrep pkill id env bash sh \
         printf true false python3 sleep seq xargs; do
         real=$(command -v "$tool" 2>/dev/null) || continue
@@ -174,6 +168,8 @@ elif args[:1] == ["dispatch"]:
     if m:
         open(ACTIVE, "w").write(m.group(1))
     m = re.match(r'hl\.dsp\.window\.close\("address:([^"]+)"\)$', expr)
+    if not m:
+        m = re.match(r'hl\.dsp\.window\.close\(\{ window = "address:([^"]+)" \}\)$', expr)
     if m:
         addr = m.group(1)
         save([c for c in clients() if c["address"] != addr])
@@ -326,31 +322,67 @@ wait_for_tags() { # $1 = expected "slot:a,slot:b,..." (sorted, comma-joined)
     return 1
 }
 
-# A full `open demo` template (all three default roles), fully spawned AND
+# A full `open demo` template (all four default roles), fully spawned AND
 # tagged. Anything that reads `demo`'s live windows by role must call this
 # rather than just waiting on the client count.
 wait_full_open() {
     for _ in $(seq 1 40); do
-        [ "$(jq 'length' "$HYPR_CLIENTS")" = "3" ] && break
+        [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
         sleep 0.05
     done
-    wait_for_tags "slot:nvim,slot:run,slot:zsh"
+    wait_for_tags "slot:nvim,slot:run,slot:yazi,slot:zsh"
 }
 
-echo "sync: populates the store from the tms scan, path included"
+echo "add: a directory becomes a project deliberately, nothing else discovers it"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 check "the project landed in the store" "demo" \
     "$(jq -r '.projects.demo.path' "$QF_STORE/projects.json" | xargs -I{} basename {})"
-check "default window template" '["nvim","zsh","run"]' \
+check "default window template" '["nvim","yazi","zsh","run"]' \
     "$(jq -c '.projects.demo.windows' "$QF_STORE/projects.json")"
 check "default workspace" "code" "$(jq -r '.projects.demo.workspace' "$QF_STORE/projects.json")"
 check "new project defaults to kind=repo" "repo" "$(jq -r '.projects.demo.kind' "$QF_STORE/projects.json")"
 teardown
 
-echo "sync: leaves hand-set dashboard metadata alone on a rerun"
+echo "add: folds the repo's own .proj.toml into the store on the way in"
+setup
+cat >"$PROJDIR/.proj.toml" <<EOF
+windows = ["nvim", "yazi"]
+workspace = "code"
+
+[scopes]
+test = "echo run-tests"
+EOF
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+check "declared windows win over the default template" '["nvim","yazi"]' \
+    "$(jq -c '.projects.demo.windows' "$QF_STORE/projects.json")"
+check "declared scopes fold in too" '{"test":"echo run-tests"}' \
+    "$(jq -c '.projects.demo.scopes' "$QF_STORE/projects.json")"
+teardown
+
+echo "sync: refreshes what the store already holds — it discovers nothing"
 setup
 "$PROJ_SH" sync >/dev/null
+check "an unadded directory never entered the store" "0" \
+    "$(jq '.projects | length' "$QF_STORE/projects.json")"
+teardown
+
+echo "sync: folds a project's later-edited scopes into the store"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+cat >"$PROJDIR/.proj.toml" <<EOF
+[scopes]
+test = "echo run-tests"
+logs = "echo tail-logs"
+EOF
+"$PROJ_SH" sync >/dev/null
+check "both scopes landed, name to command" '{"logs":"echo tail-logs","test":"echo run-tests"}' \
+    "$(jq -Sc '.projects.demo.scopes' "$QF_STORE/projects.json")"
+teardown
+
+echo "sync: leaves hand-set dashboard metadata alone on a rerun"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 jq '.projects.demo.study = true | .projects.demo.priority = 1' \
     "$QF_STORE/projects.json" >"$QF_STORE/projects.json.tmp"
 mv "$QF_STORE/projects.json.tmp" "$QF_STORE/projects.json"
@@ -361,31 +393,32 @@ teardown
 
 echo "open: a fresh project spawns its whole window template"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 # The nvim window daemonizes and needs a beat to bind its socket.
 wait_full_open
-check "three windows, one per template entry" "3" "$(jq 'length' "$HYPR_CLIENTS")"
-check "all carry the project's class" "3" \
+check "four windows, one per template entry" "4" "$(jq 'length' "$HYPR_CLIENTS")"
+check "all carry the project's class" "4" \
     "$(clients_json | jq '[.[] | select(.class == "Proj-demo")] | length')"
-check "every window got its role tag" "slot:nvim,slot:run,slot:zsh" \
+check "every window got its role tag" "slot:nvim,slot:run,slot:yazi,slot:zsh" \
     "$(clients_json | jq -r '[.[].tags[]?] | sort | join(",")')"
+contains "yazi runs as its own tab, not a shell to type in" "yazi" "$(cat "$KITTY_LOG")"
 teardown
 
 echo "open: reopening an already-open project spawns nothing new, just focuses"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
 "$PROJ_SH" open demo zsh >/dev/null
-check "still exactly three windows (nothing re-spawned)" "3" "$(jq 'length' "$HYPR_CLIENTS")"
+check "still exactly four windows (nothing re-spawned)" "4" "$(jq 'length' "$HYPR_CLIENTS")"
 zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
 check "the requested window took focus" "$zsh_addr" "$(cat "$HYPR_ACTIVE")"
 teardown
 
 echo "open: reopening with one window missing spawns only that one"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
 run_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:run") | .address')
@@ -393,25 +426,25 @@ jq --arg a "$run_addr" '[.[] | select(.address != $a)]' "$HYPR_CLIENTS" >"$HYPR_
 mv "$HYPR_CLIENTS.tmp" "$HYPR_CLIENTS"
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
-check "back up to three windows" "3" "$(jq 'length' "$HYPR_CLIENTS")"
+check "back up to four windows" "4" "$(jq 'length' "$HYPR_CLIENTS")"
 teardown
 
 echo "pick: no terminal at all opens one picker window, not a picker + a project window"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 export FZF_PICK_CHOICE=demo
 "$PROJ_SH" pick </dev/null >/dev/null
 for _ in $(seq 1 40); do
-    [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "5" ] && break
     sleep 0.05
 done
-check "one picker window plus the three project windows" "4" "$(jq 'length' "$HYPR_CLIENTS")"
+check "one picker window plus the four project windows" "5" "$(jq 'length' "$HYPR_CLIENTS")"
 contains "the picker itself used the ordinary project class" "Proj-picker" "$(cat "$KITTY_LOG")"
 teardown
 
 echo "pick: cancelled — no project ever opens"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 unset FZF_PICK_CHOICE
 "$PROJ_SH" pick </dev/null >/dev/null
 for _ in $(seq 1 40); do
@@ -423,7 +456,7 @@ teardown
 
 echo "kill: closes plain windows outright, asks nvim to quit gracefully"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
 wait_for_nvim_sock Proj-demo
@@ -438,7 +471,7 @@ teardown
 
 echo "kill: an nvim window with unsaved buffers is never force-closed"
 setup
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 # The fake nvim daemon inherits its environment at spawn time, so the
 # unsaved-buffer flag has to be set before `open`, not before `kill`.
 export NVIM_FAKE_UNSAVED=1
@@ -453,11 +486,7 @@ teardown
 
 echo "focus: resolves against whichever project's group is focused, not a hardcoded name"
 setup
-cat >"$PROJDIR/.proj.toml" <<EOF
-[scopes]
-test = "echo run-tests"
-EOF
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
 zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
@@ -470,36 +499,24 @@ run_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:run") | .address
 check "focus run lands on the run-tagged window" "$run_addr" "$(cat "$HYPR_ACTIVE")"
 teardown
 
-echo "sync: folds a project's declared scopes into the store"
-setup
-cat >"$PROJDIR/.proj.toml" <<EOF
-[scopes]
-test = "echo run-tests"
-logs = "echo tail-logs"
-EOF
-"$PROJ_SH" sync >/dev/null
-check "both scopes landed, name to command" '{"logs":"echo tail-logs","test":"echo run-tests"}' \
-    "$(jq -Sc '.projects.demo.scopes' "$QF_STORE/projects.json")"
-teardown
-
 echo "scope: spawns a declared scope with its own command and joins the group"
 setup
 cat >"$PROJDIR/.proj.toml" <<EOF
 [scopes]
 test = "echo run-tests"
 EOF
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
 zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
 printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
 "$PROJ_SH" scope test >/dev/null
 for _ in $(seq 1 40); do
-    [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "5" ] && break
     sleep 0.05
 done
-wait_for_tags "slot:nvim,slot:run,slot:test,slot:zsh"
-check "the scope window joined the project's class" "4" \
+wait_for_tags "slot:nvim,slot:run,slot:test,slot:yazi,slot:zsh"
+check "the scope window joined the project's class" "5" \
     "$(clients_json | jq '[.[] | select(.class == "Proj-demo")] | length')"
 contains "it spawned with the scope's own command" "run-tests" "$(cat "$KITTY_LOG")"
 teardown
@@ -510,23 +527,94 @@ cat >"$PROJDIR/.proj.toml" <<EOF
 [scopes]
 test = "echo run-tests"
 EOF
-"$PROJ_SH" sync >/dev/null
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
 "$PROJ_SH" open demo >/dev/null
 wait_full_open
 zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
 printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
 "$PROJ_SH" scope test >/dev/null
 for _ in $(seq 1 40); do
-    [ "$(jq 'length' "$HYPR_CLIENTS")" = "4" ] && break
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "5" ] && break
     sleep 0.05
 done
-wait_for_tags "slot:nvim,slot:run,slot:test,slot:zsh"
+wait_for_tags "slot:nvim,slot:run,slot:test,slot:yazi,slot:zsh"
 printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
 "$PROJ_SH" scope test >/dev/null
-check "still exactly four windows (nothing re-spawned)" "4" "$(jq 'length' "$HYPR_CLIENTS")"
+check "still exactly five windows (nothing re-spawned)" "5" "$(jq 'length' "$HYPR_CLIENTS")"
 test_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:test") | .address')
 check "focused the existing scope window instead" "$test_addr" "$(cat "$HYPR_ACTIVE")"
 teardown
+
+echo "open-one: exactly one template window opens, tagged, not the whole template"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+"$PROJ_SH" open-one demo yazi >/dev/null
+for _ in $(seq 1 40); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "1" ] && break
+    sleep 0.05
+done
+wait_for_tags "slot:yazi"
+check "one window, not the four-window template" "1" "$(jq 'length' "$HYPR_CLIENTS")"
+contains "the yazi tab launched yazi itself" "yazi" "$(cat "$KITTY_LOG")"
+teardown
+
+echo "open-one: re-invoking the live tab focuses it instead of spawning again"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+"$PROJ_SH" open-one demo yazi >/dev/null
+wait_for_tags "slot:yazi"
+yazi_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:yazi") | .address')
+printf '%s' "0x0" >"$HYPR_ACTIVE" # focus starts somewhere else
+"$PROJ_SH" open-one demo yazi >/dev/null
+check "still exactly one window (nothing re-spawned)" "1" "$(jq 'length' "$HYPR_CLIENTS")"
+check "focused the live yazi tab instead" "$yazi_addr" "$(cat "$HYPR_ACTIVE")"
+teardown
+
+echo "open-one: refuses a role the project's template does not declare"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+err=$("$PROJ_SH" open-one demo nope 2>&1 >/dev/null) || true
+contains "the refusal names the template's real roles" "has no 'nope' window" "$err"
+check "nothing was spawned by the refused call" "0" "$(jq 'length' "$HYPR_CLIENTS")"
+teardown
+
+echo "pick-window: from a bind, the focused project's chosen template window opens on its own"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+"$PROJ_SH" open-one demo zsh >/dev/null
+wait_for_tags "slot:zsh"
+# Stand on the project's shell window: the picker's project comes from
+# whatever window is focused right now, never a fixture name.
+zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
+printf '%s' "$zsh_addr" >"$HYPR_ACTIVE"
+export FZF_PICK_CHOICE=yazi
+"$PROJ_SH" pick-window </dev/null >/dev/null
+for _ in $(seq 1 40); do
+    [ "$(jq 'length' "$HYPR_CLIENTS")" = "3" ] && break
+    sleep 0.05
+done
+wait_for_tags "slot:yazi,slot:zsh"
+check "the picker window, zsh, and the one chosen template window" "3" "$(jq 'length' "$HYPR_CLIENTS")"
+check "the chosen window carries the project's class" "2" \
+    "$(clients_json | jq '[.[] | select(.class == "Proj-demo")] | length')"
+teardown
+
+echo "pick-window: a template window that is already live is focused, never duplicated"
+setup
+"$PROJ_SH" add demo "$PROJDIR" >/dev/null
+"$PROJ_SH" open demo >/dev/null
+wait_full_open
+zsh_addr=$(clients_json | jq -r '.[] | select(.tags[]? == "slot:zsh") | .address')
+export FZF_PICK_CHOICE=zsh
+"$PROJ_SH" pick-window --inline demo </dev/null >/dev/null
+sleep 0.3
+check "still exactly four project windows" "4" \
+    "$(clients_json | jq '[.[] | select(.class == "Proj-demo")] | length')"
+check "the live zsh tab took focus instead" "$zsh_addr" "$(cat "$HYPR_ACTIVE")"
+teardown
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -22,6 +22,21 @@ local home = require("hypr.scene.home")
 
 local M = {}
 
+-- A stray floats at the tiled box it happened to have, which on a wide monitor
+-- is the whole screen and can sit partly off it. Float it at a sensible
+-- fraction of its monitor instead, so it reads as a window rather than a
+-- broken tile.
+local WIDTH_FRACTION = 0.7
+local HEIGHT_FRACTION = 0.8
+
+---The floating box a stray should take on `monitor`.
+---@param monitor { width: integer, height: integer }
+---@return integer width, integer height
+function M.fit_size(monitor)
+  return math.floor((monitor.width or 0) * WIDTH_FRACTION + 0.5),
+    math.floor((monitor.height or 0) * HEIGHT_FRACTION + 0.5)
+end
+
 ---@class Scene.StrayDecision
 ---@field action "float"|"none"
 ---@field window HL.Window the window the triggering event fired for

@@ -171,15 +171,39 @@
         "blocks": [
           {
             "classes": [
-              "Proj%-.*"
+              "Proj-demo"
             ],
             "group": true,
             "order": 1,
-            "share": 1
+            "share": 0.25
+          },
+          {
+            "classes": [
+              "Proj-pickme"
+            ],
+            "group": true,
+            "order": 2,
+            "share": 0.25
+          },
+          {
+            "classes": [
+              "Proj-scoped"
+            ],
+            "group": true,
+            "order": 3,
+            "share": 0.25
+          },
+          {
+            "classes": [
+              "Proj-focustest"
+            ],
+            "group": true,
+            "order": 4,
+            "share": 0.25
           }
         ],
         "barred": [],
-        "strays": "slot",
+        "strays": "float",
         "bindings": []
       },
       "code-deck": {

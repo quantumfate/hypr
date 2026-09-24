@@ -70,6 +70,57 @@ t.describe("holding", function()
     t.eq(false, stub.dispatched[1].args[1].follow)
   end)
 
+  -- A deck scene hides the members its columns are not scrolled to on a
+  -- special workspace of its own. Those windows belong to the scene without
+  -- standing on it, and a hold that only swept the named workspace left them
+  -- behind: the mode withdrew `code`, its visible windows were parked, and
+  -- the hidden ones surfaced in a mode that never admitted them.
+  t.it("takes the scene's deck-parked members with it", function()
+    local spec_lib = require("hypr.scene.spec")
+    local original = spec_lib.load
+    spec_lib.load = function()
+      return { code = { name = "code", blocks = { { classes = { "zen-twilight" }, order = 1 } } } }
+    end
+    local ok, err = pcall(function()
+      local stub, hold = fresh({
+        win("0x1", "code", "Kitty-Main"),
+        win("0x2", "special:deck-hold", "zen-twilight"),
+        win("0x3", "special:deck-hold", "Dofus.x64"),
+      })
+      t.eq(2, hold.hold("code"), "the tile on the workspace and the member parked off it")
+      t.eq(true, moves(stub):find("address:0x2->special:hyprfocus-held", 1, true) ~= nil)
+      t.eq(false, moves(stub):find("address:0x3", 1, true) ~= nil, "another scene's parked window stays put")
+    end)
+    spec_lib.load = original
+    if not ok then
+      error(err, 0)
+    end
+  end)
+
+  -- A held window's origin records where it STOOD, not where it belongs. A
+  -- declaration edited while it was held (a scene given its own browser
+  -- profile) can leave that origin a workspace whose blocks no longer name
+  -- the class: restoring it there put an undeclared window on a managed
+  -- workspace, where the stray policy floated it -- a second browser sprawled
+  -- across the scene that had just opened its own.
+  t.it("restores a window to the scene that declares it today", function()
+    local spec_lib = require("hypr.scene.spec")
+    local original = spec_lib.load
+    spec_lib.load = function()
+      return { media = { name = "media", blocks = { { classes = { "zen-twilight-media" }, order = 1 } } } }
+    end
+    local ok, err = pcall(function()
+      local stub, hold = fresh({ win("0x1", "dofus", "zen-twilight-media") })
+      hold.hold("dofus")
+      hold.restore("dofus")
+      t.eq(true, moves(stub):find("address:0x1->name:media", 1, true) ~= nil, "not back to its stale origin")
+    end)
+    spec_lib.load = original
+    if not ok then
+      error(err, 0)
+    end
+  end)
+
   t.it("leaves other workspaces alone", function()
     local stub, hold = fresh({ win("0x9", "gaming") })
     t.eq(0, hold.hold("code"))

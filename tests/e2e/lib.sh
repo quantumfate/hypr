@@ -28,6 +28,9 @@ E2E_SIG=""
 E2E_WAYLAND=""
 E2E_BAR_PID=""
 declare -a E2E_EXTRA_PIDS=()
+# When the boot transition settled (ns since epoch); the anchor
+# `wait_boot_focus_quiet` measures the boot main-landing window from.
+E2E_SETTLE_AT=0
 
 # Track a background PID (e.g. the real bar) so e2e_stop kills it too --
 # nothing outside the nested compositor's own client list dies with it
@@ -165,6 +168,44 @@ e2e_start() {
     trap e2e_stop EXIT
     trap 'exit 130' INT TERM
     e2e_boot
+    # Boot enters a mode like any other transition, and its bracket holds the
+    # open-focus guard and phases the apply behind the veil. A scenario that
+    # starts driving the desk before the settle races both (windows opening
+    # unfocused, workspaces mid-move); the settle is the contract's done
+    # point, so wait for it rather than for a duration.
+    wait_transition_settled || e2e_fail "boot transition never settled"
+    # The boot's main landing is scheduled from this same settle; scenarios
+    # that assert focus wait the window out with wait_boot_focus_quiet.
+    E2E_SETTLE_AT=$(date +%s%N)
+}
+
+# wait_transition_settled [tenths]: block until the transition store exists
+# and names no active bracket. The compositor publishes the bracket for the
+# whole transition (hypr/lib/transition.lua); asserting before it flips
+# reads the desk mid-rearrangement.
+wait_transition_settled() {
+    wait_until "${1:-150}" sh -c "
+        test -f '$QF_STORE/hyprfocus.transition.json' &&
+        jq -e '.active == false' '$QF_STORE/hyprfocus.transition.json'
+    "
+}
+
+# wait_boot_focus_quiet: block until the compositor's boot main-landing
+# window is over. `focus_mode_entry` (hypr/hyprfocus/init.lua) lands on the
+# mode's declared main scene when the boot transition settles, then re-checks
+# that landing at +1.2s/+3s/+6s: each check yanks focus back to main whenever
+# the active workspace is not main. A scenario opening a project on another
+# workspace inside that window has focus stolen out from under it and nothing
+# gives it back, so focus-sensitive steps must wait the series out first. The
+# settle `e2e_start` already stalls on is the same moment the checks are
+# scheduled from, so the window measures from there; the final check is
+# +6000ms, and +7s clears it with margin.
+wait_boot_focus_quiet() {
+    [[ $E2E_SETTLE_AT != 0 ]] || e2e_fail "wait_boot_focus_quiet: no settle recorded (e2e_start)"
+    local tv=$((7000 * 1000000))
+    while (($(date +%s%N) - E2E_SETTLE_AT < tv)); do
+        sleep 0.1
+    done
 }
 
 # hyprctl against the nested instance only.
@@ -216,8 +257,17 @@ go_workspace() {
     # hyprctl's dispatch argument is Lua on this config.
     hc dispatch "hl.dsp.focus({ workspace = [[name:$1]] })" >/dev/null ||
         e2e_fail "could not focus workspace $1"
-    wait_until 50 sh -c "hyprctl -i '$E2E_SIG' -j activeworkspace | jq -e --arg n '$1' '.name == \$n'" ||
-        e2e_fail "workspace $1 never became active"
+    local seen=""
+    for _ in $(seq 50); do
+        local cur
+        # One garbled read during a busy boot must not sink the poll; the
+        # loop retries.
+        cur=$(hyprctl -i "$E2E_SIG" -j activeworkspace | jq -r '.name' 2>/dev/null) || cur=""
+        seen="$seen $cur"
+        [[ $cur == "$1" ]] && return 0
+        sleep 0.1
+    done
+    e2e_fail "workspace $1 never became active (seen:$seen, transition: $(cat "$QF_STORE/hyprfocus.transition.json" 2>/dev/null))"
 }
 
 # --- Real bar (E2E_REAL_BAR=1 scenarios only) ------------------------------

@@ -50,6 +50,19 @@ hl.on("hyprland.start", function()
     require("hypr.lib.maintenance").run()
   end
 
+  -- The study project's bring-up goes FIRST at real login: its launcher's
+  -- focus dispatches then race the boot transition from the earliest possible
+  -- moment, so they land inside the bracket (where they cannot interrupt the
+  -- settle) instead of pulling focus off main after the veil has come down.
+  -- Best-effort like boot itself: a project problem must never abort the
+  -- session start.
+  if os.getenv("QF_E2E") ~= "1" then
+    local opened, open_err = pcall(open_study_project)
+    if not opened then
+      print("open_study_project failed, continuing session start: " .. tostring(open_err))
+    end
+  end
+
   -- Login always enters `work`, unless the pointer names a still-running
   -- timed mode (docs/desktop-model.md "Pointer"). Runs under the nested e2e
   -- compositor too, deliberately: e2e's fixture pointer already starts at
@@ -89,5 +102,4 @@ hl.on("hyprland.start", function()
   -- mode it is not in. Event subscriptions rather than a timer — an idle
   -- desk pays stats, not ticks.
   watch.attach()
-  open_study_project()
 end)

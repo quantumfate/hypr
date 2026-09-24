@@ -8,6 +8,11 @@ local focus_gate = require("hypr.lib.focus_gate")
 local diag = require("hypr.services.diag")
 local hyprfocus_binds = require("hypr.hyprfocus.binds")
 
+-- Bumped by every deck-column scroll; the scroll's focus re-asserts are
+-- generation-guarded against it, so a rapid second scroll invalidates the
+-- first one's pending re-asserts (see scroll_deck_column).
+local scroll_gen = 0
+
 -- Focus mode is data + an oracle (Focus.qml on the shell side,
 -- hypr/lib/focus_gate.lua here): the store is the truth both read, so the
 -- check runs at DISPATCH time without a subprocess — a store read on the
@@ -51,21 +56,71 @@ bind.brightness("Down", ',brightness.sh --dec ""')
 -- cheatsheet, because none of the three carried a description. Maximize moves to
 -- SUPER+ALT+X; the tests assert no root chord is claimed twice and that every
 -- bind says what it does.
+-- The maximize and fullscreen toggles register themselves through the same
+-- deliberate registry the float toggle uses (`M.arm_float`/`disarm_float`):
+-- a window state the USER set deliberately is never reconciled away by the
+-- scene engine's window-state reconciliation, while an app asserting the
+-- state on its own (zen re-requesting maximize after a hold round trip)
+-- is cleared. The registration runs one tick after the dispatch, so the
+-- toggle's landing state decides which way it went.
+local function arm_window_state_toggle(dispatcher)
+  return function()
+    local w = hl.get_active_window()
+    if not w then
+      return
+    end
+    hl.dispatch(dispatcher)
+    require("hypr.lib.hypr").oneshot(50, function()
+      local live = nil
+      for _, candidate in ipairs(hl.get_windows() or {}) do
+        if candidate.address == w.address then
+          live = candidate
+        end
+      end
+      if live and (live.fullscreen or 0) ~= 0 then
+        require("hypr.events.scene").arm_float(w.address)
+      else
+        require("hypr.events.scene").disarm_float(w.address)
+      end
+    end)
+  end
+end
+
 hyprfocus_binds.bind(
   bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + X",
-  hl.dsp.window.fullscreen({ mode = "maximized" }),
+  arm_window_state_toggle(hl.dsp.window.fullscreen({ mode = "maximized" })),
   { description = "Maximize window", submap_universal = true }
 )
 hyprfocus_binds.bind(
   bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + F",
-  hl.dsp.window.fullscreen({ mode = "fullscreen" }),
+  arm_window_state_toggle(hl.dsp.window.fullscreen({ mode = "fullscreen" })),
   { description = "Fullscreen window", submap_universal = true }
 )
-hyprfocus_binds.bind(
-  bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T",
-  hl.dsp.window.float(),
-  { description = "Toggle floating", submap_universal = true }
-)
+hyprfocus_binds.bind(bind.parse_mods({ config.main_mod, config.tertiary_mod }) .. " + T", function()
+  local w = hl.get_active_window()
+  if not w then
+    return
+  end
+  -- A deliberate float is user intent: mark it so the scene engine's float
+  -- reconciliation (which re-tiles drag artifacts on the next focus) never
+  -- touches this window until the user toggles it back. The registration
+  -- runs one tick after the dispatch, so the toggle's landing state is
+  -- what decides.
+  require("hypr.lib.hypr").oneshot(50, function()
+    local live = nil
+    for _, candidate in ipairs(hl.get_windows() or {}) do
+      if candidate.address == w.address then
+        live = candidate
+      end
+    end
+    if live and live.floating then
+      require("hypr.events.scene").arm_float(w.address)
+    else
+      require("hypr.events.scene").disarm_float(w.address)
+    end
+  end)
+  hl.dispatch(hl.dsp.window.float())
+end, { description = "Toggle floating", submap_universal = true })
 
 -- A project used to be a tmux session that outlived its window, so closing one
 -- asked whether to take the project down too. A project is now its windows:
@@ -106,9 +161,9 @@ submap.tree({
   entries = {
     bind.app_entry("return", config.apps.terminal, "Open the Terminal"),
     bind.app_entry("f", config.apps.terminal_float, "Open the floating Terminal", { config.main_mod }),
-    -- No bare-tms entry: a terminal on the default tmux socket could host any
-    -- project's session, which is exactly the cross-talk `,proj.sh` exists to
-    -- prevent. Every tmux window comes from the project picker.
+    -- No bare entry here: a generic shell terminal is exactly the
+    -- cross-talk `,proj.sh` exists to prevent — every project window comes
+    -- from the project picker. SUPER+RETURN is the plain-terminal key.
     bind.project_entry("s", "zsh", "Open a project on its shell window"),
   },
 })
@@ -144,8 +199,8 @@ do
     name = "project",
     desc = "Projects",
     entries = {
-      -- No window name: the project's own template decides which tab it lands on
-      -- (`.proj.toml` in the repo, or `[projects.<name>]` in the tms config).
+      -- No window name: the project's own template decides which tab it lands
+      -- on (`.proj.toml` in the repo, or its `projects.json` entry).
       bind.project_entry("p", nil, "Open a project (its default window)"),
       {
         key = "n",
@@ -201,7 +256,14 @@ submap.tree({
           notify:notify("Blocked: " .. reason, 3000, notify.level.WARNING)
           return
         end
-        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. config.apps.media_browser.cmd))
+        -- `--new-window`, always. Without it the profile's already-running
+        -- instance answers the launch by ACTIVATING the window it has, and
+        -- Hyprland honours that activation by pulling the window to the
+        -- workspace you launched from -- so asking media for a browser while
+        -- dofus's companion stood on dofus MOVED that window to media
+        -- instead of opening one. The pokemon entry below has always passed
+        -- it, for the same reason.
+        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. config.apps.media_browser.cmd .. " --new-window"))
       end,
     },
     bind.app_entry("b", config.apps.main_browser, "Open the Browser"),
@@ -277,7 +339,7 @@ do
   local group_adapters = require("hypr.scene.group_adapters")
   local grouping = require("hypr.scene.grouping")
   local deck = require("hypr.scene.deck")
-  local deck_scroll = require("hypr.scene.deck_scroll")
+  local deck_order = require("hypr.scene.deck_order")
 
   ---Every window subscribing to a deck scene's columns, anywhere (docs/deck.md
   ---"Membership is a subscription" — a held member has already left the
@@ -288,7 +350,14 @@ do
     local tiles = {}
     for _, w in ipairs(hl.get_windows() or {}) do
       local tile = scene_provider.window_tile(w)
-      if deck.column_for(scene, tile) then
+      local at = w.workspace and w.workspace.name
+      -- Not the ones the MODE parked. Those windows belong to a scene the
+      -- running mode withdrew, and focusing one makes the compositor SHOW the
+      -- holding place it stands on -- a special workspace full of another
+      -- mode's windows sliding in behind the desk, which is what `mod+h` on
+      -- the leftmost tile did. The deck's own hold stays in: scrolling to a
+      -- member it is hiding is the whole point of these binds.
+      if at ~= "special:hyprfocus-held" and deck.column_for(scene, tile) then
         tiles[#tiles + 1] = tile
       end
     end
@@ -301,7 +370,7 @@ do
   ---@param scene Scene.Spec
   ---@return (Nav.Tile|{ plain: string[], column: integer })[]
   local function deck_tiles(scene)
-    return nav.deck_tile_order(scene, deck_member_tiles(scene), deck_scroll.get_all(scene.name))
+    return nav.deck_tile_order(scene, deck_member_tiles(scene), deck_order.get_all(scene.name))
   end
 
   ---`nav.tile_order`'s `opts.enter`: the group's adapter picks the entry
@@ -333,6 +402,33 @@ do
     -- Ignored monitors are never crossed onto.
     local ordered = nav.monitor_order(nav.usable_monitors(hl.get_monitors() or {}, config.host.ignored_monitors))
     return nav.adjacent_monitor(ordered, monitor.name, dir)
+  end
+
+  ---Focus a deck member wherever it stands. A member the strip is hiding is
+  ---parked on the deck's own hold; focusing its address outright makes the
+  ---compositor SHOW that special workspace over the desk, and the provider's
+  ---hold-guard then hides it again — which read as "reachable, but it closes
+  ---again". Bring it home first (follow=false, no focus dance), then focus:
+  ---the compositor processes dispatches in order, so by the focus call the
+  ---window already stands on the scene workspace.
+  ---@param address string
+  ---@param scene_name string
+  local function focus_member(address, scene_name)
+    local at
+    for _, w in ipairs(hl.get_windows() or {}) do
+      if w.address == address then
+        at = w.workspace and w.workspace.name
+      end
+    end
+    if at == "special:deck-hold" then
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. address,
+        workspace = "name:" .. scene_name,
+        follow = false,
+      }))
+      return
+    end
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. address }))
   end
 
   ---`mod+h`/`mod+l`: gather both monitors' state and hand it to the pure
@@ -405,7 +501,7 @@ do
       target = target,
     })
     if action.kind == "window" then
-      hl.dispatch(hl.dsp.focus({ window = "address:" .. action.address }))
+      focus_member(action.address, ws_name)
     elseif action.kind == "monitor" then
       hl.dispatch(hl.dsp.focus({ monitor = action.name }))
     end
@@ -480,7 +576,7 @@ do
     end
     local target = nav.window_neighbor(tile.addresses, w.address, dir)
     if target then
-      hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
+      focus_member(target, w.workspace.name)
     end
   end
 
@@ -519,16 +615,47 @@ do
         new_index = i
       end
     end
-    deck_scroll.set(scene.name, tile.column, new_index)
-    -- Every deck member already lives on this workspace (LEO-402: hidden
-    -- ones sit off-screen, not elsewhere), so nothing needs to be moved
-    -- home. Focusing the target both gives the user the window they asked
-    -- for and gives the compositor a change to react to, so the provider's
-    -- next `recalculate` actually places the new scroll index -- the same
-    -- "re-assert focus" trick `swap_tile` above uses, not a focus-dance
-    -- (the target is exactly what ought to end up focused, not a
-    -- steal-and-restore around some other action).
-    hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
+    deck_order.set_scroll(scene.name, tile.column, new_index)
+    -- Scrolling keeps the keyboard in the column it was in: focus the
+    -- strip's newly shown member (docs/deck.md "Navigation" — the wired
+    -- bind "moves the target home, and focus it"). Without this, the pass
+    -- that flips the strip parks the outgoing member — which is the one
+    -- holding focus — and the compositor's own fallback drops the keyboard
+    -- onto the other column's window, which read as "scrolling swaps the
+    -- focus" and broke repeated scrolling. Two dispatches in order: the
+    -- bring-home move (the record alone moves no window), then — after it
+    -- lands — focus on the target.
+    local at
+    for _, candidate in ipairs(hl.get_windows() or {}) do
+      if candidate.address == target then
+        at = candidate.workspace and candidate.workspace.name
+      end
+    end
+    if at == "special:deck-hold" then
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. target,
+        workspace = "name:" .. scene.name,
+        follow = false,
+      }))
+    end
+    -- Focus the target twice, bounded: the pass the bring-home move
+    -- triggers parks the outgoing member, and parking the member that holds
+    -- focus drops the keyboard onto the compositor's own fallback (the
+    -- other column) — a 50 ms re-assert can land before that pass settles,
+    -- so a second one at 250 ms makes the final state the target. Both are
+    -- generation-guarded: a rapid second scroll invalidates the first one's
+    -- re-asserts, so an older scroll can never yank focus back to a member
+    -- the strip has since scrolled past.
+    scroll_gen = scroll_gen + 1
+    local gen = scroll_gen
+    local function reassert()
+      if gen ~= scroll_gen then
+        return
+      end
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
+    end
+    require("hypr.lib.hypr").oneshot(50, reassert)
+    require("hypr.lib.hypr").oneshot(250, reassert)
   end
 
   ---@param dir "left"|"right"
@@ -756,26 +883,36 @@ submap.tree({
 local kb_layouts = { "Dvorak (custom)", "Programmer Dvorak" }
 local kb_idx = 1
 
--- Pokemon (LEO-412): the launch surface for the chat/stream media windows,
--- admitted only while the pokemon scene is active — the hyprfocus
--- declaration lists this tree name in the pokemon scene's `bindings`, so
--- scene admission (hypr/hyprfocus/init.lua) withholds it everywhere else,
--- door included. The arm must precede the exec: the profile is now the shared
--- Media one, and `+media-browser` (conf/base.lua) pins the launch to
--- name:media — the armed intent is what the engine's claim step
--- (hypr/events/scene.lua) stamps with a pokemon slot, so home routes the
--- window to the pokemon scene instead of leaving it tiled in media.
--- Hand-opened media windows arm nothing and stay on media.
+-- Pokemon: the launch surface for the two named media windows (one profile
+-- per column, `conf/base.lua`'s pokemon_left/right_browser), admitted only
+-- while the pokemon scene is active — the hyprfocus declaration lists this
+-- tree name in the pokemon scene's `bindings`, so scene admission
+-- (hypr/hyprfocus/init.lua) withholds it everywhere else, door included.
+-- The arm must precede the exec: the per-profile rules (hypr/windowrules.lua)
+-- pin the launch to name:pokemon, and the armed intent is what the engine's
+-- claim step (hypr/events/scene.lua) uses to stamp the pokemon slot, so home
+-- routes the window to its own column. Hand-opened pokemon-profile windows
+-- arm nothing and still fall to identify's same-class stamping.
 submap.tree({
   name = "pokemon",
   desc = "Pokemon",
   entries = {
     {
-      key = "m",
-      desc = "Open a Pokemon media window",
+      key = "l",
+      desc = "Open the left Pokemon media window",
       action = function()
-        require("hypr.events.scene").arm_launch("pokemon", config.apps.media_browser.class)
-        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. config.apps.media_browser.cmd .. " --new-window"))
+        local apps = config.apps
+        require("hypr.events.scene").arm_launch("pokemon", apps.pokemon_left_browser.class)
+        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. apps.pokemon_left_browser.cmd .. " --new-window"))
+      end,
+    },
+    {
+      key = "r",
+      desc = "Open the right Pokemon media window",
+      action = function()
+        local apps = config.apps
+        require("hypr.events.scene").arm_launch("pokemon", apps.pokemon_right_browser.class)
+        hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. apps.pokemon_right_browser.cmd .. " --new-window"))
       end,
     },
   },
@@ -974,6 +1111,14 @@ local function mode_entries()
   end
   return entries
 end
+
+-- Power menu: root bind, always available, not part of any tree so modes
+-- cannot withhold the way out of the session.
+bind.exec("e", "uwsm app -- wlogout", {
+  no_main = true,
+  mods = { config.main_mod, config.primary_mod },
+  description = "Open the power menu (wlogout)",
+})
 
 -- The way out, at root and with no submap in front of it.
 --

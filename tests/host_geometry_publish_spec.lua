@@ -118,6 +118,18 @@ t.describe("conf.host.build publishes resolved per-workspace gaps", function()
     t.eq(nil, workspaces["media"])
   end)
 
+  t.it("host build preserves docks published by the scene engine", function()
+    -- conf/host.lua runs on every reload; it must not wipe docks that the
+    -- scene engine will only re-publish on the next layout pass.
+    local Store = require("hypr.lib.store")
+    local handle = Store.define("geometry")
+    handle:set({ docks = { ["DP-1"] = { bar = { x = 10 } } } })
+    -- Re-run build() with a fresh engine; the dock document should survive.
+    published("monitors", "quantum-desktop", { { width = 5120 }, { width = 1920 } })
+    local docks = handle:get("docks")
+    t.eq(10, docks and docks["DP-1"] and docks["DP-1"].bar and docks["DP-1"].bar.x)
+  end)
+
   t.it("a runtime scene edit re-publishes on the engine's first re-read, no reload", function()
     seed_scenes({ code = { gaps_out = { top = 0, right = 60, bottom = 25, left = 25 } } })
     t.eq(

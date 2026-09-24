@@ -49,6 +49,15 @@ local opaque_media_browser = hl.window_rule({
   opacity = "1.0 override",
 })
 
+-- The dofus browser is a browser like the other two: video and text read
+-- wrong through translucency, so the same focus-time opacity override applies.
+local opaque_dofus_browser = hl.window_rule({
+  name = "opaque-dofus-browser",
+  enabled = false,
+  match = { tag = "dofus-browser" },
+  opacity = "1.0 override",
+})
+
 local opaque_default_browser = hl.window_rule({
   name = "opaque-default-browser",
   enabled = false,
@@ -89,6 +98,9 @@ hl.on(
   function(w)
     if is_tagged_browser(w, "media-browser*") then
       toggle_media_opacity(w, opaque_media_browser)
+    end
+    if is_tagged_browser(w, "dofus-browser*") then
+      toggle_media_opacity(w, opaque_dofus_browser)
     end
     if is_tagged_browser(w, "default-browser*") then
       toggle_media_opacity(w, opaque_default_browser)

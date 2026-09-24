@@ -126,7 +126,10 @@ function M.build()
   local default_gaps_out = hl.get_config("general.gaps_out") or config.default_gaps.gaps_out
   local default_gaps_in = hl.get_config("general.gaps_in") or config.default_gaps.gaps_in
   local border = hl.get_config("general.border_size") or 0
-  geometry_store:put({
+  -- Publish host-derived geometry without clobbering `docks`, which is owned
+  -- by the scene engine (`hypr/scene/dock_publish.lua`) and must survive a
+  -- config reload until the next layout pass re-publishes it.
+  geometry_store:set({
     monitors = geometry.monitor_gaps(
       config.host.workspaces.workspace_specs,
       -- Read live where possible so a future edit to conf/base.lua's

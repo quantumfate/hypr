@@ -19,7 +19,7 @@ enter_mode() {
         e2e_fail "enter $1 failed"
     wait_until 50 sh -c "jq -e --arg m '$1' '.mode == \$m' '$QF_STORE/focus.json'" ||
         e2e_fail "pointer never named $1"
-    sleep 0.5
+    wait_transition_settled || e2e_fail "transition to $1 never settled"
 }
 
 # Every test window sits on an existing workspace; held windows only while

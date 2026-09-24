@@ -1,0 +1,262 @@
+-- Test fixtures stub the runtime and re-require modules with a hand-made store.
+---@diagnostic disable: duplicate-set-field, need-check-nil, missing-fields, undefined-field, different-requires
+-- The mode-transition bracket (LEO-423): a mode apply must run with compositor
+-- animations suspended, then restore whatever was enabled before, and publish
+-- the bracket so the shell's scrim can cover the work.
+local t = require("tests.harness")
+
+---A fresh stub plus a `hypr.lib.transition` wired to a fake store.
+---@return any stub, any transition, table stores
+local function fresh()
+  local stub = require("tests.hl_stub").new()
+  _G.hl = stub
+  for _, mod in ipairs({ "hypr.lib.transition", "hypr.lib.hypr", "hypr.lib.store" }) do
+    package.loaded[mod] = nil
+  end
+  local stores = {}
+  package.loaded["hypr.lib.store"] = {
+    define = function(name)
+      return {
+        get = function(_, key)
+          local data = stores[name]
+          if key == nil then
+            return data
+          end
+          return type(data) == "table" and data[key] or nil
+        end,
+        set = function(_, patch)
+          stores[name] = stores[name] or {}
+          for k, v in pairs(patch) do
+            stores[name][k] = v
+          end
+        end,
+      }
+    end,
+  }
+  return stub, require("hypr.lib.transition"), stores
+end
+
+---The settle timer is the one with the bracket's own span; the failsafe
+---(8000 ms, armed by every `begin`) is a different timer and never the one a
+---spec wants to fire. With several finishes of the same span the LAST one
+---armed is the live one.
+---@param stub any
+---@param ms integer 400 for a plain apply, 4200 for a veiled transition
+---@return table
+local function settle_timer(stub, ms)
+  local found = nil
+  for _, handle in ipairs(stub.timers) do
+    if handle.opts.timeout == ms then
+      found = handle
+    end
+  end
+  if not found then
+    error("no settle timer with timeout " .. ms)
+  end
+  return found
+end
+
+---The armed failsafe timer, for specs that exercise it directly. With several
+---begins in flight the LAST one armed is the live one.
+---@param stub any
+---@return table
+local function failsafe_timer(stub)
+  local found = nil
+  for _, handle in ipairs(stub.timers) do
+    if handle.opts.timeout == 8000 then
+      found = handle
+    end
+  end
+  if not found then
+    error("no failsafe timer armed")
+  end
+  return found
+end
+
+t.describe("transition", function()
+  t.it("begin suspends animations, drops activation focus, and publishes the bracket", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+    stub.config_values["misc.focus_on_activate"] = true
+
+    transition.begin("gaming")
+
+    t.eq(false, stub.last_config.animations.enabled)
+    t.eq(false, stub.last_config.misc.focus_on_activate)
+    t.eq(true, stores["hyprfocus.transition"].active)
+    t.eq("gaming", stores["hyprfocus.transition"].mode)
+    t.eq(400, stores["hyprfocus.transition"].duration_ms)
+    t.eq(true, transition.active())
+  end)
+
+  t.it("finish restores the previous values once the settle fires", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+    stub.config_values["misc.focus_on_activate"] = true
+
+    transition.begin("gaming")
+    transition.finish("gaming")
+    settle_timer(stub, 400).cb()
+
+    t.eq(true, stub.last_config.animations.enabled)
+    t.eq(true, stub.last_config.misc.focus_on_activate)
+    t.eq(false, stores["hyprfocus.transition"].active)
+    t.eq(false, transition.active())
+  end)
+
+  t.it("restores enabled=false when something else had suspended animations", function()
+    local stub, transition = fresh()
+    stub.config_values["animations.enabled"] = false
+
+    transition.begin("work")
+    transition.finish("work")
+    settle_timer(stub, 400).cb()
+
+    t.eq(false, stub.last_config.animations.enabled)
+  end)
+
+  t.it("a genuine transition veils the shell and holds for the full transition", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    transition.begin("gaming", true)
+    t.eq(true, stores["hyprfocus.transition"].present)
+    t.eq(4200, stores["hyprfocus.transition"].duration_ms)
+    transition.finish("gaming")
+    t.eq(4200, settle_timer(stub, 4200).opts.timeout)
+    settle_timer(stub, 4200).cb()
+    t.eq(false, stores["hyprfocus.transition"].present, "the veil unmaps once the transition settles")
+  end)
+
+  t.it("brackets the apply with the open-focus guard, withdrawn at the settle", function()
+    local stub, transition = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    -- The name is registered once at module load (disabled): a rule first
+    -- registered after a dynamic hl.config lands inert on the live build.
+    t.eq(1, #stub.window_rules)
+    local registered = stub.window_rules[1]
+    t.eq("hyprfocus-transition-guard", registered.name)
+    t.eq(false, registered.enabled)
+
+    transition.begin("gaming", true)
+    t.eq(2, #stub.window_rules)
+    local raised = stub.window_rules[2]
+    t.eq("hyprfocus-transition-guard", raised.name)
+    t.eq(true, raised.no_focus)
+    -- An explicit `enabled = true` makes the rule inert on the live build;
+    -- the raise declaration must leave the key out entirely.
+    t.eq(nil, raised.enabled)
+
+    transition.finish("gaming")
+    settle_timer(stub, 4200).cb()
+    t.eq(3, #stub.window_rules)
+    local dropped = stub.window_rules[3]
+    t.eq("hyprfocus-transition-guard", dropped.name)
+    t.eq(false, dropped.enabled)
+  end)
+
+  t.it("runs the settle callback only when the transition settles", function()
+    local stub, transition = fresh()
+    stub.config_values["animations.enabled"] = true
+    local ran = 0
+
+    transition.begin("gaming", true, function()
+      ran = ran + 1
+    end)
+    transition.finish("gaming")
+    t.eq(0, ran, "not before the settle")
+    settle_timer(stub, 4200).cb()
+    t.eq(1, ran)
+  end)
+
+  t.it("a reload's apply suspends animations without veiling", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    transition.begin("work")
+    t.eq(false, stores["hyprfocus.transition"].present)
+    t.eq(400, stores["hyprfocus.transition"].duration_ms)
+    transition.finish("work")
+    t.eq(400, settle_timer(stub, 400).opts.timeout)
+  end)
+
+  t.it("an older settle never re-enables underneath a newer transition", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    transition.begin("work")
+    transition.finish("work")
+    local stale = settle_timer(stub, 400)
+
+    transition.begin("gaming")
+    transition.finish("gaming")
+    stale.cb()
+
+    -- The stale timer bows out at the generation guard.
+    t.eq(false, stub.last_config.animations.enabled)
+    t.eq(true, stores["hyprfocus.transition"].active)
+
+    settle_timer(stub, 400).cb()
+    t.eq(true, stub.last_config.animations.enabled)
+    t.eq(false, stores["hyprfocus.transition"].active)
+  end)
+
+  t.it("arms a failsafe at every begin and stands it down at a legitimate settle", function()
+    local stub, transition = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    transition.begin("gaming", true)
+    local failsafe = failsafe_timer(stub)
+    transition.finish("gaming")
+    settle_timer(stub, 4200).cb()
+
+    t.eq(false, failsafe.enabled, "a bracket that settled legitimately never needs its failsafe")
+  end)
+
+  t.it("force-settles a bracket whose finish never came, without running the settle callback", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+    stub.config_values["misc.focus_on_activate"] = true
+    local ran = 0
+    local hooked = 0
+    transition.on_force_settle(function()
+      hooked = hooked + 1
+    end)
+
+    transition.begin("gaming", true, function()
+      ran = ran + 1
+    end)
+    -- `finish` is never called: a phased step's timer died mid-apply.
+    failsafe_timer(stub).cb()
+
+    t.eq(false, transition.active(), "the bracket comes down")
+    t.eq(true, stub.last_config.animations.enabled, "settings are restored")
+    t.eq(true, stub.last_config.misc.focus_on_activate)
+    t.eq(false, stores["hyprfocus.transition"].active, "the shell is told the bracket is over")
+    t.eq(0, ran, "the settle callback never runs: the desk may be half-placed")
+    t.eq(1, hooked, "the apply guard is released, so the next mode change is not refused")
+    -- The open-focus guard is withdrawn too.
+    local dropped = stub.window_rules[#stub.window_rules]
+    t.eq("hyprfocus-transition-guard", dropped.name)
+    t.eq(false, dropped.enabled)
+  end)
+
+  t.it("a stale failsafe from an older begin cannot settle a newer bracket", function()
+    local stub, transition, stores = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    transition.begin("work")
+    local stale = failsafe_timer(stub)
+    transition.begin("gaming", true)
+    stale.cb()
+
+    t.eq(true, transition.active(), "the newer bracket stands")
+    t.eq(true, stores["hyprfocus.transition"].active)
+
+    -- Its own failsafe settles it instead.
+    failsafe_timer(stub).cb()
+    t.eq(false, transition.active())
+    t.eq(false, stores["hyprfocus.transition"].active)
+  end)
+end)

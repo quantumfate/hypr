@@ -15,6 +15,10 @@
 -- same mechanism `hypr/lib/minimize.lua` and `hypr/hyprfocus/hold.lua`
 -- already use), which is a dispatch this pure module only reports the need
 -- for — it never performs it.
+--
+-- `opts.gaps_out` is a CssGap (number or {top,right,bottom,left} table),
+-- the same shape `hypr/scene/layout.lua` accepts; the provider used to
+-- collapse it to one scalar, which broke asymmetric outer gaps.
 local layout = require("hypr.scene.layout")
 
 local M = {}
@@ -83,14 +87,24 @@ function M.column_for(spec, tile)
   return nil
 end
 
----Every tile grouped by the column it subscribes to, in arrival order
----within each column — the column's "deck" of windows, unclaimed tiles
----dropped (a deck scene has no stray catch-all; every column names its own
----membership explicitly, unlike a `scene` block's fallback strays).
+---Every tile grouped by the column it subscribes to — a column's "deck" of
+---windows, unclaimed tiles dropped (a deck scene has no stray catch-all;
+---every column names its own membership explicitly, unlike a `scene` block's
+---fallback strays).
+---
+---Ordering within a column: the recorded `order` (per-column address list,
+---`hypr/scene/deck_order.lua`) leads, so the strip walks the arrangement the
+---user built it into — a reload re-enumerates windows and must not scramble
+---that. Anything the record does not name — a freshly opened window, or one
+---whose recorded place falls outside the live set — is appended afterwards in
+---arrival order; the provider folds it into the record on the same pass, so
+---"new" means exactly "not yet recorded". With no recorded order (a
+---brand-new deck) every tile stays in arrival order, today's behaviour.
 ---@param spec Deck.Spec
 ---@param tiles Scene.Tile[]
+---@param order table<integer, string[]>? recorded address list per column
 ---@return table<integer, Scene.Tile[]> stacks keyed by column order
-function M.stacks(spec, tiles)
+function M.stacks(spec, tiles, order)
   local out = {}
   for _, tile in ipairs(tiles) do
     local column = M.column_for(spec, tile)
@@ -98,6 +112,36 @@ function M.stacks(spec, tiles)
       out[column.order] = out[column.order] or {}
       local list = out[column.order]
       list[#list + 1] = tile
+    end
+  end
+  if not order then
+    return out
+  end
+  for column_order, list in pairs(out) do
+    local recorded = order[column_order]
+    if recorded and #recorded > 0 then
+      local by_address = {}
+      for _, tile in ipairs(list) do
+        if tile.address then
+          by_address[tile.address] = tile
+        end
+      end
+      local sorted = {}
+      for _, address in ipairs(recorded) do
+        local tile = by_address[address]
+        if tile then
+          sorted[#sorted + 1] = tile
+          by_address[address] = nil
+        end
+      end
+      -- Recorded addresses that still stand come first, in record order; the
+      -- survivors of the arrival pass fill the tail, keeping arrival order.
+      for _, tile in ipairs(list) do
+        if tile.address and by_address[tile.address] then
+          sorted[#sorted + 1] = tile
+        end
+      end
+      out[column_order] = sorted
     end
   end
   return out
@@ -165,16 +209,25 @@ end
 ---@param spec Deck.Spec
 ---@param tiles Scene.Tile[] tiled windows on the deck workspace
 ---@param area Scene.Area
----@param opts { gaps_in: number?, gaps_out: number?, scroll: table<integer, integer>? }
----scroll: 1-based visible index per column order, from session state the
----next chunk's provider owns; nil/missing defaults to 1 (the first window).
+---@param opts { gaps_in: number?, gaps_out: number?, scroll: table<integer, integer>?,
+---order: table<integer, string[]>? }
+---scroll: 1-based visible index per column order, from the persisted records
+---(hypr/scene/deck_order.lua) the provider owns; nil/missing defaults to 1
+---(the first window). `order`: the recorded address list per column (the
+---same records' `order` field), which `stacks` leads with so a reload
+---re-enumerating windows cannot scramble the strip.
 ---@return Scene.Box[] boxes one per visible tile
 ---@return string[] hold addresses of every non-visible deck member — the
 ---executor's cue to move them off the workspace (see module comment)
 function M.boxes(spec, tiles, area, opts)
   opts = opts or {}
   local gaps_in = opts.gaps_in or 0
-  local gaps_out = opts.gaps_out or 0
+  -- `gaps_out` is a CssGap just like the scene layout's: a bare number is
+  -- uniform on all sides, a table names each side (LEO-421 follow-up). The
+  -- deck used to force it to one symmetric number, which made asymmetric
+  -- outer gaps (a tighter top for the bar, say) collapse to the left value
+  -- on every other side.
+  local top, right, bottom, left = layout.sides(opts.gaps_out)
   local scroll = opts.scroll or {}
 
   local columns = {}
@@ -191,16 +244,16 @@ function M.boxes(spec, tiles, area, opts)
     columns[#columns] = nil
   end
 
-  local stacks = M.stacks(spec, tiles)
+  local stacks = M.stacks(spec, tiles, opts.order)
   local boxes, hold = {}, {}
   if #columns < MIN_COLUMNS then
     return boxes, hold
   end
 
-  local inner_x = area.x + gaps_out
-  local inner_y = area.y + gaps_out
-  local inner_w = area.w - gaps_out * 2
-  local inner_h = area.h - gaps_out * 2
+  local inner_x = area.x + left
+  local inner_y = area.y + top
+  local inner_w = area.w - left - right
+  local inner_h = area.h - top - bottom
   local usable = inner_w - gaps_in * (#columns - 1)
 
   local shares = fractions(columns)

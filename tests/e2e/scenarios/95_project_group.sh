@@ -9,6 +9,10 @@ if ! command -v kitty >/dev/null 2>&1; then
 fi
 
 e2e_start
+# The boot's main landing re-checks steal focus for a few seconds after the
+# settle (lib.sh's wait_boot_focus_quiet); project work that asserts focus
+# must not race them.
+wait_boot_focus_quiet
 
 # A store with one project, no filesystem scan involved: `,proj.sh open`
 # reads this directly. Plain shell roles only (no "nvim") — this scenario is
@@ -21,7 +25,7 @@ JSON
 
 demo_clients() { clients | jq -c '[.[] | select(.class == "Proj-demo")]'; }
 class_count() { [ "$(demo_clients | jq 'length')" = "$1" ]; }
-tags_match() { [ "$(demo_clients | jq -r '[.[].tags[]?] | sort | join(",")')" = "$1" ]; }
+slot_tags_match() { [ "$(demo_clients | jq -r '[.[].tags[]? | select(startswith("slot:"))] | sort | join(",")')" = "$1" ]; }
 one_group() {
     demo_clients | jq -e '
       . as $w
@@ -33,7 +37,7 @@ focused_is() { [ "$(hc -j activewindow | jq -r '.address')" = "$1" ]; }
 
 ,proj.sh open demo >/dev/null 2>&1
 wait_until 100 class_count 2 || e2e_fail "demo did not spawn two windows: $(demo_clients)"
-wait_until 100 tags_match "slot:one,slot:two" || e2e_fail "windows never got their role tags: $(demo_clients)"
+wait_until 100 slot_tags_match "slot:one,slot:two" || e2e_fail "windows never got their role tags: $(demo_clients)"
 wait_until 50 one_group || e2e_fail "demo's two windows are not one group: $(demo_clients)"
 assert_eq "$(demo_clients | jq -r '.[0].workspace.name')" "code" "project windows land on the code workspace"
 e2e_log "PASS: open spawns the whole template, grouped, on code"
@@ -48,7 +52,7 @@ e2e_log "PASS: reopen refocuses instead of respawning"
 
 # One window gone: reopening spawns only the missing one.
 one_addr=$(demo_clients | jq -r '.[] | select(.tags[]? == "slot:one") | .address')
-hc dispatch "hl.dsp.window.close(\"address:$one_addr\")" >/dev/null
+hc dispatch "hl.dsp.window.close({ window = \"address:$one_addr\" })" >/dev/null
 wait_until 50 class_count 1 || e2e_fail "closing one window did not leave exactly one: $(demo_clients)"
 ,proj.sh open demo >/dev/null 2>&1
 wait_until 100 class_count 2 || e2e_fail "reopening with one window missing did not bring it back: $(demo_clients)"
@@ -57,11 +61,14 @@ e2e_log "PASS: reopen with one window missing spawns only that one"
 # Closing the last window dissolves the group: nothing project-classed left.
 # Retried, address list recomputed each pass: a window closed moments after
 # spawning (the "missing one" above just came back) can miss its first close
-# request before the compositor has settled it.
+# request before the compositor has settled it. The TABLE form is required —
+# `hl.dsp.window.close("address:...")` ignores the string and closes the
+# focused window instead (verified in the Lua plugin source: a bare-string
+# arg makes the window upval nil, and a nil selector falls back to focus).
 close_all_demo() {
     local a
     for a in $(demo_clients | jq -r '.[].address'); do
-        hc dispatch "hl.dsp.window.close(\"address:$a\")" >/dev/null
+        hc dispatch "hl.dsp.window.close({ window = \"address:$a\" })" >/dev/null
     done
     class_count 0
 }

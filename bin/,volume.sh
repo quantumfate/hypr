@@ -41,7 +41,7 @@ get_icon() {
 
 # Notify
 notify_user() {
-    ,notify volume -u low "$(get_icon)   $(get_volume)%"
+    ,notify audio-volume "$(get_icon)   $(get_volume)%" "" -u low
 }
 
 # Increase Volume
@@ -57,18 +57,18 @@ dec_volume() {
 # Toggle Mute
 toggle_mute() {
     if [ "$(get_mute)" == "false" ]; then
-        wpctl set-mute "$SINK" toggle && ,notify volume -u low -i "" "Volume Switched OFF"
+        wpctl set-mute "$SINK" toggle && ,notify audio-volume "" "Volume Switched OFF" -u low
     elif [ "$(get_mute)" == "true" ]; then
-        wpctl set-mute "$SINK" toggle && ,notify volume -u low -i "$(get_icon)" "Volume Switched ON"
+        wpctl set-mute "$SINK" toggle && ,notify audio-volume "" "Volume Switched ON" -u low
     fi
 }
 
 # Toggle Mic
 toggle_mic() {
     if [ "$(get_mic_mute)" == "false" ]; then
-        wpctl set-mute "$SOURCE" toggle && ,notify volume -u low -i "" "Microphone Switched OFF"
+        wpctl set-mute "$SOURCE" toggle && ,notify audio-volume "" "Microphone Switched OFF" -u low
     elif [ "$(get_mic_mute)" == "true" ]; then
-        wpctl set-mute "$SOURCE" toggle && ,notify volume -u low -i "" "Microphone Switched ON"
+        wpctl set-mute "$SOURCE" toggle && ,notify audio-volume "" "Microphone Switched ON" -u low
     fi
 }
 
