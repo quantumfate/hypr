@@ -114,15 +114,6 @@ hex_to_rgba() {
         "$alpha"
 }
 
-# Read one base24 slot or ramp value from the pack that owns a variant.
-# Prints the hex or nothing if the pack/slot is missing.
-# "#rrggbb" as the decimal "r;g;b" triple SGR colour escapes take, which is
-# what the LS_COLORS/EZA_COLORS grammar carries.
-hex_to_dec() {
-    local hex=${1#\#}
-    printf '%d;%d;%d' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
-}
-
 # "#rrggbb" as the decimal "r;g;b" triple SGR colour escapes take, which is
 # what the LS_COLORS/EZA_COLORS grammar carries.
 hex_to_dec() {
@@ -154,6 +145,8 @@ blend_hex() { # $1 = from hex, $2 = toward hex, $3 = percent
     printf '%s' "$out"
 }
 
+# Read one base24 slot or ramp value from the pack that owns a variant.
+# Prints the hex or nothing if the pack/slot is missing.
 pack_slot() {
     local variant=$1 slot=$2 f
     [ -d "$PACKS" ] || return 0
@@ -887,7 +880,7 @@ apply_shell() {
     # it. Named locals rather than repeated calls: this function spells out a
     # lot of colour and the names are what make it readable.
     local text subtext0 overlay0 surface0 surface1 surface2 base mantle
-    local mauve red maroon peach yellow green teal blue lavender sky
+    local mauve red maroon peach yellow green teal lavender
     text=$(accent_hex "$palette" text)
     subtext0=$(accent_hex "$palette" subtext0)
     overlay0=$(accent_hex "$palette" overlay0)
@@ -903,9 +896,7 @@ apply_shell() {
     yellow=$(accent_hex "$palette" yellow)
     green=$(accent_hex "$palette" green)
     teal=$(accent_hex "$palette" teal)
-    blue=$(accent_hex "$palette" blue)
     lavender=$(accent_hex "$palette" lavender)
-    sky=$(accent_hex "$palette" sky)
 
     # delta paints added and removed lines on a tinted background rather than a
     # palette colour: a blend of the flavour's own base toward green and red.

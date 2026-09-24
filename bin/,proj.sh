@@ -770,8 +770,15 @@ open_projects() {
 fzf_pick() {
     local open
     open=$(open_projects)
-    list | cut -f1 | { [[ -n $open ]] && grep -Fxv -f <(printf '%s\n' "$open") || cat; } |
-        fzf "${FZF_PICK_OPTS[@]}"
+    # Plain if/else, not `A && B || C`: `grep -Fxv` exits 1 when it prints
+    # nothing, which is exactly the case where EVERY project is already open
+    # — and the `|| cat` fallback then listed all of them unfiltered, the one
+    # situation the filter exists for.
+    if [[ -n $open ]]; then
+        list | cut -f1 | grep -Fxv -f <(printf '%s\n' "$open") | fzf "${FZF_PICK_OPTS[@]}"
+    else
+        list | cut -f1 | fzf "${FZF_PICK_OPTS[@]}"
+    fi
 }
 
 # One inline-picker spawner for every picker (project, scope, window): one
@@ -860,8 +867,13 @@ unopened_scope_names() { # $1 = project name
     local name=$1 class live
     class=$(class_for "$name")
     live=$(live_windows "$class" | cut -f1 | sort -u)
-    store_scope_names "$name" |
-        { [[ -n $live ]] && grep -Fxv -f <(printf '%s\n' "$live") || cat; }
+    # Same reason as `fzf_pick`: an empty grep result is exit 1, not a reason
+    # to fall back to the unfiltered list.
+    if [[ -n $live ]]; then
+        store_scope_names "$name" | grep -Fxv -f <(printf '%s\n' "$live")
+    else
+        store_scope_names "$name"
+    fi
 }
 
 # Opens the FOCUSED project's declared scope <name>: focuses it if a
