@@ -9,6 +9,13 @@ python_files := "$(git ls-files 'bin/*' '*.py' | xargs -r grep -lE '^#!.*python'
 default:
 	@just --list
 
+# Regenerate docs/binds.md's census from the LIVE bind registry. Needs a
+# running compositor -- which binds exist is a runtime fact (trees are
+# admitted and withheld per mode), so the source cannot answer it. Decisions
+# already written into the third column are kept.
+binds-doc:
+	python3 bin/binds_doc.py
+
 # Reformat the tree in place
 fmt:
 	stylua .

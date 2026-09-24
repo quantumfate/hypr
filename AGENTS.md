@@ -144,6 +144,13 @@ Hyprland owns window state, placement, grouping, and layouts.
 
 ## Keybindings and which-key
 
+The census of what is bound right now — every key, what it does, and the
+audit column for where it belongs — is [docs/binds.md](docs/binds.md),
+regenerated from the live registry with `just binds-doc`. Read it before
+adding a bind: the answer to "is this key free" and "does this already
+exist" is there, and a new bind should arrive with its row's third column
+filled in.
+
 Maintain three keybinding classes. The intent is defined in
 [docs/desktop-model.md](docs/desktop-model.md#bindings); it overrides older
 wording elsewhere.
