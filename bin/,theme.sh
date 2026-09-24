@@ -607,6 +607,51 @@ apply_btop() {
     record_applied btop immediate
 }
 
+# yazi's theme is one 880-line document, most of it a per-filename icon table
+# that no palette switch has any business regenerating. Every colour in it is
+# a Catppuccin role, though, so the swap is mechanical: the shipped template
+# (assets/yazi/theme.toml, Macchiato) is read role by role and each hex is
+# rewritten to the resolved flavour's own. Adding a colour to the template is
+# free; adding a ROLE means adding it to `accent_hex`, which is where every
+# other adapter reads its colours from too.
+#
+# yazi reads the file at launch, so a running instance keeps the old palette —
+# the same tier as Zen and Obsidian, and reported as such.
+YAZI_ROLES="rosewater flamingo pink mauve red maroon peach yellow green teal sky sapphire blue lavender text subtext1 subtext0 overlay2 overlay1 overlay0 surface2 surface1 surface0 base mantle crust"
+
+apply_yazi() {
+    local palette=$1 conf="$CONFIG/yazi/theme.toml" template flavor
+    template="$SCRIPT_DIR/../assets/yazi/theme.toml"
+    [ -f "$template" ] || {
+        record_failed yazi "no theme template at $template"
+        echo "yazi: no theme template"
+        return 0
+    }
+    [ -d "$CONFIG/yazi" ] || return 0
+
+    case "$palette" in
+    latte) flavor="Latte" ;;
+    frappe) flavor="Frappe" ;;
+    mocha) flavor="Mocha" ;;
+    *) flavor="Macchiato" ;;
+    esac
+
+    # One sed script, built role by role. The template is Macchiato, so its own
+    # hex is what each rule matches.
+    local script="" role from to
+    for role in $YAZI_ROLES; do
+        from=$(accent_hex macchiato "$role")
+        to=$(accent_hex "$palette" "$role")
+        script="$script;s|${from}|${to}|Ig"
+    done
+    # bat's tmTheme carries yazi's syntax highlighting, and ships per flavour.
+    script="$script;s|Catppuccin Macchiato\.tmTheme|Catppuccin ${flavor}.tmTheme|g"
+
+    sed "${script#;}" "$template" >"$conf.tmp" && mv -f "$conf.tmp" "$conf"
+    echo "yazi: $flavor (applies on next launch)"
+    record_pending yazi next-launch "theme.toml is read at launch"
+}
+
 # zathura includes a file by bare name.
 apply_zathura() {
     local palette=$1 theme conf="$CONFIG/zathura/zathurarc"
@@ -1769,6 +1814,7 @@ cmd_apply() {
     apply_hyprland "$palette"
     apply_cursor "$palette"
     apply_btop "$palette"
+    apply_yazi "$palette"
     apply_zathura "$palette"
     apply_rofi "$palette"
     apply_wlogout "$palette" "$role"

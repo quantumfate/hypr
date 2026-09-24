@@ -29,12 +29,24 @@ local M = {}
 local WIDTH_FRACTION = 0.7
 local HEIGHT_FRACTION = 0.8
 
----The floating box a stray should take on `monitor`.
+-- A fraction alone does not survive an ultrawide. 0.7 of 5120 is 3584px of
+-- window for a picker listing five projects, which is what it looked like:
+-- a nearly empty pane most of a desk wide. A stray is a dialog -- a picker, a
+-- confirmation, a one-off terminal -- and past roughly this size it stops
+-- reading as one, so the fraction is a ceiling on small screens and these are
+-- the ceiling on large ones. The laptop profile is untouched: 0.7 of 1920 is
+-- already below the cap.
+local MAX_WIDTH = 1280
+local MAX_HEIGHT = 860
+
+---The floating box a stray should take on `monitor`: a fraction of it, never
+---larger than a dialog has any use for.
 ---@param monitor { width: integer, height: integer }
 ---@return integer width, integer height
 function M.fit_size(monitor)
-  return math.floor((monitor.width or 0) * WIDTH_FRACTION + 0.5),
-    math.floor((monitor.height or 0) * HEIGHT_FRACTION + 0.5)
+  local width = math.floor((monitor.width or 0) * WIDTH_FRACTION + 0.5)
+  local height = math.floor((monitor.height or 0) * HEIGHT_FRACTION + 0.5)
+  return math.min(width, MAX_WIDTH), math.min(height, MAX_HEIGHT)
 end
 
 ---@class Scene.StrayDecision
