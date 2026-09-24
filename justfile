@@ -15,6 +15,7 @@ default:
 # already written into the third column are kept.
 binds-doc:
 	python3 bin/binds_doc.py
+	prettier --write docs/binds.md
 
 # Reformat the tree in place
 fmt:
