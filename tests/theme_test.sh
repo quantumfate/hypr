@@ -138,6 +138,20 @@ contains "xsettingsd announces the light theme to XWayland" 'Net/ThemeName "catp
 contains "and the light icon pack" 'Net/IconThemeName "Papirus-Light"' "$xss"
 teardown
 
+echo "the nwg-look store stays in agreement so Apply cannot repaint the seed"
+setup
+mkdir -p "$XDG_CONFIG_HOME/gtk-3.0"
+printf '[Settings]\ngtk-application-prefer-dark-theme=1\n' >"$XDG_CONFIG_HOME/gtk-3.0/settings.ini"
+printf 'gtk-theme=catppuccin-macchiato-mauve-standard+default\nicon-theme=Papirus-Dark\ncolor-scheme=prefer-dark\n' >"$ROOT/nwg-store"
+export THEME_NWG_GSETTINGS="$ROOT/nwg-store"
+"$THEME" set latte >/dev/null
+nwg=$(cat "$ROOT/nwg-store")
+contains "nwg-look store follows the light scheme" "color-scheme=prefer-light" "$nwg"
+contains "and the light theme name" "gtk-theme=catppuccin-latte-mauve-standard+default" "$nwg"
+contains "and the light icon pack" "icon-theme=Papirus-Light" "$nwg"
+unset THEME_NWG_GSETTINGS
+teardown
+
 setup
 mkdir -p "$XDG_CONFIG_HOME/gtk-3.0"
 printf '[Settings]\ngtk-theme-name=catppuccin-latte-mauve-standard+default\ngtk-application-prefer-dark-theme=0\n' >"$XDG_CONFIG_HOME/gtk-3.0/settings.ini"
@@ -164,6 +178,51 @@ before=$([ -f "$home_mine" ] && cat "$home_mine" || echo "<absent>")
 "$THEME" set mocha >/dev/null
 after=$([ -f "$home_mine" ] && cat "$home_mine" || echo "<absent>")
 check "a sandboxed run leaves the home .mine alone" "$before" "$after"
+teardown
+
+echo "zen gets only the runtime accent, never the provisioned CSS"
+setup
+mkdir -p "$XDG_CONFIG_HOME/zen/shared"
+cat >"$XDG_CONFIG_HOME/zen/shared/user.js" <<'EOF'
+user_pref("zen.theme.accent-color", "#000000");
+user_pref("layout.css.prefers-color-scheme.content-override", 1); // stale dark
+user_pref("theme-better_find_bar-enable_custom_background", true);
+EOF
+"$THEME" set macchiato >/dev/null
+ZS="$XDG_CONFIG_HOME/zen/shared"
+contains "the accent follows the palette" 'zen.theme.accent-color", "#c6a0f6"' "$(cat "$ZS/user.js")"
+contains "prefers-color-scheme stays on follow-system" 'prefers-color-scheme.content-override", 3' "$(cat "$ZS/user.js")"
+contains "the palette file carries the accent" '#c6a0f6' "$(cat "$ZS/zen-palette.css")"
+[ -f "$ZS/userChrome.css" ] && css_written=1 || css_written=0
+check "the provisioned CSS is left alone" "0" "$css_written"
+teardown
+
+echo "wlogout follows the palette and drops the hardcoded dark background"
+setup
+mkdir -p "$XDG_CONFIG_HOME/wlogout/catppuccin/icons/wlogout/latte/text"
+mkdir -p "$XDG_CONFIG_HOME/wlogout/catppuccin/icons/wlogout/latte/mauve"
+touch "$XDG_CONFIG_HOME/wlogout/catppuccin/icons/wlogout/latte/text/lock.svg"
+touch "$XDG_CONFIG_HOME/wlogout/catppuccin/icons/wlogout/latte/mauve/lock.svg"
+# Seed a legacy CSS with the old dark scrim.
+cat >"$XDG_CONFIG_HOME/wlogout/style.css" <<'EOF'
+window { background-color: rgba(24, 25, 38, 0.55); }
+button { background-color: #363a4f; }
+#lock { background-image: url("/home/user/.config/wlogout/catppuccin/icons/wlogout/macchiato/text/lock.svg"); }
+EOF
+"$THEME" set latte >/dev/null
+wls=$(cat "$XDG_CONFIG_HOME/wlogout/style.css")
+contains "wlogout icon path follows the palette" "icons/wlogout/latte/" "$wls"
+contains "wlogout background becomes transparent" "background-color: transparent;" "$wls"
+contains "wlogout text colour follows the palette" "color: #cad3f5;" "$wls"
+contains "wlogout button uses an alpha surface" "rgba(" "$wls"
+# The old dark scrim must be gone.
+if printf '%s' "$wls" | grep -q 'rgba(24, 25, 38, 0.55)'; then
+    printf '  FAIL legacy dark scrim survived the apply\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   legacy dark scrim was replaced\n'
+    pass=$((pass + 1))
+fi
 teardown
 
 echo "nothing reaches the live session"
@@ -278,6 +337,38 @@ check "an unchanged source is not re-rendered" "1" "$(wc -l <"$MAGICK_LOG" | tr 
 touch -d '+1 hour' "$XDG_CONFIG_HOME/hypr/wallpapers/mocha.png"
 "$THEME" apply >/dev/null
 check "a changed source mtime re-renders" "2" "$(wc -l <"$MAGICK_LOG" | tr -d ' ')"
+unset THEME_MAGICK
+teardown
+
+echo "wallpaper cache: the store's blur dial drives the magick flags"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
+MAGICK_LOG="$ROOT/magick.log"
+cat >"$ROOT/magick" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$MAGICK_LOG"
+touch "\${@: -1}"
+STUB
+chmod +x "$ROOT/magick"
+export THEME_MAGICK="$ROOT/magick"
+printf 'dial' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha.png"
+
+printf '{"palette":"mocha","mode":"manual","wallpaper_blur":24}\n' >"$STORE"
+"$THEME" apply >/dev/null
+contains "a custom sigma reaches magick" "-blur 0x18" "$(cat "$MAGICK_LOG")"
+
+# A dial change must re-render even though neither the source nor the role
+# moved — it is part of the cache stamp, not a cosmetic label.
+: >"$MAGICK_LOG"
+printf '{"palette":"mocha","mode":"manual","wallpaper_blur":18}\n' >"$STORE"
+"$THEME" apply >/dev/null
+contains "the default sigma 18 is the historic 0x12" "-blur 0x12" "$(cat "$MAGICK_LOG")"
+
+: >"$MAGICK_LOG"
+printf '{"palette":"mocha","mode":"manual","wallpaper_blur":0}\n' >"$STORE"
+"$THEME" apply >/dev/null
+check "blur 0 skips the -blur flag" "0" "$(grep -c -- '-blur' "$MAGICK_LOG" || true)"
+check "blur 0 still renders through magick" "1" "$(wc -l <"$MAGICK_LOG" | tr -d ' ')"
 unset THEME_MAGICK
 teardown
 
@@ -445,11 +536,41 @@ printf '{"modes":{"gaming":{"name":"gaming","presentation":{"accent_role":"laven
     >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
 printf '{"mode":"gaming","until":null}\n' >"$XDG_STATE_HOME/quantum-store/focus.json"
 "$THEME" set latte >/dev/null
-check "gaming's lavender role on latte is the catppuccin lavender hex" "#7287fd" \
+check "gaming's lavender role on latte falls back to mauve (contrast guard)" "#8839ef" \
+    "$(jq -r '.accentColor' "$ROOT/vault/.obsidian/appearance.json")"
+
+printf '{"modes":{"gaming":{"name":"gaming","presentation":{"accent_role":"blue"}}}}\n' \
+    >"$XDG_STATE_HOME/quantum-store/hyprfocus.json"
+"$THEME" set latte >/dev/null
+check "latte keeps the blue role (it clears contrast)" "#1e66f5" \
     "$(jq -r '.accentColor' "$ROOT/vault/.obsidian/appearance.json")"
 
 rm -f "$XDG_STATE_HOME/quantum-store/hyprfocus.json" "$XDG_STATE_HOME/quantum-store/focus.json"
 unset OBSIDIAN_VAULT
+teardown
+
+# The cursor outline is painted in its own flavour's base colour, so a
+# flavour-matched cursor is invisible on that flavour's own background
+# (latte's near-white outline on the latte desk). The cursor is resolved for
+# CONTRAST: a light desk carries the night flavour's cursor, a dark desk its
+# own. The applier names the resolved theme even when sandboxed, so the
+# resolution is assertable without a compositor.
+echo "cursor: a light desk carries the night flavour's (dark-outlined) cursor"
+setup
+printf '{"mode":"manual","palette":"latte","day":"latte","night":"macchiato"}\n' >"$STORE"
+contains "latte resolves the dark cursor" "cursor: catppuccin-macchiato-mauve-cursors" "$("$THEME" apply)"
+teardown
+
+echo "cursor: a dark desk keeps its own flavour"
+setup
+printf '{"mode":"manual","palette":"mocha","day":"latte","night":"macchiato"}\n' >"$STORE"
+contains "mocha keeps its own cursor" "cursor: catppuccin-mocha-mauve-cursors" "$("$THEME" apply)"
+teardown
+
+echo "cursor: a degenerate light-night config still resolves a dark cursor"
+setup
+printf '{"mode":"manual","palette":"latte","day":"latte","night":"latte"}\n' >"$STORE"
+contains "latte with a light night falls back to a dark flavour" "cursor: catppuccin-mocha-mauve-cursors" "$("$THEME" apply)"
 teardown
 
 echo "nvim: a live control socket is poked and reported as switched"
@@ -509,6 +630,74 @@ contains "a missed editor is not reported immediate" "no socket switched" "$(cat
 kill "$NVIM_PID" 2>/dev/null || true
 wait "$NVIM_PID" 2>/dev/null || true
 unset THEME_NVIM XDG_RUNTIME_DIR
+teardown
+
+echo "nvim: a dead socket (E247 with exit 2) is a miss, never a fatal"
+setup
+# The live failure shape: a stale socket file left by an exited editor makes
+# nvim exit 2 with the E247 connect-refused text. That exit status used to
+# ride the `answer=$(...)` assignment, and set -e turned it into an abort of
+# the whole apply mid-flight — kitty printed, then gtk/zen/obsidian/linear/
+# shell/wallpaper never ran, which is the desk's "apps didn't follow the
+# theme" regression. The stub replicates the shape exactly: the same stderr
+# text AND a nonzero exit. The run must surface the miss and keep going.
+printf '#!/usr/bin/env bash\nprintf "E247: Failed to connect to %%s: connection refused. Send expression failed.\\n" "${@: -1}" >&2\nexit 2\n' >"$ROOT/nvim-e247"
+chmod +x "$ROOT/nvim-e247"
+export THEME_NVIM="$ROOT/nvim-e247"
+mkdir -p "$ROOT/runtime"
+python3 - "$ROOT/runtime/nvim.9999.0" <<'PY' &
+import socket
+import sys
+import time
+s = socket.socket(socket.AF_UNIX)
+s.bind(sys.argv[1])
+time.sleep(30)
+PY
+NVIM_PID=$!
+sleep 0.3
+export XDG_RUNTIME_DIR="$ROOT/runtime"
+
+"$THEME" set mocha >"$ROOT/out" 2>&1
+contains "a dead socket is surfaced, not fatal" "no socket switched: E247" "$(cat "$ROOT/out")"
+contains "the apply survives the dead socket and runs the later surfaces" "shell: Mocha" "$(cat "$ROOT/out")"
+kill "$NVIM_PID" 2>/dev/null || true
+wait "$NVIM_PID" 2>/dev/null || true
+unset THEME_NVIM XDG_RUNTIME_DIR
+teardown
+
+echo "nvim: a hung socket is timed out, surfaced, never stalls the apply"
+setup
+# Third failure shape, live: a socket whose editor is still alive but wedged
+# accepts the connect and never answers, so --remote-expr blocks forever and
+# the fan-out stalls right after kitty. The poke is capped by `timeout`; the
+# editor's own deadly-signal text (what nvim prints on SIGTERM) becomes the
+# miss. THEME_NVIM_TIMEOUT keeps the test fast.
+cat >"$ROOT/nvim-hang" <<'STUB'
+#!/usr/bin/env bash
+printf "Nvim: Caught deadly signal 'SIGTERM'\nNvim: Finished.\n" >&2
+sleep 30
+STUB
+chmod +x "$ROOT/nvim-hang"
+export THEME_NVIM="$ROOT/nvim-hang" THEME_NVIM_TIMEOUT=1
+mkdir -p "$ROOT/runtime"
+python3 - "$ROOT/runtime/nvim.8888.0" <<'PY' &
+import socket
+import sys
+import time
+s = socket.socket(socket.AF_UNIX)
+s.bind(sys.argv[1])
+time.sleep(30)
+PY
+NVIM_PID=$!
+sleep 0.3
+export XDG_RUNTIME_DIR="$ROOT/runtime"
+
+"$THEME" set mocha >"$ROOT/out" 2>&1
+contains "a timed-out socket is a miss, not a switch" "no socket switched" "$(cat "$ROOT/out")"
+contains "the apply survives the hang and runs the later surfaces" "shell: Mocha" "$(cat "$ROOT/out")"
+kill "$NVIM_PID" 2>/dev/null || true
+wait "$NVIM_PID" 2>/dev/null || true
+unset THEME_NVIM THEME_NVIM_TIMEOUT XDG_RUNTIME_DIR
 teardown
 
 echo "nvim: no sockets at all is pending, not immediate"
@@ -799,6 +988,24 @@ contains "HDMI-A-1 (16:9, unbound) got its own fitting pick, not DP-1's" "b.jpg"
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES
 teardown
 
+echo "wallpaper blur: per-monitor blur subcommand and query"
+setup
+mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers/mocha"
+printf 'a' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha/a.jpg"
+export THEME_OUTPUTS="DP-1 DP-2"
+export THEME_OUTPUT_SIZES="DP-1:5120x1440 DP-2:1920x1080"
+export THEME_IMAGE_SIZES="a.jpg:5120x1440"
+awww_stub
+printf '{"palette":"mocha","mode":"manual","wallpapers":{"mocha":{"DP-1":"mocha/a.jpg","DP-2":"mocha/a.jpg"}}}\n' >"$STORE"
+"$THEME" wallpaper blur 25 mocha --output DP-1 >/dev/null
+check "per-monitor blur written to store" "25" "$(jq -r '.wallpaper_blurs["DP-1"] // -1' "$STORE")"
+check "unmentioned monitor falls back to default 18" "18" "$(jq -r '.wallpaper_blurs["DP-2"] // 18' "$STORE")"
+list=$("$THEME" wallpaper list mocha)
+check "wallpaper list reports per-monitor blur for DP-1" "25" "$(printf '%s' "$list" | jq -r '.monitors["DP-1"].blur // -1')"
+check "wallpaper list reports default blur for DP-2" "18" "$(printf '%s' "$list" | jq -r '.monitors["DP-2"].blur // -1')"
+unset THEME_OUTPUTS THEME_OUTPUT_SIZES THEME_IMAGE_SIZES THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG
+teardown
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
 
@@ -912,7 +1119,18 @@ setup
 "$THEME" set mocha >"$ROOT/out" 2>&1
 check "BAT_THEME follows the palette" "Catppuccin Mocha" \
     "$(bash -c '. "$1" && printf "%s" "$BAT_THEME"' _ "$XDG_CONFIG_HOME/zsh/theme.zsh")"
-contains "fzf gets mocha's own colours" "hl:#f38ba8" "$(cat "$XDG_CONFIG_HOME/zsh/theme.zsh")"
+# fzf takes one accent (mauve) from the flavour, so this is mocha's mauve --
+# the check that the --color list is derived per palette, not a fixed table.
+contains "fzf gets mocha's own colours" "hl:#cba6f7" "$(cat "$XDG_CONFIG_HOME/zsh/theme.zsh")"
+# The rest of the shell's palette rides the same file, so a regression that
+# drops one of them (a hardcoded flavour winning in the rc, say) fails here.
+shell_var() { bash -c '. "$1" && printf "%s" "${!2}"' _ "$XDG_CONFIG_HOME/zsh/theme.zsh" "$2"; }
+contains "delta follows the palette" "Catppuccin Mocha" "$(shell_var _ DELTA_OPTS)"
+contains "eza gets mocha's directory colour" "di=38;2;203;166;247" "$(shell_var _ EZA_COLORS)"
+check "difftastic is told mocha is dark" "dark" "$(shell_var _ DFT_BACKGROUND)"
+contains "less headings take mocha's mauve" "38;2;203;166;247" "$(shell_var _ LESS_TERMCAP_md)"
+contains "zsh highlighting follows the palette" "fg=#a6adc8" \
+    "$(grep "ZSH_HIGHLIGHT_STYLES\[comment\]" "$XDG_CONFIG_HOME/zsh/theme.zsh")"
 contains "shell is reported as applied, not pending" "shell: Mocha" "$(cat "$ROOT/out")"
 "$THEME" set latte >/dev/null 2>&1
 check "a second palette rewrites the same file" "Catppuccin Latte" \

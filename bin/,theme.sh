@@ -103,6 +103,69 @@ surface_template() {
     done
 }
 
+# Convert #rrggbb to rgba(r,g,b,a). GTK CSS accepts either form.
+hex_to_rgba() {
+    local hex=$1 alpha=$2
+    hex=${hex#"#"}
+    printf 'rgba(%d, %d, %d, %s)' \
+        $((16#${hex:0:2})) \
+        $((16#${hex:2:2})) \
+        $((16#${hex:4:2})) \
+        "$alpha"
+}
+
+# Read one base24 slot or ramp value from the pack that owns a variant.
+# Prints the hex or nothing if the pack/slot is missing.
+# "#rrggbb" as the decimal "r;g;b" triple SGR colour escapes take, which is
+# what the LS_COLORS/EZA_COLORS grammar carries.
+hex_to_dec() {
+    local hex=${1#\#}
+    printf '%d;%d;%d' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+# "#rrggbb" as the decimal "r;g;b" triple SGR colour escapes take, which is
+# what the LS_COLORS/EZA_COLORS grammar carries.
+hex_to_dec() {
+    local hex=${1#\#}
+    printf '%d;%d;%d' "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+# A ready-made SGR foreground escape, for the termcap variables less reads.
+sgr_fg() { # $1 = hex, $2 = optional attribute (bold|underline)
+    local attr
+    case ${2-} in
+    bold) attr='01;' ;;
+    underline) attr='04;' ;;
+    *) attr='' ;;
+    esac
+    printf '\033[%s38;2;%sm' "$attr" "$(hex_to_dec "$1")"
+}
+
+# `$1` mixed `$3` percent of the way toward `$2`. Diff backgrounds are a tint
+# of the flavour's own base rather than a palette colour, so they have to be
+# computed per flavour instead of listed.
+blend_hex() { # $1 = from hex, $2 = toward hex, $3 = percent
+    local a=${1#\#} b=${2#\#} pct=$3 i out='#' x y
+    for i in 0 2 4; do
+        x=$((16#${a:i:2}))
+        y=$((16#${b:i:2}))
+        out+=$(printf '%02x' $(((x * (100 - pct) + y * pct) / 100)))
+    done
+    printf '%s' "$out"
+}
+
+pack_slot() {
+    local variant=$1 slot=$2 f
+    [ -d "$PACKS" ] || return 0
+    for f in "$PACKS"/*.json; do
+        [ -f "$f" ] || continue
+        if jq -e --arg v "$variant" '.variants[$v] != null' "$f" >/dev/null 2>&1; then
+            jq -r --arg v "$variant" --arg s "$slot" '.variants[$v].slots[$s] // .variants[$v].ramp[$s] // empty' "$f"
+            return 0
+        fi
+    done
+}
+
 # The name a variant carries on a surface. Falls back to the template below
 # when the pack does not name it — Catppuccin's shape, which is exactly what
 # the shipped surface assets implement. Substitutes the variant's id, kind and
@@ -384,8 +447,17 @@ apply_nvim() {
         # call itself exits 0 either way. Judge by what came back, not the
         # status: a swallowed E185 must not count as a switch. Anything that is
         # not an empty answer, including a connector that cannot reach the
-        # editor behind a socket file, lands in `miss` and is surfaced.
-        answer=$("$NVIM" --server "$sock" --remote-expr "execute('colorscheme $theme')" 2>&1)
+        # editor behind a socket file, lands in `miss` and is surfaced. The
+        # `|| true` is load-bearing: nvim exits 2 on E247 (connect refused —
+        # a stale socket file left by an exited editor), and under set -e that
+        # exit status rides the assignment and killed the whole apply
+        # mid-flight — which is why gtk/zen/obsidian/linear stopped flipping
+        # whenever one stale socket lingered. A dead socket is a miss, not
+        # the theme's failure. The timeout covers the third shape, a socket
+        # whose editor accepts but never answers (a wedged process): without
+        # it the poke blocks forever, and the desk waits on one stuck editor
+        # instead of switching. THEME_NVIM_TIMEOUT exists for the tests.
+        answer=$(timeout "${THEME_NVIM_TIMEOUT:-5}" "$NVIM" --server "$sock" --remote-expr "execute('colorscheme $theme')" 2>&1) || true
         if [ -z "$(printf '%s' "$answer" | tr -d '[:space:]')" ]; then
             sent=$((sent + 1))
         else
@@ -465,7 +537,21 @@ apply_gtk() {
             sed -i 's|^gtk-icon-theme-name=.*|gtk-icon-theme-name="'"$icons"'"|' "$mine"
         fi
     fi
-    echo "gtk: $theme ($scheme, $icons; settings.ini + xsettingsd + .gtkrc follow)"
+    # The nwg-look store is the declaration its GUI renders from, and a click
+    # on Apply there re-exports every file this function just wrote — from the
+    # store. If the store still named the palette the machine was installed
+    # with, Apply would paint the old scheme back over the desk; keep its
+    # scheme in agreement with the apply. Same home-directory escape hatch as
+    # the .gtkrc file above.
+    if [ -n "${THEME_NWG_GSETTINGS-}" ] || ! sandboxed; then
+        local nwg="${THEME_NWG_GSETTINGS:-$HOME/.local/share/nwg-look/gsettings}"
+        if [ -f "$nwg" ]; then
+            sed -i "s|^gtk-theme=.*|gtk-theme=$theme|" "$nwg"
+            sed -i "s|^icon-theme=.*|icon-theme=$icons|" "$nwg"
+            sed -i "s|^color-scheme=.*|color-scheme=$scheme|" "$nwg"
+        fi
+    fi
+    echo "gtk: $theme ($scheme, $icons; settings.ini + xsettingsd + .gtkrc + nwg-look follow)"
     record_applied gtk immediate
 }
 
@@ -551,46 +637,137 @@ apply_rofi() {
     record_applied rofi immediate
 }
 
-# wlogout hardcodes the flavour inside every icon path.
+# wlogout needs both its icon flavour and its CSS colours rewritten to follow
+# the active palette. The applier owns the whole file: it is regenerated every
+# time so the paths and colours stay in sync and no hand-edits can drift.
 apply_wlogout() {
-    local palette=$1 theme css="$CONFIG/wlogout/style.css"
-    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" wlogout "$palette")
-    [ -f "$css" ] || return 0
-    [ -d "$CONFIG/wlogout/catppuccin/icons/wlogout/$theme" ] || return 0
-    sed -i -E "s#(/wlogout/catppuccin/icons/wlogout/)[a-z]+/#\\1$theme/#g" "$css"
-    echo "wlogout: $theme"
+    local palette=$1 role=${2:-$ACCENT} kind theme css="$CONFIG/wlogout/style.css"
+    local icon_dir icon_ext="svg"
+    kind=$(is_light "$palette" && echo light || echo dark)
+    theme=$(resolve_surface "$palette" "$kind" "$role" wlogout "$palette")
+
+    # Prefer the Catppuccin icon set if it is provisioned, otherwise fall back
+    # to the system wlogout icons so the menu is never blank.
+    icon_dir="$CONFIG/wlogout/catppuccin/icons/wlogout/$theme"
+    if [ ! -d "$icon_dir" ]; then
+        for d in /usr/share/wlogout/icons /usr/local/share/wlogout/icons; do
+            if [ -f "$d/lock.png" ]; then
+                icon_dir="$d"
+                icon_ext="png"
+                break
+            fi
+        done
+    fi
+    [ -n "$icon_dir" ] || return 0
+
+    # Read the palette's own slots; fall back to Macchiato if the pack is gone.
+    local base01 base02 base03 base05 accent
+    base01=$(pack_slot "$palette" "base01")
+    base01=${base01:-#1e2030}
+    base02=$(pack_slot "$palette" "base02")
+    base02=${base02:-#363a4f}
+    base03=$(pack_slot "$palette" "base03")
+    base03=${base03:-#494d64}
+    base05=$(pack_slot "$palette" "base05")
+    base05=${base05:-#cad3f5}
+    accent=$(accent_hex "$palette" "$role")
+
+    # Alpha-scrimmed surfaces: keep tiles subtle on every palette.
+    local btn_bg btn_border btn_hover
+    btn_bg=$(hex_to_rgba "$base01" 0.82)
+    btn_border=$(hex_to_rgba "$base03" 0.55)
+    btn_hover=$(hex_to_rgba "$base02" 0.92)
+
+    # Hover icons: use the accent flavour when the Catppuccin set is present,
+    # otherwise tint the same neutral icon via the hover colour.
+    local hover_dir
+    if [ "$icon_ext" = "svg" ] && [ -d "$CONFIG/wlogout/catppuccin/icons/wlogout/$theme/$role" ]; then
+        hover_dir="$CONFIG/wlogout/catppuccin/icons/wlogout/$theme/$role"
+    else
+        hover_dir="$icon_dir"
+    fi
+
+    mkdir -p "$(dirname "$css")"
+    cat >"$css" <<EOF
+# ~/.config/wlogout/style.css — rendered by roles/theming and recoloured by
+# \`,theme.sh apply_wlogout'. Do not edit by hand; the next palette change
+# overwrites this file.
+
+* {
+  font-family: "JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono";
+  font-weight: 600;
+  font-size: 15px;
+  background-image: none;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+window {
+  background-color: transparent;
+}
+
+button {
+  color: $base05;
+  background-color: $btn_bg;
+  border: 1px solid $btn_border;
+  border-radius: 18px;
+  margin: 10px;
+  background-repeat: no-repeat;
+  background-position: center 30%;
+  background-size: 26%;
+  outline: none;
+}
+
+button:hover {
+  color: $accent;
+  background-color: $btn_hover;
+  border-color: $accent;
+}
+
+/* default (neutral) icons */
+#lock      { background-image: url("$icon_dir/lock.$icon_ext"); }
+#logout    { background-image: url("$icon_dir/logout.$icon_ext"); }
+#suspend   { background-image: url("$icon_dir/suspend.$icon_ext"); }
+#hibernate { background-image: url("$icon_dir/hibernate.$icon_ext"); }
+#shutdown  { background-image: url("$icon_dir/shutdown.$icon_ext"); }
+#reboot    { background-image: url("$icon_dir/reboot.$icon_ext"); }
+
+/* accent icons on hover */
+#lock:hover      { background-image: url("$hover_dir/lock.$icon_ext"); }
+#logout:hover    { background-image: url("$hover_dir/logout.$icon_ext"); }
+#suspend:hover   { background-image: url("$hover_dir/suspend.$icon_ext"); }
+#hibernate:hover { background-image: url("$hover_dir/hibernate.$icon_ext"); }
+#shutdown:hover  { background-image: url("$hover_dir/shutdown.$icon_ext"); }
+#reboot:hover    { background-image: url("$hover_dir/reboot.$icon_ext"); }
+EOF
+
+    echo "wlogout: $theme (${icon_dir##*/})"
     record_applied wlogout immediate
 }
 
 # Zen reads user.js once at launch, so the prefs land on the next restart.
-# The chrome CSS is also read at launch, but `,theme.sh` keeps the runtime
-# palette file (`zen-palette.css`) in sync and overwrites the main CSS files
-# from the repo assets so light/dark blocks are always present. A running Zen
-# still needs a restart to pick up CSS changes, but the files are correct
-# immediately.
+# The chrome CSS is provisioned by system-config's `roles/browser` and read at
+# launch too; nothing here overwrites it, so a per-profile CSS edit (Browser
+# Toolbox, a userstyle manager) survives every apply. This applier owns the two
+# runtime seams: the accent Zen reads from user.js, and the palette file the
+# chrome CSS @imports. A running Zen still needs a restart to pick up either.
 apply_zen() {
     local palette=$1 role=$2 accent
-    local zen_dir="$CONFIG/zen-chezmoi"
+    local zen_dir="$CONFIG/zen/shared"
     local js="$zen_dir/user.js"
     [ -f "$js" ] || return 0
+    mkdir -p "$zen_dir"
     accent=$(accent_hex "$palette" "$role")
 
     sed -i "s|^user_pref(\"zen.theme.accent-color\".*|user_pref(\"zen.theme.accent-color\", \"$accent\");|" "$js"
     sed -i "s|^user_pref(\"layout.css.prefers-color-scheme.content-override\".*|user_pref(\"layout.css.prefers-color-scheme.content-override\", 3); // follow system|" "$js"
     sed -i "s|^user_pref(\"theme-better_find_bar-enable_custom_background\".*|user_pref(\"theme-better_find_bar-enable_custom_background\", false);|" "$js"
 
-    # Overwrite the CSS from the repo assets so both light and dark blocks are
-    # present and the accent is controlled by the runtime palette file.
-    local asset_dir="$SCRIPT_DIR/../assets/zen"
-    if [ -d "$asset_dir" ]; then
-        install -m 644 "$asset_dir/userChrome.css" "$zen_dir/userChrome.css"
-        install -m 644 "$asset_dir/userContent.css" "$zen_dir/userContent.css"
-        printf '@media (prefers-color-scheme: light) { :root { --qf-accent: %s; } }\n@media (prefers-color-scheme: dark) { :root { --qf-accent: %s; } }\n' "$accent" "$accent" >"$zen_dir/zen-palette.css"
-        chmod 644 "$zen_dir/zen-palette.css"
-    fi
+    printf '@media (prefers-color-scheme: light) { :root { --qf-accent: %s; } }\n@media (prefers-color-scheme: dark) { :root { --qf-accent: %s; } }\n' "$accent" "$accent" >"$zen_dir/zen-palette.css"
+    chmod 644 "$zen_dir/zen-palette.css"
 
-    echo "zen: $accent (user.js + CSS written; Zen restart required to see CSS)"
-    record_pending zen next-launch "Zen reads user.js and CSS at launch"
+    echo "zen: $accent (palette + user.js accent; CSS is provisioned by roles/browser)"
+    record_pending zen next-launch "Zen reads user.js and the provisioned CSS at launch"
 }
 
 # Obsidian reads its vault's appearance.json at launch, so this lands on the
@@ -628,16 +805,15 @@ apply_obsidian() {
     record_pending obsidian next-launch "appearance.json is read at launch"
 }
 
-# fzf's own colour table per flavour — the same values catppuccin/fzf ships.
-# Duplicated here for the reason accent_hex is: a shell script cannot require
-# the Lua/QML tables, and this is the one place fzf's colours are named.
+# fzf's colour list, derived from the palette rather than spelled out: one
+# accent (mauve), the scene's own surface, and overlay0 for the quiet text.
 fzf_colors() {
-    case "$1" in
-    latte) printf 'bg+:#ccd0da,bg:#eff1f5,spinner:#dc8a78,hl:#d20f39,fg:#4c4f69,header:#d20f39,info:#8839ef,pointer:#dc8a78,marker:#dc8a78,fg+:#4c4f69,prompt:#8839ef,hl+:#d20f39' ;;
-    frappe) printf 'bg+:#414559,bg:#303446,spinner:#f2d5cf,hl:#e78284,fg:#c6d0f5,header:#e78284,info:#ca9ee6,pointer:#f2d5cf,marker:#f2d5cf,fg+:#c6d0f5,prompt:#ca9ee6,hl+:#e78284' ;;
-    macchiato) printf 'bg+:#363a4f,bg:#24273a,spinner:#f4dbd6,hl:#ed8796,fg:#cad3f5,header:#ed8796,info:#c6a0f6,pointer:#f4dbd6,marker:#f4dbd6,fg+:#cad3f5,prompt:#c6a0f6,hl+:#ed8796' ;;
-    *) printf 'bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#f38ba8,fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc,marker:#f5e0dc,fg+:#cdd6f4,prompt:#cba6f7,hl+:#f38ba8' ;;
-    esac
+    local p=$1
+    printf 'bg+:%s,fg:%s,fg+:%s,hl:%s,hl+:%s,pointer:%s,prompt:%s,marker:%s,spinner:%s,info:%s,header:%s,gutter:-1,border:%s' \
+        "$(accent_hex "$p" surface0)" "$(accent_hex "$p" text)" "$(accent_hex "$p" text)" \
+        "$(accent_hex "$p" mauve)" "$(accent_hex "$p" mauve)" "$(accent_hex "$p" mauve)" \
+        "$(accent_hex "$p" mauve)" "$(accent_hex "$p" green)" "$(accent_hex "$p" mauve)" \
+        "$(accent_hex "$p" overlay0)" "$(accent_hex "$p" overlay0)" "$(accent_hex "$p" surface0)"
 }
 
 # zsh and fzf read no store and no live D-Bus signal — the desk's every other
@@ -660,19 +836,155 @@ apply_shell() {
     *) flavor="Macchiato" ;;
     esac
     mkdir -p "$CONFIG/zsh"
-    local bat_theme="Catppuccin $flavor" fzf_opts="--color=$(fzf_colors "$palette")"
+
+    # Every colour below comes from accent_hex, the one palette table this
+    # script keeps, so the shell cannot drift from the surfaces themed beside
+    # it. Named locals rather than repeated calls: this function spells out a
+    # lot of colour and the names are what make it readable.
+    local text subtext0 overlay0 surface0 surface1 surface2 base mantle
+    local mauve red maroon peach yellow green teal blue lavender sky
+    text=$(accent_hex "$palette" text)
+    subtext0=$(accent_hex "$palette" subtext0)
+    overlay0=$(accent_hex "$palette" overlay0)
+    surface0=$(accent_hex "$palette" surface0)
+    surface1=$(accent_hex "$palette" surface1)
+    surface2=$(accent_hex "$palette" surface2)
+    base=$(accent_hex "$palette" base)
+    mantle=$(accent_hex "$palette" mantle)
+    mauve=$(accent_hex "$palette" mauve)
+    red=$(accent_hex "$palette" red)
+    maroon=$(accent_hex "$palette" maroon)
+    peach=$(accent_hex "$palette" peach)
+    yellow=$(accent_hex "$palette" yellow)
+    green=$(accent_hex "$palette" green)
+    teal=$(accent_hex "$palette" teal)
+    blue=$(accent_hex "$palette" blue)
+    lavender=$(accent_hex "$palette" lavender)
+    sky=$(accent_hex "$palette" sky)
+
+    # delta paints added and removed lines on a tinted background rather than a
+    # palette colour: a blend of the flavour's own base toward green and red.
+    local minus_bg plus_bg minus_emph plus_emph
+    minus_bg=$(blend_hex "$base" "$red" 25)
+    minus_emph=$(blend_hex "$base" "$red" 45)
+    plus_bg=$(blend_hex "$base" "$green" 25)
+    plus_emph=$(blend_hex "$base" "$green" 45)
+
+    local bat_theme="Catppuccin $flavor"
+    local delta_opts
+    delta_opts="--navigate --line-numbers --hyperlinks --syntax-theme='$bat_theme'"
+    delta_opts="$delta_opts --true-color=always"
+    delta_opts="$delta_opts --minus-style='syntax $minus_bg' --minus-non-emph-style='syntax $minus_bg'"
+    delta_opts="$delta_opts --minus-emph-style='syntax $minus_emph' --minus-empty-line-marker-style='syntax $minus_bg'"
+    delta_opts="$delta_opts --plus-style='syntax $plus_bg' --plus-non-emph-style='syntax $plus_bg'"
+    delta_opts="$delta_opts --plus-emph-style='syntax $plus_emph' --plus-empty-line-marker-style='syntax $plus_bg'"
+    delta_opts="$delta_opts --zero-style='syntax' --whitespace-error-style='$base $red'"
+    delta_opts="$delta_opts --file-style='bold $mauve' --file-decoration-style='$surface1 ul'"
+    delta_opts="$delta_opts --hunk-header-style='file line-number syntax'"
+    delta_opts="$delta_opts --hunk-header-decoration-style='$surface1 box'"
+    delta_opts="$delta_opts --hunk-header-file-style='$lavender' --hunk-header-line-number-style='$teal'"
+    delta_opts="$delta_opts --line-numbers-minus-style='$red' --line-numbers-plus-style='$green'"
+    delta_opts="$delta_opts --line-numbers-zero-style='$overlay0'"
+    delta_opts="$delta_opts --line-numbers-left-style='$surface2' --line-numbers-right-style='$surface2'"
+    delta_opts="$delta_opts --blame-palette='$base $mantle $surface0 $surface1' --blame-code-style='syntax'"
+    delta_opts="$delta_opts --merge-conflict-begin-symbol='~' --merge-conflict-end-symbol='~'"
+    delta_opts="$delta_opts --merge-conflict-ours-diff-header-style='$yellow bold'"
+    delta_opts="$delta_opts --merge-conflict-theirs-diff-header-style='$yellow bold'"
+
+    # eza and ls read the same SGR grammar, in decimal triples.
+    local eza_colors
+    eza_colors="da=38;2;$(hex_to_dec "$overlay0"):uu=38;2;$(hex_to_dec "$overlay0")"
+    eza_colors="$eza_colors:gu=38;2;$(hex_to_dec "$overlay0"):ur=38;2;$(hex_to_dec "$mauve")"
+    eza_colors="$eza_colors:uw=38;2;$(hex_to_dec "$yellow"):ux=38;2;$(hex_to_dec "$green")"
+    eza_colors="$eza_colors:sn=38;2;$(hex_to_dec "$teal"):sb=38;2;$(hex_to_dec "$overlay0")"
+    eza_colors="$eza_colors:xx=38;2;$(hex_to_dec "$surface1"):di=38;2;$(hex_to_dec "$mauve")"
+    eza_colors="$eza_colors:ln=38;2;$(hex_to_dec "$peach"):ex=38;2;$(hex_to_dec "$green")"
+
+    # fzf's bindings are structure, not palette, so they stay fixed while the
+    # --color list moves with the flavour.
+    local fzf_opts
+    fzf_opts="--bind='tab:toggle+down,btab:up,ctrl-/:toggle-preview'"
+    fzf_opts="$fzf_opts --layout=reverse --info=inline --border=none --pointer='▌' --marker='▌'"
+    fzf_opts="$fzf_opts --color=$(fzf_colors "$palette")"
+
     {
         printf '# generated by `,theme.sh apply` -- do not edit by hand\n'
-        printf 'export BAT_THEME=%q\n' "$bat_theme"
-        printf 'export FZF_DEFAULT_OPTS=%q\n' "$fzf_opts"
+        printf '# palette: %s\n\n' "$palette"
+
+        printf '# bat, and everything that pages through it (man, lessfilter).\n'
+        printf 'export BAT_THEME=%q\n\n' "$bat_theme"
+
+        printf '# delta, as git'\''s pager and for hand-piped diffs. Its syntax\n'
+        printf '# theme is BAT_THEME, so bat and git diffs move together.\n'
+        printf 'export DELTA_OPTS=%q\n' "$delta_opts"
+        printf 'export GIT_PAGER=%q\n\n' "delta $delta_opts"
+
+        printf '# difftastic colours itself and only needs the background'\''s polarity.\n'
+        printf 'export DFT_BACKGROUND=%q\n\n' "$(is_light "$palette" && echo light || echo dark)"
+
+        printf 'export LS_COLORS=%q\n' "$eza_colors"
+        printf 'export EZA_COLORS=%q\n\n' "$eza_colors"
+
+        printf 'export FZF_DEFAULT_OPTS=%q\n\n' "$fzf_opts"
+
+        printf '# less, for man pages and anything else it renders.\n'
+        printf 'export LESS_TERMCAP_mb=%q\n' "$(sgr_fg "$red" bold)"
+        printf 'export LESS_TERMCAP_md=%q\n' "$(sgr_fg "$mauve" bold)"
+        printf 'export LESS_TERMCAP_me=%q\n' "$(printf '\033[0m')"
+        printf 'export LESS_TERMCAP_so=%q\n' "$(printf '\033[38;2;%s;48;2;%sm' "$(hex_to_dec "$base")" "$(hex_to_dec "$yellow")")"
+        printf 'export LESS_TERMCAP_se=%q\n' "$(printf '\033[0m')"
+        printf 'export LESS_TERMCAP_us=%q\n' "$(sgr_fg "$teal" underline)"
+        printf 'export LESS_TERMCAP_ue=%q\n\n' "$(printf '\033[0m')"
+
+        # zsh-syntax-highlighting is read at prompt setup, so the whole map is
+        # written here rather than left hardcoded in the rc file (where it
+        # could only ever name one flavour).
+        printf 'ZSH_HIGHLIGHT_HIGHLIGHTERS=(main cursor)\n'
+        printf 'typeset -gA ZSH_HIGHLIGHT_STYLES\n'
+        local role
+        for role in alias suffix-alias global-alias function command builtin reserved-word hashed-command; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$green"
+        done
+        printf "ZSH_HIGHLIGHT_STYLES[precommand]='fg=%s,italic'\n" "$green"
+        printf "ZSH_HIGHLIGHT_STYLES[autodirectory]='fg=%s,italic'\n" "$peach"
+        for role in single-hyphen-option double-hyphen-option; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$peach"
+        done
+        for role in back-quoted-argument history-expansion; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$mauve"
+        done
+        for role in commandseparator back-quoted-argument-delimiter back-double-quoted-argument back-dollar-quoted-argument; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$red"
+        done
+        for role in command-substitution-quoted command-substitution-delimiter-quoted single-quoted-argument double-quoted-argument rc-quote; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$yellow"
+        done
+        for role in single-quoted-argument-unclosed double-quoted-argument-unclosed dollar-quoted-argument-unclosed back-quoted-argument-unclosed unknown-token; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$maroon"
+        done
+        for role in command-substitution-delimiter command-substitution-delimiter-unquoted process-substitution-delimiter \
+            dollar-quoted-argument dollar-double-quoted-argument assign named-fd numeric-fd globbing redirection arg0 default cursor; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s'\n" "$role" "$text"
+        done
+        for role in path path_prefix; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s,underline'\n" "$role" "$text"
+        done
+        for role in path_pathseparator path_prefix_pathseparator; do
+            printf "ZSH_HIGHLIGHT_STYLES[%s]='fg=%s,underline'\n" "$role" "$red"
+        done
+        printf "ZSH_HIGHLIGHT_STYLES[comment]='fg=%s'\n" "$subtext0"
     } >"$conf.tmp"
     mv -f "$conf.tmp" "$conf"
+
     # Same three-tier reach apply_cursor uses: the file above is what a fresh
     # shell (or one that re-sources rc) reads; set-environment is what makes
     # anything uwsm spawns AFTER this point (a new terminal window, most
     # notably) pick it up without waiting on that re-source.
-    sandboxed || systemctl --user set-environment "BAT_THEME=$bat_theme" "FZF_DEFAULT_OPTS=$fzf_opts" 2>/dev/null || true
-    echo "shell: $flavor (zsh/fzf theme.zsh written)"
+    sandboxed || systemctl --user set-environment \
+        "BAT_THEME=$bat_theme" "FZF_DEFAULT_OPTS=$fzf_opts" \
+        "LS_COLORS=$eza_colors" "EZA_COLORS=$eza_colors" \
+        "DELTA_OPTS=$delta_opts" 2>/dev/null || true
+    echo "shell: $flavor (bat, delta, eza, fzf, less, zsh highlighting)"
     record_applied shell immediate
 }
 
@@ -701,8 +1013,19 @@ apply_linear() {
 # Miss the middle one and a browser opened after a switch still gets the old
 # cursor; miss the last and a fresh login has no cursor theme at all.
 apply_cursor() {
-    local palette=$1 theme size
-    theme=$(resolve_surface "$palette" "$(is_light "$palette" && echo light || echo dark)" "$ACCENT" cursor "catppuccin-$palette-$ACCENT-cursors")
+    local palette=$1 theme size variant
+    # The cursor outline is painted in its own flavour's base colour, so a
+    # flavour-matched cursor loses its border on that flavour's own background:
+    # latte's near-white outline on the latte desk read as a thin accent
+    # sliver. The cursor is the one surface that wants CONTRAST, not match —
+    # a light desk carries the night flavour's cursor (near-black outline),
+    # a dark desk keeps its own (the light body already reads on dark).
+    variant="$palette"
+    if is_light "$palette"; then
+        variant=$(get night "$palette")
+        is_light "$variant" && variant="mocha"
+    fi
+    theme=$(resolve_surface "$variant" cursor "$ACCENT" cursor "catppuccin-$variant-$ACCENT-cursors")
     size=$(get cursor_size 28)
     if [ ! -d "/usr/share/icons/$theme" ] && [ ! -d "$HOME/.icons/$theme" ] && [ ! -d "$HOME/.local/share/icons/$theme" ]; then
         echo "cursor: $theme not installed"
@@ -710,7 +1033,7 @@ apply_cursor() {
         return 0
     fi
     sandboxed && {
-        echo "cursor: skipped (sandboxed)"
+        echo "cursor: $theme (skipped: sandboxed)"
         return 0
     }
     systemctl --user set-environment "XCURSOR_THEME=$theme" "XCURSOR_SIZE=$size" 2>/dev/null || true
@@ -733,6 +1056,17 @@ apply_hyprland() {
         record_failed hyprland "not running"
         return
     }
+    # A genuine hyprfocus mode transition holds the desk behind a veil and
+    # keeps state in the Lua runtime. Reloading mid-transition restarts that
+    # runtime, drops the bracket, and makes the veil vanish early. Defer the
+    # reload until the transition settles; the post-settle half will call
+    # ,theme.sh apply again when it is safe.
+    local transition="$ROOT/hyprfocus.transition.json"
+    if [ -f "$transition" ] && jq -e '.active == true' "$transition" >/dev/null 2>&1; then
+        echo "hyprland: transition active, deferring reload"
+        record_applied hyprland pending
+        return
+    fi
     # Hyprland's colours come from its own config (hypr/themes/colors.lua reads
     # this same store), because `hyprctl keyword general:col.*` answers "unknown
     # request" on a Lua-configured Hyprland — and exits 0, so a script cannot
@@ -747,6 +1081,21 @@ apply_hyprland() {
     # for zero colour change. Skip it when the palette is the one already live.
     stamp="${XDG_CACHE_HOME:-$HOME/.cache}/quantumfate/hyprland.applied"
     previous=$([ -f "$stamp" ] && cat "$stamp" || echo "")
+
+    # A mode-change path already applied border/groupbar colours at runtime
+    # (hypr.themes.colors.apply_colors), so the full reload is redundant
+    # there and it wipes the Lua state that the scene engine keeps in memory.
+    # Skip it, but still mark the palette applied so a later sun-tick or
+    # manual `set` does not surprise-reload.
+    if [ -n "${HYPRFOCUS_NO_RELOAD-}" ]; then
+        if [ "$palette" != "$previous" ]; then
+            mkdir -p "$(dirname "$stamp")"
+            printf '%s' "$palette" >"$stamp"
+        fi
+        echo "hyprland: skipped reload (mode-change path)"
+        record_applied hyprland immediate
+        return
+    fi
 
     if [ "$palette" = "$previous" ]; then
         echo "hyprland: $palette (unchanged, no reload)"
@@ -777,6 +1126,13 @@ apply_hyprland() {
 # — the sun timer fires hourly and a reload is visible. So it runs only when the
 # dial actually moved, tracked by a stamp beside the wallpaper cache.
 apply_transparency() {
+    # The mode-change path avoids any Hyprland reload; transparency does not
+    # change with the mode, and a reload here would re-run the config and
+    # disturb the scene engine.
+    if [ -n "${HYPRFOCUS_NO_RELOAD-}" ]; then
+        return
+    fi
+
     local dial stamp previous
     dial=$(get transparency 1.0)
     stamp="${XDG_CACHE_HOME:-$HOME/.cache}/quantumfate/transparency.applied"
@@ -799,25 +1155,54 @@ apply_transparency() {
 # every wallpaper toward its palette's accent once, and hand awww the result
 # instead of the original.
 #
+# Per-output blur sigma, falling back to the global wallpaper_blur, then 18.
+get_monitor_blur() {
+    local out=${1-} blur=""
+    if [ -n "$out" ] && [ "$out" != "*" ]; then
+        blur=$(jq -r --arg o "$out" '.wallpaper_blurs[$o] // empty' "$STATE" 2>/dev/null || true)
+    fi
+    if [ -z "$blur" ]; then
+        blur=$(get wallpaper_blur 18)
+    fi
+    case "$blur" in
+    '' | *[!0-9]*) blur=18 ;;
+    esac
+    if [ "$blur" -gt 48 ]; then blur=48; fi
+    printf '%s' "$blur"
+}
+
 # Cached by source mtime rather than content hash — a stat is free and a
 # wallpaper file does not change without its mtime moving. The stamp also
-# carries the accent role: two modes leasing the same palette can still tint
-# toward different accents, so a role change must re-render even though the
-# source file did not move. The stamp file next to the render is what makes
-# an unchanged source-and-role a no-op on the next apply.
+# carries the accent role and the blur sigma: two modes leasing the same
+# palette can still tint toward different accents, and the `wallpaper_blur`
+# dial changes the sigma, so either must re-render even though the source
+# file did not move. The stamp file next to the render is what makes an
+# unchanged source-and-role-and-blur a no-op on the next apply.
 process_wallpaper() {
-    local palette=$1 wall=$2 role=$3
+    local palette=$1 wall=$2 role=$3 out=${4-} blur
     have "$MAGICK" || {
         printf '%s' "$wall"
         return
     }
+    # The blur dial is a store option (`wallpaper_blurs[out]`, falling back to
+    # `wallpaper_blur`, default 18 = the 0x12 sigma this step has always used).
+    # 0 means "no blur at all" — a source image the user wants straight — so it
+    # must skip the flag, not pass a 0-sigma one; anything non-numeric falls back
+    # like an unset key.
+    blur=$(get_monitor_blur "$out")
     local name="${wall##*/}"
     local out_dir="$CACHE/$palette"
-    local cached="$out_dir/$name"
+    local cached
+    if [ -n "$out" ] && [ "$out" != "*" ]; then
+        cached="$out_dir/${out}_${name}"
+    else
+        cached="$out_dir/$name"
+    fi
     local stamp="$cached.mtime"
-    local src_mtime stamp_key
+    local src_mtime stamp_key blur_flag=()
     src_mtime=$(stat -c %Y "$wall" 2>/dev/null || echo 0)
-    stamp_key="$src_mtime:$role"
+    stamp_key="$src_mtime:$role:$blur"
+    [ "$blur" -gt 0 ] && blur_flag=(-blur "0x$(printf %x "$blur")")
 
     if [ -f "$cached" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$stamp_key" ]; then
         printf '%s' "$cached"
@@ -830,7 +1215,7 @@ process_wallpaper() {
     # Blur hides detail a bar would otherwise sit on top of; the modulate call
     # desaturates without flattening to grey; colorize is the tint toward the
     # palette's accent that makes the result read as "this palette" at a glance.
-    if "$MAGICK" "$wall" -blur 0x12 -modulate 100,50,100 -fill "$accent" -colorize 25% "$cached" 2>/dev/null; then
+    if "$MAGICK" "$wall" "${blur_flag[@]}" -modulate 100,50,100 -fill "$accent" -colorize 25% "$cached" 2>/dev/null; then
         printf '%s' "$stamp_key" >"$stamp"
         printf '%s' "$cached"
     else
@@ -1153,13 +1538,31 @@ apply_wallpaper() {
 apply_wallpaper_output() {
     local palette=$1 role=$2 out=$3 wall label="wallpaper"
     [ "$out" = "*" ] || label="wallpaper[$out]"
-    wall=$(resolve_wallpaper "$palette" "$out")
+    # If this palette is currently active, keep what is already on this monitor
+    # unless an explicit binding overrides it — a blur adjustment or re-apply
+    # must not re-roll the wallpaper.
+    local bound
+    bound=$(jq -r --arg p "$palette" --arg o "$out" '.wallpapers[$p][$o] // empty' "$STATE" 2>/dev/null || true)
+    if [ -n "$bound" ]; then
+        wall=$(resolve_wallpaper "$palette" "$out")
+    elif [ "$palette" = "$(resolve)" ]; then
+        local live_file
+        live_file=$(displayed_wallpaper "$out")
+        if [ -n "$live_file" ]; then
+            if [ -f "$CONFIG/hypr/wallpapers/$palette/$live_file" ]; then
+                wall="$CONFIG/hypr/wallpapers/$palette/$live_file"
+            elif [ -f "$CONFIG/hypr/wallpapers/$live_file" ]; then
+                wall="$CONFIG/hypr/wallpapers/$live_file"
+            fi
+        fi
+    fi
+    [ -n "${wall-}" ] || wall=$(resolve_wallpaper "$palette" "$out")
     [ -n "$wall" ] && [ -f "$wall" ] || {
         echo "$label: unchanged"
         record_failed "$label" "no wallpaper bound to the palette and no default found"
         return
     }
-    wall=$(process_wallpaper "$palette" "$wall" "$role")
+    wall=$(process_wallpaper "$palette" "$wall" "$role" "$out")
     # Unlike MAGICK, calling the real awww has a live-session side effect (it
     # would actually repaint the desk), so sandboxed() still holds it back —
     # except when a test has pointed AWWW at its own recorder, the same
@@ -1198,10 +1601,20 @@ apply_wallpaper_output() {
 # borders — so the bar, the borders and these adapters can never disagree).
 # Falls back to "mauve" exactly like the Lua reader does: a fresh desk or a
 # mode with no declared role must still resolve to something installed.
+#
+# $1 is the resolved palette, for the contrast guard it shares with the Lua
+# reader: on the light latte palette only mauve and blue clear the
+# accent-on-base target, so any other declared role stands in as mauve there;
+# the dark palettes pass every role. None of the callers pass a palette when
+# the guard cannot know it — it is withheld, not guessed.
 accent_role() {
-    local mode
+    local mode palette=${1-} role
     mode=$(lease_state)
-    jq -r --arg m "$mode" '.modes[$m].presentation.accent_role // "mauve"' "$DECLARATION" 2>/dev/null || printf 'mauve'
+    role=$(jq -r --arg m "$mode" '.modes[$m].presentation.accent_role // "mauve"' "$DECLARATION" 2>/dev/null || printf 'mauve')
+    if [ "$palette" = latte ] && [ "$role" != mauve ] && [ "$role" != blue ]; then
+        role=mauve
+    fi
+    printf '%s' "$role"
 }
 
 # The accent colour for a palette+role pair, matching the tables
@@ -1210,29 +1623,117 @@ accent_role() {
 # `tests/theme_test.sh` rather than left to drift. An unknown role falls back
 # to the palette's own mauve; an unknown palette falls back to macchiato's,
 # matching `baseline`'s own default.
+# The Catppuccin palette, by flavour and role, and the ONLY place this script
+# names a colour. Every adapter that has to spell a hex out -- the shell
+# palette, rofi, wlogout, the cursor border -- reads it from here, so a flavour
+# cannot be half-applied by one surface carrying its own copy.
 accent_hex() {
     local palette=$1 role=${2:-mauve}
     case "$palette:$role" in
+    latte:rosewater) printf '#dc8a78' ;;
+    latte:flamingo) printf '#dd7878' ;;
+    latte:pink) printf '#ea76cb' ;;
     latte:mauve) printf '#8839ef' ;;
     latte:red) printf '#d20f39' ;;
+    latte:maroon) printf '#e64553' ;;
     latte:peach) printf '#fe640b' ;;
+    latte:yellow) printf '#df8e1d' ;;
+    latte:green) printf '#40a02b' ;;
+    latte:teal) printf '#179299' ;;
+    latte:sky) printf '#04a5e5' ;;
+    latte:sapphire) printf '#209fb5' ;;
     latte:blue) printf '#1e66f5' ;;
     latte:lavender) printf '#7287fd' ;;
+    latte:text) printf '#4c4f69' ;;
+    latte:subtext1) printf '#5c5f77' ;;
+    latte:subtext0) printf '#6c6f85' ;;
+    latte:overlay2) printf '#7c7f93' ;;
+    latte:overlay1) printf '#8c8fa1' ;;
+    latte:overlay0) printf '#9ca0b0' ;;
+    latte:surface2) printf '#acb0be' ;;
+    latte:surface1) printf '#bcc0cc' ;;
+    latte:surface0) printf '#ccd0da' ;;
+    latte:base) printf '#eff1f5' ;;
+    latte:mantle) printf '#e6e9ef' ;;
+    latte:crust) printf '#dce0e8' ;;
+    frappe:rosewater) printf '#f2d5cf' ;;
+    frappe:flamingo) printf '#eebebe' ;;
+    frappe:pink) printf '#f4b8e4' ;;
     frappe:mauve) printf '#ca9ee6' ;;
     frappe:red) printf '#e78284' ;;
+    frappe:maroon) printf '#ea999c' ;;
     frappe:peach) printf '#ef9f76' ;;
+    frappe:yellow) printf '#e5c890' ;;
+    frappe:green) printf '#a6d189' ;;
+    frappe:teal) printf '#81c8be' ;;
+    frappe:sky) printf '#99d1db' ;;
+    frappe:sapphire) printf '#85c1dc' ;;
     frappe:blue) printf '#8caaee' ;;
     frappe:lavender) printf '#babbf1' ;;
+    frappe:text) printf '#c6d0f5' ;;
+    frappe:subtext1) printf '#b5bfe2' ;;
+    frappe:subtext0) printf '#a5adce' ;;
+    frappe:overlay2) printf '#949cbb' ;;
+    frappe:overlay1) printf '#838ba7' ;;
+    frappe:overlay0) printf '#737994' ;;
+    frappe:surface2) printf '#626880' ;;
+    frappe:surface1) printf '#51576d' ;;
+    frappe:surface0) printf '#414559' ;;
+    frappe:base) printf '#303446' ;;
+    frappe:mantle) printf '#292c3c' ;;
+    frappe:crust) printf '#232634' ;;
+    macchiato:rosewater) printf '#f4dbd6' ;;
+    macchiato:flamingo) printf '#f0c6c6' ;;
+    macchiato:pink) printf '#f5bde6' ;;
     macchiato:mauve) printf '#c6a0f6' ;;
     macchiato:red) printf '#ed8796' ;;
+    macchiato:maroon) printf '#ee99a0' ;;
     macchiato:peach) printf '#f5a97f' ;;
+    macchiato:yellow) printf '#eed49f' ;;
+    macchiato:green) printf '#a6da95' ;;
+    macchiato:teal) printf '#8bd5ca' ;;
+    macchiato:sky) printf '#91d7e3' ;;
+    macchiato:sapphire) printf '#7dc4e4' ;;
     macchiato:blue) printf '#8aadf4' ;;
     macchiato:lavender) printf '#b7bdf8' ;;
+    macchiato:text) printf '#cad3f5' ;;
+    macchiato:subtext1) printf '#b8c0e0' ;;
+    macchiato:subtext0) printf '#a5adcb' ;;
+    macchiato:overlay2) printf '#939ab7' ;;
+    macchiato:overlay1) printf '#8087a2' ;;
+    macchiato:overlay0) printf '#6e738d' ;;
+    macchiato:surface2) printf '#5b6078' ;;
+    macchiato:surface1) printf '#494d64' ;;
+    macchiato:surface0) printf '#363a4f' ;;
+    macchiato:base) printf '#24273a' ;;
+    macchiato:mantle) printf '#1e2030' ;;
+    macchiato:crust) printf '#181926' ;;
+    mocha:rosewater) printf '#f5e0dc' ;;
+    mocha:flamingo) printf '#f2cdcd' ;;
+    mocha:pink) printf '#f5c2e7' ;;
     mocha:mauve) printf '#cba6f7' ;;
     mocha:red) printf '#f38ba8' ;;
+    mocha:maroon) printf '#eba0ac' ;;
     mocha:peach) printf '#fab387' ;;
+    mocha:yellow) printf '#f9e2af' ;;
+    mocha:green) printf '#a6e3a1' ;;
+    mocha:teal) printf '#94e2d5' ;;
+    mocha:sky) printf '#89dceb' ;;
+    mocha:sapphire) printf '#74c7ec' ;;
     mocha:blue) printf '#89b4fa' ;;
     mocha:lavender) printf '#b4befe' ;;
+    mocha:text) printf '#cdd6f4' ;;
+    mocha:subtext1) printf '#bac2de' ;;
+    mocha:subtext0) printf '#a6adc8' ;;
+    mocha:overlay2) printf '#9399b2' ;;
+    mocha:overlay1) printf '#7f849c' ;;
+    mocha:overlay0) printf '#6c7086' ;;
+    mocha:surface2) printf '#585b70' ;;
+    mocha:surface1) printf '#45475a' ;;
+    mocha:surface0) printf '#313244' ;;
+    mocha:base) printf '#1e1e2e' ;;
+    mocha:mantle) printf '#181825' ;;
+    mocha:crust) printf '#11111b' ;;
     latte:*) printf '#8839ef' ;;
     frappe:*) printf '#ca9ee6' ;;
     mocha:*) printf '#cba6f7' ;;
@@ -1249,7 +1750,7 @@ cmd_apply() {
     # The accent role belongs to whichever mode holds the lease right now
     # (accent_role(), the store field a mode declares) — resolved once so every
     # accent-bearing adapter below tints toward the same colour.
-    role=$(accent_role)
+    role=$(accent_role "$palette")
     # Keep the BASELINE in the store so the shell and the script never
     # disagree about what the desk shows with no lease held, even in auto
     # mode. A lease is never written here: a mode holds a palette the way it
@@ -1270,7 +1771,7 @@ cmd_apply() {
     apply_btop "$palette"
     apply_zathura "$palette"
     apply_rofi "$palette"
-    apply_wlogout "$palette"
+    apply_wlogout "$palette" "$role"
     apply_zen "$palette" "$role"
     apply_obsidian "$palette" "$role"
     apply_linear "$palette"
@@ -1335,8 +1836,23 @@ cmd_wallpaper() {
     cmd_apply
 }
 
+# Returns the basename of the image currently displayed on an output by awww.
+displayed_wallpaper() {
+    local out=$1 line img
+    have "$AWWW" || return 0
+    sandboxed && [ -z "${THEME_AWWW-}" ] && return 0
+    line=$("$AWWW" query 2>/dev/null | grep -E "^: $out:" || true)
+    [ -n "$line" ] || return 0
+    img=${line##*currently displaying: image: }
+    [ -n "$img" ] || return 0
+    img=$(printf '%s' "$img" | tr -d '\r\n')
+    img=${img##*/}
+    img=${img#"${out}_"}
+    printf '%s' "$img"
+}
+
 # `,theme.sh wallpaper list [P]`: the palette's set and each known monitor's
-# current pick, as JSON — `{palette, monitors: {NAME: {current, index}}, count,
+# current pick, as JSON — `{palette, monitors: {NAME: {current, index, blur}}, count,
 # items}`. Shared resolve_wallpaper/palette_wallpaper_files with the cycle
 # commands and `status`, so none of them can disagree about what is bound.
 cmd_wallpaper_list() {
@@ -1350,17 +1866,28 @@ cmd_wallpaper_list() {
     [ -n "$outs" ] || outs='*'
     read -r -a outs_arr <<<"$outs" # see apply_wallpaper: "*" is a literal, not a glob
     for out in "${outs_arr[@]}"; do
-        local cur idx=-1 rel=null fits
+        local cur idx=-1 rel=null fits live_file b
         cur=$(resolve_wallpaper "$palette" "$out")
+        if [ "$palette" = "$(resolve)" ]; then
+            live_file=$(displayed_wallpaper "$out")
+            if [ -n "$live_file" ]; then
+                if [ -f "$CONFIG/hypr/wallpapers/$palette/$live_file" ]; then
+                    cur="$CONFIG/hypr/wallpapers/$palette/$live_file"
+                elif [ -f "$CONFIG/hypr/wallpapers/$live_file" ]; then
+                    cur="$CONFIG/hypr/wallpapers/$live_file"
+                fi
+            fi
+        fi
         if [ -n "$cur" ] && [ -f "$cur" ]; then
             rel=$(jq -n --arg f "$(relativize "$cur" "$CONFIG/hypr/wallpapers")" '$f')
             idx=$(printf '%s' "$items" | jq --arg n "$(basename "$cur")" '[.[].name] | index($n) // -1')
         fi
+        b=$(get_monitor_blur "$out")
         # Which of the pool's own images fit this output — the same subset
         # next/prev/random draw from.
         fits=$(palette_fitting_files "$palette" "$out" | jq -R -s 'split("\n") | map(select(length > 0) | (split("/") | last))')
-        monitors=$(jq -n --argjson base "$monitors" --arg o "$out" --argjson f "$rel" --argjson i "$idx" --argjson fits "$fits" \
-            '$base * {($o): {current: $f, index: $i, fits: $fits}}')
+        monitors=$(jq -n --argjson base "$monitors" --arg o "$out" --argjson f "$rel" --argjson i "$idx" --argjson fits "$fits" --argjson b "$b" \
+            '$base * {($o): {current: $f, index: $i, fits: $fits, blur: $b}}')
     done
     jq -n --arg p "$palette" --argjson monitors "$monitors" --argjson items "$items" --argjson count "$count" \
         '{palette: $p, monitors: $monitors, count: $count, items: $items}'
@@ -1381,7 +1908,7 @@ cmd_wallpaper_cycle() {
         cycle_one_output "$op" "$palette" "$out"
     done
     if [ "$palette" = "$(resolve)" ]; then
-        apply_wallpaper "$palette" "$(accent_role)"
+        apply_wallpaper "$palette" "$(accent_role "$palette")"
     fi
     sandboxed || write_result
 }
@@ -1438,6 +1965,27 @@ cycle_one_output() {
     echo "wallpaper[$out]: $palette -> $newfile ($((idx + 1))/$len)"
 }
 
+# `,theme.sh wallpaper blur <sigma> [palette] [--output NAME]`: sets the blur
+# sigma (0..48; 0 disables blur) for one monitor or globally, persists it to
+# theme.json, and repaints live if $palette is currently resolved.
+cmd_wallpaper_blur() {
+    local sigma=$1 palette=$2 out=${3-}
+    if [ -n "$out" ] && [ "$out" != "*" ]; then
+        put "$(jq -n --arg o "$out" --argjson b "$sigma" '{wallpaper_blurs: {($o): $b}}')"
+        echo "wallpaper_blur[$out]: $sigma"
+        if [ "$palette" = "$(resolve)" ]; then
+            apply_wallpaper_output "$palette" "$(accent_role "$palette")" "$out"
+        fi
+    else
+        put "$(jq -n --argjson b "$sigma" '{wallpaper_blur: $b}')"
+        echo "wallpaper_blur: $sigma"
+        if [ "$palette" = "$(resolve)" ]; then
+            apply_wallpaper "$palette" "$(accent_role "$palette")"
+        fi
+    fi
+    sandboxed || write_result
+}
+
 cmd_status() {
     printf 'store     %s\n' "$STATE"
     printf 'mode      %s\n' "$(get mode auto)"
@@ -1487,6 +2035,31 @@ wallpaper)
         else
             cmd_wallpaper_cycle "$sub" "$palette" "$output"
         fi
+        ;;
+    blur)
+        shift
+        sigma=${1-} palette="" output=""
+        [ -n "$sigma" ] || die "wallpaper blur requires a sigma (0..48)"
+        case "$sigma" in
+        '' | *[!0-9]*) die "invalid blur sigma '$sigma' — must be integer 0..48" ;;
+        esac
+        [ "$sigma" -gt 48 ] && sigma=48
+        shift
+        while [ $# -gt 0 ]; do
+            case "$1" in
+            --output)
+                output=${2-}
+                shift 2
+                ;;
+            *)
+                palette=$1
+                shift
+                ;;
+            esac
+        done
+        [ -n "$palette" ] || palette=$(resolve)
+        is_palette "$palette" || die "unknown palette '$palette'"
+        cmd_wallpaper_blur "$sigma" "$palette" "$output"
         ;;
     *)
         cmd_wallpaper "${1-}" "${2-}"
