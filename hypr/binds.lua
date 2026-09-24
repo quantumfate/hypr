@@ -122,16 +122,28 @@ hyprfocus_binds.bind(bind.parse_mods({ config.main_mod, config.tertiary_mod }) .
   hl.dispatch(hl.dsp.window.float())
 end, { description = "Toggle floating", submap_universal = true })
 
--- A project used to be a tmux session that outlived its window, so closing one
--- asked whether to take the project down too. A project is now its windows:
--- the last one closing ends it, and nothing survives to ask about. So this is
--- the plain compositor close again — which is also what lets an editor with
+-- Closing a window, and closing a group, are two different actions on one
+-- key — decided by what is actually focused, not by a mode.
+--
+-- Ungrouped: the plain compositor close, which is what lets an editor with
 -- unsaved work put its own prompt on screen instead of losing it.
-hyprfocus_binds.bind(
-  config.main_mod .. " + semicolon",
-  hl.dsp.window.close(),
-  { description = "Close focused window", submap_universal = true }
-)
+--
+-- Grouped: the whole group goes, behind a confirmation. Taking a group down
+-- one tab at a time was never what the key meant on a project, and doing it
+-- that way left the group half-closed and its adapter records naming windows
+-- that no longer exist. `,kill-group` asks first and hands a project to
+-- `,proj.sh kill`, so an nvim tab is still asked to quit through its own
+-- socket rather than having its terminal torn down under it.
+hyprfocus_binds.bind(config.main_mod .. " + semicolon", function()
+  local w = hl.get_active_window()
+  local members = w and w.group and w.group.members
+  members = (members and members.title) and { members } or (members or {})
+  if #members > 1 then
+    hl.dispatch(hl.dsp.exec_cmd((",kill-group %s"):format(w.address)))
+    return
+  end
+  hl.dispatch(hl.dsp.window.close())
+end, { description = "Close focused window (or its whole group)", submap_universal = true })
 
 -- === The short path ===
 --
@@ -195,27 +207,65 @@ do
     end
   end
 
+  -- One key per template role, keyed by its own first letter. The tree name
+  -- is what makes the key withholdable on its own (hypr/lib/submap.lua's
+  -- `e.tree`), so a role the focused project has no window for can have its
+  -- key taken away rather than sitting there doing nothing.
+  local SLOT_KEYS = { nvim = "n", yazi = "y", zsh = "z", run = "r" }
+  local function slot_tree(role)
+    return "project:slot:" .. role
+  end
+
+  ---Hold every slot key whose window does not exist right now, and release
+  ---the ones that do.
+  ---
+  ---The target is the guard. These keys used to be a fixed pair (nvim and
+  ---run) that existed whatever was focused: `y`/`z` were missing for windows
+  ---the template does have, and `n`/`r` were offered on a window with no such
+  ---tab and on windows that are not a project at all. Which-key must render
+  ---the set that works (AGENTS.md "Keybindings and which-key"), so the
+  ---cheatsheet is re-dumped from the enabled set in the same pass.
+  local function refresh_slot_keys()
+    local w = hl.get_active_window()
+    local class = project.focused_class(w)
+    local windows = class and hl.get_windows() or {}
+    for role in pairs(SLOT_KEYS) do
+      local live = class ~= nil and project.slot_address(windows, class, role) ~= nil
+      hyprfocus_binds.hold(slot_tree(role), not live)
+    end
+    pcall(require("hypr.lib.whichkey").dump, hyprfocus_binds.loaded())
+  end
+
+  ---@param role string
+  ---@return SubmapEntry
+  local function slot_entry(role)
+    return {
+      key = SLOT_KEYS[role],
+      tree = slot_tree(role),
+      desc = ("Focus the active project's %s window"):format(role),
+      action = function()
+        focus_project_slot(role)
+      end,
+    }
+  end
+
   submap.tree({
     name = "project",
     desc = "Projects",
+    -- Recomputed on every entry rather than on window focus: this is the
+    -- moment the keys are about to be offered, and it is the moment the
+    -- overlay renders them.
+    on_enter = refresh_slot_keys,
     entries = {
       -- No window name: the project's own template decides which tab it lands
-      -- on (`.proj.toml` in the repo, or its `projects.json` entry).
+      -- on (`.proj.toml` in the repo, or its `projects.json` entry). Never
+      -- held — opening a project is what this submap is for, and it is valid
+      -- whatever is focused.
       bind.project_entry("p", nil, "Open a project (its default window)"),
-      {
-        key = "n",
-        desc = "Focus the active project's nvim window",
-        action = function()
-          focus_project_slot("nvim")
-        end,
-      },
-      {
-        key = "r",
-        desc = "Focus the active project's run window",
-        action = function()
-          focus_project_slot("run")
-        end,
-      },
+      slot_entry("nvim"),
+      slot_entry("yazi"),
+      slot_entry("zsh"),
+      slot_entry("run"),
       -- Scopes are declared per project (.proj.toml's `[scopes]`, synced
       -- into the store — docs/... next to projects.schema.json): a name,
       -- a command, and the `slot:<name>` role tag it spawns with. The
@@ -592,7 +642,10 @@ do
       return
     end
     local tiles = deck_tiles(scene)
-    local index = nav.tile_index(tiles, w.address)
+    -- By the window, not its address: focus on any group member but the
+    -- representative used to miss the tile entirely and scrolling did
+    -- nothing on a grouped column.
+    local index = nav.tile_index_for_window(tiles, w)
     local tile = index and tiles[index]
     if not tile then
       return

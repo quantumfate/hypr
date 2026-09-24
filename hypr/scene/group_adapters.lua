@@ -165,6 +165,50 @@ local function dofus_order(members)
   return ordered
 end
 
+---Project template order (`hypr/lib/project.lua`'s `TEMPLATE_ROLES`): a
+---project's tabs sit nvim, yazi, zsh, run, whatever order the spawns
+---happened to land in. The default adapter orders by join order, which for a
+---project is arrival noise -- the roles are declared and their positions
+---mean something, so a reopened project should not shuffle its tabs.
+---
+---A member with no `slot:` tag (still being stamped) and a declared scope
+---(`slot:<name>` the template does not name) both sort after the template,
+---in join order, so an on-demand scope lands at the end rather than
+---displacing a tab.
+---@param members { address: string, title: string?, tags: string[]? }[]
+---@param ctx table?
+---@return string[]
+local function project_order(members, ctx)
+  local project = require("hypr.lib.project")
+  local joined = default_order(members, ctx)
+  local rank = {}
+  for i, address in ipairs(joined) do
+    rank[address] = i
+  end
+  local by_address = {}
+  for _, m in ipairs(members) do
+    by_address[m.address] = m
+  end
+
+  local ordered = {}
+  for _, address in ipairs(joined) do
+    ordered[#ordered + 1] = address
+  end
+  table.sort(ordered, function(a, b)
+    local ia = project.template_index(project.slot_role((by_address[a] or {}).tags))
+    local ib = project.template_index(project.slot_role((by_address[b] or {}).tags))
+    if ia and ib then
+      return ia < ib
+    end
+    -- A template role always precedes a scope; two scopes keep join order.
+    if ia or ib then
+      return ia ~= nil
+    end
+    return (rank[a] or 0) < (rank[b] or 0)
+  end)
+  return ordered
+end
+
 M.default = { order = default_order, enter = default_enter }
 
 ---Keyed by class rather than scene/block name: a group is one class set
@@ -176,11 +220,30 @@ M.registry = {
   ["Dofus.x64"] = { order = dofus_order, enter = default_enter },
 }
 
+---Adapters for a whole family of classes, matched as Lua patterns in order.
+---A project's class carries its own name (`Proj-<name>`), so the exact-match
+---registry above can never name one.
+M.patterns = {
+  { pattern = "^Proj%-", adapter = { order = project_order, enter = default_enter } },
+}
+
 ---The adapter for a member class, or the default.
 ---@param class string?
 ---@return GroupAdapter
 function M.for_class(class)
-  return (class and M.registry[class]) or M.default
+  if not class then
+    return M.default
+  end
+  local exact = M.registry[class]
+  if exact then
+    return exact
+  end
+  for _, entry in ipairs(M.patterns) do
+    if class:match(entry.pattern) then
+      return entry.adapter
+    end
+  end
+  return M.default
 end
 
 ---A live `HL.Group`'s members as `{ address, title }`, normalized the way
@@ -193,7 +256,9 @@ function M.normalize_members(group)
   raw = (raw and raw.title) and { raw } or (raw or {})
   local members = {}
   for _, m in ipairs(raw) do
-    members[#members + 1] = { address = m.address, title = m.title }
+    -- `tags` travels too: an adapter that orders by role (the project one)
+    -- reads it, and dropping it here left that adapter with nothing to sort by.
+    members[#members + 1] = { address = m.address, title = m.title, tags = m.tags }
   end
   return members
 end

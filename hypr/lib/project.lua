@@ -16,6 +16,45 @@ local M = {}
 
 M.CLASS_PREFIX = "Proj-"
 
+---The fixed template roles, in the order a project's tabs should sit.
+---Mirrors `bin/,proj.sh`'s `TEMPLATE_WINDOWS` the same way `class_for`
+---mirrors its `class_for`: both sides agree without either shelling out to
+---the other. A project's declared scopes are not here — they are opened on
+---demand and have no declared position, so they sort after the template in
+---the order they joined.
+M.TEMPLATE_ROLES = { "nvim", "yazi", "zsh", "run" }
+
+---The role a `slot:<role>` tag names, or nil for any other tag.
+---@param tags string[]?
+---@return string?
+function M.slot_role(tags)
+  for _, tag in ipairs(tags or {}) do
+    -- Hyprland renders a tag it applied itself with a trailing `*`; match
+    -- the role without it.
+    local role = tag:match("^slot:([^*]+)")
+    if role then
+      return role
+    end
+  end
+  return nil
+end
+
+---Where `role` sits in the template, or nil for a scope (anything the
+---template does not name).
+---@param role string?
+---@return integer?
+function M.template_index(role)
+  if not role then
+    return nil
+  end
+  for i, name in ipairs(M.TEMPLATE_ROLES) do
+    if name == role then
+      return i
+    end
+  end
+  return nil
+end
+
 ---Hyprland matches classes as regex, so `,proj.sh`'s `class_for` keeps to
 ---[A-Za-z0-9_-] — mirrored here so both sides agree on one project's class
 ---without either shelling out to the other.

@@ -152,6 +152,38 @@ function M.tile_index(tiles, address)
   return nil
 end
 
+---The tile `w` stands in, resolving a group member to its group's tile.
+---
+---A deck tile names one address per thing (`layout.collapse_groups` keeps
+---each group's FIRST member as its representative), so looking a focused
+---window up by its own address finds nothing whenever focus sits on any
+---other member of a group — which is every member but one. `mod+ctrl+j/k`
+---read that as "not on the deck" and did nothing at all on a grouped tile.
+---Match the whole group, not just the address that happens to represent it.
+---@param tiles Nav.Tile[]
+---@param w HL.Window
+---@return integer?
+function M.tile_index_for_window(tiles, w)
+  if not w or not w.address then
+    return nil
+  end
+  local index = M.tile_index(tiles, w.address)
+  if index then
+    return index
+  end
+  local members = w.group and w.group.members
+  members = (members and members.title) and { members } or (members or {})
+  for _, member in ipairs(members) do
+    if member.address then
+      index = M.tile_index(tiles, member.address)
+      if index then
+        return index
+      end
+    end
+  end
+  return nil
+end
+
 ---The neighbouring tile in `dir` ("left"|"right"), or nil at the edge — the
 ---caller's cue to continue onto the adjacent monitor.
 ---@param tiles Nav.Tile[]

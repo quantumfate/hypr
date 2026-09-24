@@ -140,6 +140,55 @@ function M.size(name)
   return #(trees[name] or {})
 end
 
+-- Trees withheld by something other than the mode: a leaf whose target does
+-- not exist right now (a project tab the focused project has no window for).
+-- A mode names what it takes and enables the rest, so without recording these
+-- separately the next mode apply would hand back a key with nothing behind
+-- it. Keyed by tree name, same vocabulary `admit` speaks.
+---@type table<string, true>
+local held = {}
+
+-- What the last `admit` took, so `M.loaded()` can answer "which trees work
+-- right now" without re-running admission.
+---@type table<string, true>
+local mode_withheld = {}
+
+---Hold or release one tree independently of the mode's own admission
+---(LEO: contextual project binds). A held tree stays disabled across a mode
+---apply; releasing it hands it back unless the mode withholds it too.
+---@param name string
+---@param on boolean true = hold (disable), false = release
+function M.hold(name, on)
+  if name == ROOT or name == MODES then
+    return
+  end
+  if on then
+    held[name] = true
+  else
+    held[name] = nil
+  end
+  local off = held[name] == true or mode_withheld[name] == true
+  for _, handle in ipairs(trees[name] or {}) do
+    pcall(function()
+      handle:set_enabled(not off)
+    end)
+  end
+end
+
+---Every tree whose binds actually work right now: what `M.names()` knows,
+---minus what the mode withheld and minus what is held. This is the set the
+---cheatsheet must render, so the keys it shows are the keys that fire.
+---@return table<string, true>
+function M.loaded()
+  local out = {}
+  for _, name in ipairs(M.names()) do
+    if not mode_withheld[name] and not held[name] then
+      out[name] = true
+    end
+  end
+  return out
+end
+
 ---Withhold exactly the named trees, and enable everything else.
 ---
 ---The default is on, and that is the load-bearing part. A tree the
@@ -164,9 +213,10 @@ function M.admit(withheld)
     end
   end
 
+  mode_withheld = drop
   local disabled = {}
   for _, name in ipairs(M.names()) do
-    local off = drop[name] == true
+    local off = drop[name] == true or held[name] == true
     if off then
       disabled[#disabled + 1] = name
     end
@@ -186,6 +236,8 @@ end
 function M.reset()
   trees = {}
   stack = { ROOT }
+  held = {}
+  mode_withheld = {}
 end
 
 return M

@@ -135,4 +135,39 @@ t.describe("Dofus adapter: team roster order", function()
   end)
 end)
 
+t.describe("the project adapter", function()
+  ---@param address string
+  ---@param role string?
+  ---@return table
+  local function slot(address, role)
+    -- Hyprland renders its own tags with a trailing `*`; carry that, so the
+    -- spec exercises the shape the live window table actually hands over.
+    return { address = address, title = address, tags = role and { "slot:" .. role .. "*" } or {} }
+  end
+
+  t.it("is chosen by the class pattern, whatever the project is called", function()
+    t.eq(true, group_adapters.for_class("Proj-hypr") ~= group_adapters.default)
+    t.eq(true, group_adapters.for_class("Proj-security-and-privacy") ~= group_adapters.default)
+    t.eq(true, group_adapters.for_class("Kitty-Main") == group_adapters.default)
+  end)
+
+  t.it("sits the tabs in template order, not the order they spawned", function()
+    local members = { slot("0x4", "run"), slot("0x1", "zsh"), slot("0x2", "nvim"), slot("0x3", "yazi") }
+    local order = group_adapters.for_class("Proj-hypr").order(members, { group_key = "0x1" })
+    t.eq({ "0x2", "0x3", "0x1", "0x4" }, order)
+  end)
+
+  t.it("puts a declared scope after the template, in join order", function()
+    local members = { slot("0x9", "test"), slot("0x2", "nvim"), slot("0x1", "zsh") }
+    local order = group_adapters.for_class("Proj-hypr").order(members, { group_key = "k" })
+    t.eq({ "0x2", "0x1", "0x9" }, order)
+  end)
+
+  t.it("leaves a member still being stamped at the end rather than dropping it", function()
+    local members = { slot("0x8", nil), slot("0x2", "nvim") }
+    local order = group_adapters.for_class("Proj-hypr").order(members, { group_key = "k" })
+    t.eq({ "0x2", "0x8" }, order)
+  end)
+end)
+
 return t

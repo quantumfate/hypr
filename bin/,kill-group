@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# ,kill-group — close every window of one Hyprland group, once.
+#
+# `mod+;` on a grouped window used to close exactly the focused tab, which on
+# a project meant taking a group down one window at a time and leaving the
+# rest behind. Closing a whole group is a different action from closing a
+# window, so it asks first.
+#
+# A project group is not closed here: `,proj.sh kill` already knows how to end
+# one, and an nvim tab is asked to quit through its own socket rather than
+# having its terminal torn down under it (bin/,proj.sh "nvim"). This delegates
+# rather than reimplementing that, so unsaved work keeps its prompt.
+#
+#   ,kill-group [address]   the focused window's group, or the group holding
+#                           `address`
+#
+# Called from `hypr/binds.lua`; nothing else spawns it.
+set -euo pipefail
+
+die() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+command -v hyprctl >/dev/null 2>&1 || die "kill-group: hyprctl is required"
+command -v jq >/dev/null 2>&1 || die "kill-group: jq is required"
+
+address=${1-}
+if [[ -z $address ]]; then
+    address=$(hyprctl activewindow -j | jq -r '.address // empty')
+fi
+[[ -n $address ]] || exit 0
+
+# `grouped` lists every member of the window's group, the focused one
+# included; an ungrouped window reports an empty list and there is no group to
+# take down.
+read -r class members < <(hyprctl clients -j | jq -r --arg a "$address" '
+    .[] | select(.address == $a)
+    | "\(.class) \((.grouped // []) | join(" "))"')
+[[ -n ${members:-} ]] || exit 0
+
+# A project owns its own teardown, prompt included.
+if [[ $class == Proj-* ]]; then
+    exec ,proj.sh kill "${class#Proj-}"
+fi
+
+count=$(wc -w <<<"$members")
+if [[ ${ASSUME_YES-} != 1 ]]; then
+    picked=$(printf 'no\nyes\n' | {
+        items=$(mktemp) out=$(mktemp)
+        cat >"$items"
+        kitty --class "Kitty-Confirm" --title "Close all $count windows?" \
+            -o confirm_os_window_close=0 \
+            -e "$SHELL" -ic "fzf --prompt='Close all $count windows? ' --reverse --no-preview --height=100% <$items >$out" \
+            >/dev/null 2>&1 || true
+        [[ -s $out ]] && cat "$out"
+        rm -f "$items" "$out"
+    })
+    [[ ${picked:-no} == yes ]] || exit 0
+fi
+
+# The table form: `hl.dsp.window.close("address:x")` ignores its argument and
+# closes whatever is focused (AGENTS.md "Hyprland primitives"), which here
+# would close the same window as many times as the group has members.
+for member in $members; do
+    hyprctl dispatch "hl.dsp.window.close({ window = \"address:$member\" })" >/dev/null || true
+done
