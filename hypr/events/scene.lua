@@ -34,6 +34,7 @@ local hyprfocus = require("hypr.hyprfocus")
 local trace = require("hypr.lib.trace")
 local nav = require("hypr.lib.nav")
 local dock_publish = require("hypr.scene.dock_publish")
+local deck = require("hypr.scene.deck")
 
 local specs = spec_lib.load()
 
@@ -1030,6 +1031,50 @@ hl.on("window.open", function(w)
   end)
 end)
 
+-- Keep the keyboard in the column a closing window is leaving.
+--
+-- Hyprland's own fallback picks whatever is next in its focus history, which
+-- on a deck scene is routinely the OTHER column: closing a project tab landed
+-- focus on the browser instead of on the rest of the project. That is the
+-- same "focus stays in the column" rule `scroll_deck_column` already applies
+-- when the strip moves. A close event still lists the closing window, so it
+-- is excluded by address rather than by absence.
+---@param w HL.Window? the window being closed
+---@param scene_name string?
+local function keep_focus_in_column(w, scene_name)
+  local spec = scene_name and specs[scene_name]
+  if not w or not w.address or not spec or not deck.applies(spec) then
+    return
+  end
+  local leaving = deck.column_for(spec, { class = w.class, tags = w.tags })
+  if not leaving then
+    return
+  end
+  -- A group member first: the rest of the project is what the user was
+  -- working in, and it is already on screen.
+  local members = w.group and w.group.members
+  members = (members and members.title) and { members } or (members or {})
+  for _, member in ipairs(members) do
+    if member.address and member.address ~= w.address then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. member.address }))
+      return
+    end
+  end
+  -- Otherwise anything else standing in the same column on this workspace.
+  local ws_name = w.workspace and w.workspace.name
+  for _, other in ipairs(hl.get_windows() or {}) do
+    if
+      other.address ~= w.address
+      and other.workspace
+      and other.workspace.name == ws_name
+      and deck.column_for(spec, { class = other.class, tags = other.tags }) == leaving
+    then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. other.address }))
+      return
+    end
+  end
+end
+
 hl.on("window.close", function(w)
   local name = w and scene_for(w)
   local fields = window_fields(w, name)
@@ -1045,6 +1090,7 @@ hl.on("window.close", function(w)
   if w and w.group then
     group_adapters.record_leave(grouping.group_key(w), w.address)
   end
+  keep_focus_in_column(w, name)
   -- A remembered spawn source that has closed can no longer be returned to.
   if w and w.address then
     for ws_name, entry in pairs(spawn_source) do

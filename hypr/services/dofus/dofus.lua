@@ -132,15 +132,27 @@ hyprfocus_binds.attribute(
 -- Follow the focused window. `window.active` is the one signal that says the
 -- context changed; the overlay counts as Dofus here because the middle click
 -- answers for it too.
+--
+-- Only when it actually changes. This fires on every focus change on the
+-- desk, and re-dumping the cheatsheet is a file write -- doing that on each
+-- one puts disk IO in the path of ordinary window switching for a state that
+-- is the same nine times out of ten.
+---@type boolean?
+local admitted
 hl.on("window.active", function()
   local wanted = on_dofus() or on_dofus_overlay()
+  if wanted == admitted then
+    return
+  end
+  admitted = wanted
   hyprfocus_binds.hold(WINDOW_TREE, not wanted)
   pcall(require("hypr.lib.whichkey").dump, hyprfocus_binds.loaded())
 end)
 
 -- Nothing is focused yet at config load, so start held rather than letting
 -- the keys exist until the first focus change.
-hyprfocus_binds.hold(WINDOW_TREE, not (on_dofus() or on_dofus_overlay()))
+admitted = on_dofus() or on_dofus_overlay()
+hyprfocus_binds.hold(WINDOW_TREE, not admitted)
 
 -- Press the current member (single click at the cursor across the team).
 dofus_bind("up", function()
