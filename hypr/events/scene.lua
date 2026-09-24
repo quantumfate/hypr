@@ -544,6 +544,26 @@ local function unhold(member, scene_name)
   end
 end
 
+---Whether `w`, or any block peer a grouping decision would fold in with it,
+---is currently parked on the hold workspace.
+---@param w HL.Window?
+---@return boolean
+local function touches_hold(w)
+  local hold = require("hypr.scene.deck_provider").HOLD
+  if not w or not w.class then
+    return false
+  end
+  if w.workspace and w.workspace.name == hold then
+    return true
+  end
+  for _, other in ipairs(hl.get_windows() or {}) do
+    if other.class == w.class and other.workspace and other.workspace.name == hold then
+      return true
+    end
+  end
+  return false
+end
+
 ---Execute one `grouping.decide` decision (LEO-369): `hl.dispatch`/`HL.Group`
 ---calls the spike verified live, never a loop or timer. `seed` folds every
 ---currently ungrouped block peer in the same pass, since a peer that opened
@@ -553,7 +573,31 @@ end
 ---blocks): an ejectable foreigner's class matches no block by definition,
 ---but its workspace still owns a scene whose group it was swallowed into.
 ---@param w HL.Window?
-local function apply_group_decision(w)
+---@param deferred boolean? true on the re-run scheduled below, so a decision
+---defers at most once and can never schedule itself forever
+local function apply_group_decision(w, deferred)
+  -- Bringing a parked member home is `moveToWorkspace`, and dispatching that
+  -- from inside an event pass crashes the compositor: it lands in
+  -- `Layout::ITarget::assignToSpace` while the layout is still mid-assignment
+  -- and trips an assert, which is a SIGSEGV and the whole session (four of
+  -- them before this was traced to the crash report's own backtrace). It is
+  -- the same rule the deck already follows -- never dispatch a property
+  -- change from inside the layout pass -- and grouping has to follow it too.
+  --
+  -- So a decision that would touch a held window is re-run a tick later,
+  -- outside the pass, where the move is an ordinary dispatch. Everything
+  -- else still decides synchronously, which is what keeps an ordinary open
+  -- from flickering through an ungrouped frame.
+  if not deferred and touches_hold(w) then
+    local address = w and w.address
+    require("hypr.lib.hypr").oneshot(1, function()
+      local live = address and hl.get_window("address:" .. address)
+      if live then
+        apply_group_decision(live, true)
+      end
+    end)
+    return
+  end
   local spec = w and w.workspace and specs[w.workspace.name]
   -- A window the deck has parked stands on a hold workspace, which owns no
   -- scene -- so reading the spec from the workspace alone gave a held window
