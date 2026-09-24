@@ -53,6 +53,12 @@ Log-system    slot:errors  slot:kernel  slot:follow
 Nothing here is new engine work: `Log-[A-Za-z0-9_-]+` is a block like
 `Proj-[A-Za-z0-9_-]+`, and the deck already strips a column of groups.
 
+A log group **ends when its last window closes**, exactly like a project
+group: the group is the instantiation of its declaration, derived from the
+windows it holds, never a remembered membership set. Reopening a source is a
+deliberate gesture — a declared key, or the picker. The long-running tail is
+served by keeping the source declared, not by keeping the group alive empty.
+
 ## The document
 
 A log group is declared in its **own** file, not in `.proj.toml`. Two reasons:
@@ -75,8 +81,11 @@ and there is no second mapping to drift. When absent the group stands alone
 and every rule below that mentions a project simply does not apply to it.
 
 Standalone groups need a home for their documents, since they have no repo:
-a log catalogue in the store, populated by an explicit `add`, the same
-deliberate gesture `,proj.sh add` is — nothing scans.
+a **log catalogue** store document of their own, populated by an explicit
+`add`, the same deliberate gesture `,proj.sh add` is — nothing scans. Its own
+document, not a `kind` inside the projects store: the two carry different
+schemas once they are described in CUE, and a log group need not have a
+project to live in — the repo's rule is one document per concern.
 
 ## Direction: the code scene drives
 
@@ -92,6 +101,10 @@ log strip looking for something must not rearrange the work behind it, and a
 strip that reorders under you because you looked at a neighbour is worse than
 no linking at all. The code scene is where the intent lives, so it is the only
 side that pushes.
+
+Opening a project **never spawns** its log group: the bring-forward is an
+ordering act over a group that already exists. Spawning windows nobody asked
+for is a launch, and the desk otherwise avoids it.
 
 An unlinked log group is simply never brought forward by a project swap, and
 scrolling past it changes nothing on `code` either.
@@ -133,14 +146,14 @@ rather than implied. Clicking one focuses that group; it does not move the
    the socket, once the group engine covers what they did. Not before: the
    viewer is the working implementation until the replacement is.
 
-## Open questions
+## Decisions (user, 2026-09-24)
 
-- Where does the standalone catalogue live — its own store document, or a
-  `kind` inside the existing projects store? The two have different schemas,
-  which argues for its own.
-- Does a log group survive its last window, or end like a project does?
-  Ending is consistent; a log you have to reopen after every close may not be
-  what you want from a long-running tail.
-- Should a project opening bring its log group up automatically, or only
-  bring it forward when it already exists? Automatic is convenient and
-  spawns windows nobody asked for, which the desk otherwise avoids.
+- **Catalogue** — standalone log groups live in the store's **own log
+  catalogue document**, not a `kind` inside the projects store: the two carry
+  different schemas, and the repo keeps one document per concern.
+- **Lifecycle** — a log group **ends with its last window**, like a project
+  group. The declaration survives; the runtime group does not. Reopening a
+  source is a deliberate gesture.
+- **Project open** — opening a project **never spawns** its log group; a
+  project swap only brings an existing group forward. The pairing is an
+  ordering act, not a launch.
