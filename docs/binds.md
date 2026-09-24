@@ -29,21 +29,21 @@ just binds-doc
 | `F6`                       | Dofus: activate team member 6                       | contextual           |
 | `F7`                       | Dofus: activate team member 7                       | contextual           |
 | `F8`                       | Dofus: activate team member 8                       | contextual           |
-| `XF86AudioLowerVolume`     | Volume down                                         |                      |
-| `XF86AudioMicMute`         | Mute microphone                                     |                      |
-| `XF86AudioMute`            | Mute output                                         |                      |
-| `XF86AudioNext`            | Media next track                                    |                      |
-| `XF86AudioPause`           | Media play/pause                                    |                      |
-| `XF86AudioPlay`            | Media play/pause                                    |                      |
-| `XF86AudioPrev`            | Media previous track                                |                      |
-| `XF86AudioRaiseVolume`     | Volume up                                           |                      |
-| `XF86MonBrightnessDown`    | Brightness down                                     |                      |
-| `XF86MonBrightnessUp`      | Brightness up                                       |                      |
+| `XF86AudioLowerVolume`     | Volume down                                         | system               |
+| `XF86AudioMicMute`         | Mute microphone                                     | system               |
+| `XF86AudioMute`            | Mute output                                         | system               |
+| `XF86AudioNext`            | Media next track                                    | system               |
+| `XF86AudioPause`           | Media play/pause                                    | system               |
+| `XF86AudioPlay`            | Media play/pause                                    | system               |
+| `XF86AudioPrev`            | Media previous track                                | system               |
+| `XF86AudioRaiseVolume`     | Volume up                                           | system               |
+| `XF86MonBrightnessDown`    | Brightness down                                     | system               |
+| `XF86MonBrightnessUp`      | Brightness up                                       | system               |
 | `mouse:274`                | Dofus: press current member (middle click)          | contextual           |
 | `up`                       | Dofus: press current member                         | contextual           |
 | `ALT+TAB`                  | Alt-tab: next window                                |                      |
-| `ALT+XF86AudioLowerVolume` | Media player volume down                            |                      |
-| `ALT+XF86AudioRaiseVolume` | Media player volume up                              |                      |
+| `ALT+XF86AudioLowerVolume` | Media player volume down                            | system               |
+| `ALT+XF86AudioRaiseVolume` | Media player volume up                              | system               |
 | `ALT+p`                    | Execute hyprpicker to extract hex code              |                      |
 | `ALT+SUPER+F`              | Fullscreen window                                   |                      |
 | `ALT+SUPER+T`              | Toggle floating                                     |                      |
@@ -57,45 +57,45 @@ just binds-doc
 | `SHIFT+right`              | Dofus: next team member                             | contextual           |
 | `SHIFT+ALT+TAB`            | Alt-tab: previous window                            |                      |
 | `SHIFT+CTRL+SUPER+escape`  | Modes: return to neutral                            |                      |
-| `SHIFT+SUPER+TAB`          | Workspace: Previous on this monitor                 |                      |
-| `SHIFT+SUPER+ampersand`    | Move focused window to workspace & on this monitor  |                      |
-| `SHIFT+SUPER+asterisk`     | Move focused window to workspace \* on this monitor |                      |
-| `SHIFT+SUPER+braceleft`    | Move focused window to workspace { on this monitor  |                      |
-| `SHIFT+SUPER+braceright`   | Move focused window to workspace } on this monitor  |                      |
-| `SHIFT+SUPER+bracketleft`  | Move focused window to workspace [ on this monitor  |                      |
-| `SHIFT+SUPER+bracketright` | Move focused window to workspace ] on this monitor  |                      |
-| `SHIFT+SUPER+equal`        | Move focused window to workspace = on this monitor  |                      |
+| `SHIFT+SUPER+TAB`          | Workspace: Previous on this monitor                 | system               |
+| `SHIFT+SUPER+ampersand`    | Move focused window to workspace & on this monitor  | system               |
+| `SHIFT+SUPER+asterisk`     | Move focused window to workspace \* on this monitor | system               |
+| `SHIFT+SUPER+braceleft`    | Move focused window to workspace { on this monitor  | system               |
+| `SHIFT+SUPER+braceright`   | Move focused window to workspace } on this monitor  | system               |
+| `SHIFT+SUPER+bracketleft`  | Move focused window to workspace [ on this monitor  | system               |
+| `SHIFT+SUPER+bracketright` | Move focused window to workspace ] on this monitor  | system               |
+| `SHIFT+SUPER+equal`        | Move focused window to workspace = on this monitor  | system               |
 | `SHIFT+SUPER+h`            | Swap this tile with the one to the left             |                      |
 | `SHIFT+SUPER+j`            | Move this window forward in its group               |                      |
 | `SHIFT+SUPER+k`            | Move this window back in its group                  |                      |
 | `SHIFT+SUPER+l`            | Swap this tile with the one to the right            |                      |
-| `SHIFT+SUPER+parenleft`    | Move focused window to workspace ( on this monitor  |                      |
-| `SHIFT+SUPER+parenright`   | Move focused window to workspace ) on this monitor  |                      |
-| `SHIFT+SUPER+plus`         | Move focused window to workspace + on this monitor  |                      |
-| `SHIFT+SUPER+w`            | Pick a workspace                                    |                      |
+| `SHIFT+SUPER+parenleft`    | Move focused window to workspace ( on this monitor  | system               |
+| `SHIFT+SUPER+parenright`   | Move focused window to workspace ) on this monitor  | system               |
+| `SHIFT+SUPER+plus`         | Move focused window to workspace + on this monitor  | system               |
+| `SHIFT+SUPER+w`            | Pick a workspace                                    | system               |
 | `SUPER+F10`                | Dofus: start double-click                           | contextual           |
 | `SUPER+F11`                | Dofus: stop double-click                            | contextual           |
 | `SUPER+F23`                | Dofus: previous team member                         | contextual           |
-| `SUPER+TAB`                | Workspace: Next on this monitor                     |                      |
-| `SUPER+ampersand`          | Workspace & on this monitor                         |                      |
-| `SUPER+asterisk`           | Workspace \* on this monitor                        |                      |
+| `SUPER+TAB`                | Workspace: Next on this monitor                     | system               |
+| `SUPER+ampersand`          | Workspace & on this monitor                         | system               |
+| `SUPER+asterisk`           | Workspace \* on this monitor                        | system               |
 | `SUPER+b`                  | Open the Browser                                    |                      |
-| `SUPER+braceleft`          | Workspace { on this monitor                         |                      |
-| `SUPER+braceright`         | Workspace } on this monitor                         |                      |
-| `SUPER+bracketleft`        | Workspace [ on this monitor                         |                      |
-| `SUPER+bracketright`       | Workspace ] on this monitor                         |                      |
+| `SUPER+braceleft`          | Workspace { on this monitor                         | system               |
+| `SUPER+braceright`         | Workspace } on this monitor                         | system               |
+| `SUPER+bracketleft`        | Workspace [ on this monitor                         | system               |
+| `SUPER+bracketright`       | Workspace ] on this monitor                         | system               |
 | `SUPER+comma`              | Control centre (theme, wallpaper, sound, focus)     |                      |
 | `SUPER+e`                  | Logs…                                               |                      |
-| `SUPER+equal`              | Workspace = on this monitor                         |                      |
+| `SUPER+equal`              | Workspace = on this monitor                         | system               |
 | `SUPER+f`                  | Modes…                                              |                      |
 | `SUPER+h`                  | Focus the tile to the left                          |                      |
 | `SUPER+j`                  | Focus the next window in this tile                  |                      |
 | `SUPER+k`                  | Focus the previous window in this tile              |                      |
 | `SUPER+l`                  | Focus the tile to the right                         |                      |
 | `SUPER+o`                  | Obsidian…                                           |                      |
-| `SUPER+parenleft`          | Workspace ( on this monitor                         |                      |
-| `SUPER+parenright`         | Workspace ) on this monitor                         |                      |
-| `SUPER+plus`               | Workspace + on this monitor                         |                      |
+| `SUPER+parenleft`          | Workspace ( on this monitor                         | system               |
+| `SUPER+parenright`         | Workspace ) on this monitor                         | system               |
+| `SUPER+plus`               | Workspace + on this monitor                         | system               |
 | `SUPER+r`                  | Open Application Launcher                           |                      |
 | `SUPER+return`             | Open the Terminal                                   |                      |
 | `SUPER+semicolon`          | Close focused window (or its whole group)           |                      |

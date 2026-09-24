@@ -141,7 +141,21 @@ hl.config({
     vrr = 2,
     disable_hyprland_logo = true,
     disable_splash_rendering = true,
-    focus_on_activate = true,
+    -- An application may ask to be focused; it does not get to decide. A
+    -- running app raising itself -- a message arriving, a second window
+    -- opening, a background job finishing -- pulls the keyboard out from
+    -- under whatever the user was actually doing, and an unasked-for focus
+    -- change is the most disruptive thing a desk can do. Focus follows what
+    -- the user opened, and nothing else.
+    --
+    -- This is the activation REQUEST only. A window still takes focus when it
+    -- opens in the ordinary way, so launching something still lands on it;
+    -- the paths that spawn a window nobody asked for suppress that
+    -- themselves (drawers, scene companions, a project's template).
+    --
+    -- `hypr/lib/transition.lua` turns this off for the length of a mode
+    -- bracket and restores what it found, so it keeps working either way.
+    focus_on_activate = false,
     font_family = "Hack Nerd Font Mono",
     size_limits_tiled = true,
     mouse_move_enables_dpms = true,
