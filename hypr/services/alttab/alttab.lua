@@ -45,10 +45,10 @@ function M:bind(bind)
   if bind then
     hl.bind("ALT + TAB", function()
       self:alttab("down")
-    end, { submap_universal = true })
+    end, { submap_universal = true, description = "Alt-tab: next window" })
     hl.bind("ALT + SHIFT + TAB", function()
       self:alttab("up")
-    end, { submap_universal = true })
+    end, { submap_universal = true, description = "Alt-tab: previous window" })
   else
     hl.unbind("ALT + TAB")
     hl.unbind("ALT + SHIFT + TAB")

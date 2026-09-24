@@ -21,8 +21,20 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOC = os.path.join(HERE, "docs", "binds.md")
 
-# Hyprland's modmask bits. Only the ones this desk can actually produce.
-MOD_BITS = {1: "SHIFT", 2: "CAPS", 4: "CTRL", 8: "SUPER", 64: "ALT", 128: "MOD5"}
+# Hyprland's modmask bits, in its own order: ALT is 8 and SUPER is 64, not
+# the other way round. Getting these two backwards inverts the label on every
+# bind the desk actually uses -- `main_mod` is SUPER (conf/base.lua), and it
+# reports as 64.
+MOD_BITS = {
+    1: "SHIFT",
+    2: "CAPS",
+    4: "CTRL",
+    8: "ALT",
+    16: "MOD2",
+    32: "MOD3",
+    64: "SUPER",
+    128: "MOD5",
+}
 
 # The submap exits are created without a description on purpose: they are
 # re-anchored to the root tree rather than owned by the submap they sit in.
