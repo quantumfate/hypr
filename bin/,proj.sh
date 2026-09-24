@@ -476,6 +476,18 @@ own_window_address() {
 reassert_focus_after_picker_closes() { # $1 = picker's own address, $2 = target address
     local picker_addr=$1 addr=$2 tries
     [[ -n $addr ]] || return 0
+    # Not knowing which window the picker was is not a reason to skip the
+    # re-assert: `own_window_address` comes back empty whenever focus has
+    # already moved off the picker, and treating that as "nothing to do" is
+    # exactly the case where focus ends up somewhere the user did not ask
+    # for. Without an address to watch, wait a beat for the picker's own
+    # close to settle and then assert anyway -- `focus_window` re-asserts on
+    # its own, so a slightly early first attempt costs nothing.
+    if [[ -z $picker_addr ]]; then
+        sleep 0.3
+        focus_window "$addr"
+        return 0
+    fi
     for ((tries = 0; tries < 40; tries++)); do
         if hyprctl clients -j 2>/dev/null | jq -e --arg a "$picker_addr" \
             '[.[] | select(.address == $a)] | length == 0' >/dev/null 2>&1; then
@@ -855,8 +867,8 @@ pick_scope() { # $1 = project name (resolved by the caller, before the picker sp
     # A live scope answers at once; a fresh spawn is still mapping, and
     # `current_role_address` waits a bounded beat for it.
     addr=$(current_role_address "$name" "$choice") || addr=""
-    if [[ -n $own_addr && -n $addr ]]; then
-        setsid "$SELF" _reassert-focus "$own_addr" "$addr" </dev/null >/dev/null 2>&1 &
+    if [[ -n $addr ]]; then
+        setsid "$SELF" _reassert-focus "${own_addr-}" "$addr" </dev/null >/dev/null 2>&1 &
         disown
     fi
 }
@@ -928,12 +940,12 @@ pick() { # $1 = window
     # only now that fzf has returned — see `own_window_address`.
     ((inline)) && { own_addr=$(own_window_address) || true; }
     open "$choice" "${1-}"
-    if [[ -n ${own_addr-} ]]; then
+    if ((inline)); then
         # A live window's address answers at once; a fresh project's first
         # spawn is still mapping, and `current_role_address` waits for it.
         target=$(current_role_address "$choice" "${1-}") || target=""
         if [[ -n $target ]]; then
-            setsid "$SELF" _reassert-focus "$own_addr" "$target" \
+            setsid "$SELF" _reassert-focus "${own_addr-}" "$target" \
                 </dev/null >/dev/null 2>&1 &
             disown
         fi
