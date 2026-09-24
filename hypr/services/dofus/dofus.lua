@@ -6,6 +6,17 @@ local ipc = require("hypr.services.dofus.ipc")
 local qs = require("hypr.lib.qs")
 local submap = require("hypr.lib.submap")
 local drawer = require("hypr.lib.drawer")
+local hyprfocus_binds = require("hypr.hyprfocus.binds")
+
+-- The base-layer Dofus keys are contextual: they belong to a Dofus window,
+-- not to the desk. Holding them by tree is what takes them out of the
+-- cheatsheet when no Dofus window is focused -- the pass-through inside
+-- `dofus_bind` already stopped them acting off a client, but a key that
+-- cannot do anything must not be rendered either (AGENTS.md "Keybindings and
+-- which-key"). The two halves stay: the hold is the honest answer, the
+-- pass-through is what still forwards the key in the frame before a focus
+-- change has been observed.
+local WINDOW_TREE = "dofus:window"
 
 local DOFUS_CLASS = "Dofus.x64"
 local OVERLAY_CLASS = "Ankama Launcher"
@@ -44,7 +55,7 @@ end
 ---@param opts DofusBindOpts
 ---@param cond function
 local function dofus_bind(key, action, send_shortcut, opts, cond)
-  hl.bind(key, function()
+  local handle = hyprfocus_binds.bind(key, function()
     if cond() then
       action()
     elseif send_shortcut then
@@ -64,6 +75,8 @@ local function dofus_bind(key, action, send_shortcut, opts, cond)
     transparent = opts.transparent,
     non_consuming = opts.non_consuming,
   })
+  hyprfocus_binds.attribute(handle, WINDOW_TREE)
+  return handle
 end
 
 -- F1..F8 → focus team member N (turn order = team.json order).
@@ -91,7 +104,7 @@ dofus_bind(
     team.iterate(common.team(), true)
   end,
   false,
-  { desc = "Dofus: next team member", send_mods = "SHIFT", send_key = "left", non_consuming = true },
+  { desc = "Dofus: previous team member", send_mods = "SHIFT", send_key = "left", non_consuming = true },
   on_dofus
 )
 dofus_bind("F23", function()
@@ -101,23 +114,33 @@ dofus_bind(config.main_mod .. " + F23", function()
   team.iterate(common.team(), true)
 end, true, { desc = "Dofus: previous team member", send_key = "F23", send_mods = config.main_mod }, on_dofus)
 
-hl.bind("mouse:274", function()
-  if on_dofus() then
-    team.press(common.team())
-  elseif on_dofus_overlay() then
-    hl.dispatch(hl.dsp.send_shortcut({
-      mods = "CTRL",
-      key = "v",
-      window = "activewindow",
-    }))
-  end
-end, { description = "Dofus: press current member (middle click)", non_consuming = true })
+hyprfocus_binds.attribute(
+  hyprfocus_binds.bind("mouse:274", function()
+    if on_dofus() then
+      team.press(common.team())
+    elseif on_dofus_overlay() then
+      hl.dispatch(hl.dsp.send_shortcut({
+        mods = "CTRL",
+        key = "v",
+        window = "activewindow",
+      }))
+    end
+  end, { description = "Dofus: press current member (middle click)", non_consuming = true }),
+  WINDOW_TREE
+)
 
-hl.bind("mouse:274", function()
-  if on_dofus() then
-    team.press(common.team())
-  end
-end, { description = "Dofus: press current member (middle click)", non_consuming = true })
+-- Follow the focused window. `window.active` is the one signal that says the
+-- context changed; the overlay counts as Dofus here because the middle click
+-- answers for it too.
+hl.on("window.active", function()
+  local wanted = on_dofus() or on_dofus_overlay()
+  hyprfocus_binds.hold(WINDOW_TREE, not wanted)
+  pcall(require("hypr.lib.whichkey").dump, hyprfocus_binds.loaded())
+end)
+
+-- Nothing is focused yet at config load, so start held rather than letting
+-- the keys exist until the first focus change.
+hyprfocus_binds.hold(WINDOW_TREE, not (on_dofus() or on_dofus_overlay()))
 
 -- Press the current member (single click at the cursor across the team).
 dofus_bind("up", function()

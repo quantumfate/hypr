@@ -71,6 +71,32 @@ function M.record_root(key, mods, desc)
   node.items[#node.items + 1] = { key = key, mods = sanitize_mods(mods), desc = desc, group = false }
 end
 
+---Re-file a root item under `tree`, so a bind moved out of the root tree
+---takes its cheatsheet row with it.
+---
+---`M.dump` already drops an item whose own `tree` is not loaded; a root item
+---simply never had one, because a bind at the root belongs to the root by
+---definition. A contextual bind breaks that assumption: it is registered at
+---the root (no submap encloses it) but withheld whenever its window is not
+---focused, and without this the key vanished from the compositor while the
+---cheatsheet went on advertising it.
+---@param key string
+---@param mods string[]
+---@param tree string
+function M.attribute_root(key, mods, tree)
+  local node = nodes[RESET]
+  if not node then
+    return
+  end
+  local want = table.concat(sanitize_mods(mods), "+")
+  for _, item in ipairs(node.items) do
+    if item.key == key and table.concat(item.mods or {}, "+") == want then
+      item.tree = tree
+      return
+    end
+  end
+end
+
 ---Record a submap node. `entries` are the raw SubmapEntry tables coming out of
 ---the a tree definition; groups (entries with `entries`) get a `child` so the
 ---renderer can follow nesting.

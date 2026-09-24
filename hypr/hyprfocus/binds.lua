@@ -28,6 +28,11 @@ local trees = {}
 -- belongs to rather than making every nesting level its own tree.
 local stack = { "root" }
 
+-- Root binds that made it into the cheatsheet, by handle, so re-attributing
+-- one can move its row too.
+---@type table<any, { key: string, mods: string[] }>
+local root_items = {}
+
 -- Binds outside any submap. Never withheld: they carry the leader key and the
 -- way out of a submap, so a mode that dropped them would leave a desk with no
 -- way to reach anything.
@@ -80,6 +85,12 @@ function M.bind(pattern, action, opts)
     if desc and not opts.submap_universal then
       local mods, key = split_key(pattern or "")
       whichkey.record_root(key, mods, desc)
+      -- Remembered so `M.attribute` can move the cheatsheet row with the
+      -- bind; a contextual bind is registered here and re-filed straight
+      -- after. A stub that hands back no handle simply records nothing.
+      if handle ~= nil then
+        root_items[handle] = { key = key, mods = mods }
+      end
     end
   end
   trees[name] = trees[name] or {}
@@ -122,6 +133,10 @@ end
 ---@param handle HL.Keybind
 ---@param tree string the tree this bind takes its fate from
 function M.attribute(handle, tree)
+  local root_item = handle ~= nil and root_items[handle] or nil
+  if root_item then
+    whichkey.attribute_root(root_item.key, root_item.mods, tree)
+  end
   for _, handles in pairs(trees) do
     for i, h in ipairs(handles) do
       if h == handle then
@@ -236,6 +251,7 @@ end
 function M.reset()
   trees = {}
   stack = { ROOT }
+  root_items = {}
   held = {}
   mode_withheld = {}
 end
