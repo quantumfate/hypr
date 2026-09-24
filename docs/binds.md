@@ -51,12 +51,12 @@ just binds-doc
 | `ALT+SUPER+m`              | Minimize Window                                     |                      |
 | `ALT+SUPER+mouse:272`      | Move a window with left click                       |                      |
 | `CTRL+SUPER+e`             | Open the power menu (wlogout)                       |                      |
-| `CTRL+SUPER+j`             | Scroll this column to the next thing                |                      |
-| `CTRL+SUPER+k`             | Scroll this column to the previous thing            |                      |
+| `CTRL+SUPER+j`             | Scroll this column to the next thing                | system               |
+| `CTRL+SUPER+k`             | Scroll this column to the previous thing            | system               |
 | `SHIFT+left`               | Dofus: previous team member                         | contextual           |
 | `SHIFT+right`              | Dofus: next team member                             | contextual           |
 | `SHIFT+ALT+TAB`            | Alt-tab: previous window                            |                      |
-| `SHIFT+CTRL+SUPER+escape`  | Modes: return to neutral                            |                      |
+| `SHIFT+CTRL+SUPER+escape`  | Modes: return to neutral                            | system               |
 | `SHIFT+SUPER+TAB`          | Workspace: Previous on this monitor                 | system               |
 | `SHIFT+SUPER+ampersand`    | Move focused window to workspace & on this monitor  | system               |
 | `SHIFT+SUPER+asterisk`     | Move focused window to workspace \* on this monitor | system               |
@@ -65,10 +65,10 @@ just binds-doc
 | `SHIFT+SUPER+bracketleft`  | Move focused window to workspace [ on this monitor  | system               |
 | `SHIFT+SUPER+bracketright` | Move focused window to workspace ] on this monitor  | system               |
 | `SHIFT+SUPER+equal`        | Move focused window to workspace = on this monitor  | system               |
-| `SHIFT+SUPER+h`            | Swap this tile with the one to the left             |                      |
-| `SHIFT+SUPER+j`            | Move this window forward in its group               |                      |
-| `SHIFT+SUPER+k`            | Move this window back in its group                  |                      |
-| `SHIFT+SUPER+l`            | Swap this tile with the one to the right            |                      |
+| `SHIFT+SUPER+h`            | Swap this tile with the one to the left             | system               |
+| `SHIFT+SUPER+j`            | Move this window forward in its group               | system               |
+| `SHIFT+SUPER+k`            | Move this window back in its group                  | system               |
+| `SHIFT+SUPER+l`            | Swap this tile with the one to the right            | system               |
 | `SHIFT+SUPER+parenleft`    | Move focused window to workspace ( on this monitor  | system               |
 | `SHIFT+SUPER+parenright`   | Move focused window to workspace ) on this monitor  | system               |
 | `SHIFT+SUPER+plus`         | Move focused window to workspace + on this monitor  | system               |
@@ -79,30 +79,30 @@ just binds-doc
 | `SUPER+TAB`                | Workspace: Next on this monitor                     | system               |
 | `SUPER+ampersand`          | Workspace & on this monitor                         | system               |
 | `SUPER+asterisk`           | Workspace \* on this monitor                        | system               |
-| `SUPER+b`                  | Open the Browser                                    |                      |
+| `SUPER+b`                  | Open the Browser                                    | system               |
 | `SUPER+braceleft`          | Workspace { on this monitor                         | system               |
 | `SUPER+braceright`         | Workspace } on this monitor                         | system               |
 | `SUPER+bracketleft`        | Workspace [ on this monitor                         | system               |
 | `SUPER+bracketright`       | Workspace ] on this monitor                         | system               |
-| `SUPER+comma`              | Control centre (theme, wallpaper, sound, focus)     |                      |
-| `SUPER+e`                  | Logs…                                               |                      |
+| `SUPER+comma`              | Control centre (theme, wallpaper, sound, focus)     | system               |
+| `SUPER+e`                  | Logs…                                               | tree: logs           |
 | `SUPER+equal`              | Workspace = on this monitor                         | system               |
-| `SUPER+f`                  | Modes…                                              |                      |
-| `SUPER+h`                  | Focus the tile to the left                          |                      |
-| `SUPER+j`                  | Focus the next window in this tile                  |                      |
-| `SUPER+k`                  | Focus the previous window in this tile              |                      |
-| `SUPER+l`                  | Focus the tile to the right                         |                      |
-| `SUPER+o`                  | Obsidian…                                           |                      |
+| `SUPER+f`                  | Modes…                                              | tree: modes          |
+| `SUPER+h`                  | Focus the tile to the left                          | system               |
+| `SUPER+j`                  | Focus the next window in this tile                  | system               |
+| `SUPER+k`                  | Focus the previous window in this tile              | system               |
+| `SUPER+l`                  | Focus the tile to the right                         | system               |
+| `SUPER+o`                  | Obsidian…                                           | tree: obsidian       |
 | `SUPER+parenleft`          | Workspace ( on this monitor                         | system               |
 | `SUPER+parenright`         | Workspace ) on this monitor                         | system               |
 | `SUPER+plus`               | Workspace + on this monitor                         | system               |
-| `SUPER+r`                  | Open Application Launcher                           |                      |
-| `SUPER+return`             | Open the Terminal                                   |                      |
+| `SUPER+r`                  | Open Application Launcher                           | system               |
+| `SUPER+return`             | Open the Terminal                                   | system               |
 | `SUPER+semicolon`          | Close focused window (or its whole group)           |                      |
-| `SUPER+slash`              | Show keybind cheatsheet                             |                      |
-| `SUPER+space`              | Which-key…                                          |                      |
-| `SUPER+t`                  | Open a project (picker)                             |                      |
-| `SUPER+x`                  | Cycle the workspace layout                          |                      |
+| `SUPER+slash`              | Show keybind cheatsheet                             | system               |
+| `SUPER+space`              | Which-key…                                          | system               |
+| `SUPER+t`                  | Open a project (picker)                             | system               |
+| `SUPER+x`                  | Cycle the workspace layout                          | system               |
 
 ## `alttab` submap
 

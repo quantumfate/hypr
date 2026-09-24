@@ -8,6 +8,37 @@
 --- that could bleed between specs, so the only isolation that matters is
 --- resetting `_G.hl` and re-requiring hypr.* modules fresh per spec, which
 --- this does directly rather than paying for a subprocess per spec.
+-- Run in a sandboxed environment, always.
+--
+-- The comment above used to claim the modules under test are pure. They are
+-- not: anything that resolves a path at require-time from the live
+-- environment writes to the REAL desk when a spec loads it. `alttab.lua`
+-- did exactly that -- running the suite overwrote
+-- `$XDG_RUNTIME_DIR/hypr/alttab/input`, the running session's own alt-tab
+-- picker list, with stub windows.
+--
+-- Lua cannot set environment variables, so the guard is a re-exec: without
+-- the marker, hand the whole run to a fresh interpreter with the
+-- user-writable roots pointed at a throwaway directory. `just test` and a
+-- bare `lua tests/run.lua` are both covered, since the guard is here rather
+-- than in the recipe.
+if not os.getenv("HYPR_TEST_SANDBOX") then
+  local sandbox = os.tmpname()
+  os.remove(sandbox)
+  local args = ""
+  for _, a in ipairs(arg or {}) do
+    args = args .. " " .. ("%q"):format(a)
+  end
+  -- `env` rather than a `VAR=x cmd` prefix: the assignments and the command
+  -- have to reach the shell as ONE command, and a prefix split across lines
+  -- is two -- which re-ran this file with the marker still unset, forever.
+  local ok, _, code = os.execute(([[
+    mkdir -p %q && env HYPR_TEST_SANDBOX=1 XDG_RUNTIME_DIR=%q XDG_STATE_HOME=%q QF_STORE=%q lua %q%s;
+    status=$?; rm -rf %q; exit $status
+  ]]):format(sandbox, sandbox, sandbox, sandbox .. "/quantum-store", arg[0], args, sandbox))
+  os.exit(ok and 0 or (code or 1))
+end
+
 package.path = package.path .. ";./?.lua"
 
 local t = require("tests.harness")
