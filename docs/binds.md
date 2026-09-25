@@ -14,7 +14,57 @@ source hopes it does. Regenerate after any bind change:
 just binds-doc
 ```
 
+### Which monitor a workspace key acts on
+
+**A workspace key never changes monitor.** `mod+<key>` (the workspace row),
+`mod+shift+<key>` (move the focused window there) and `mod+TAB` /
+`mod+shift+TAB` (cycle) all resolve their target against ONE screen: the
+monitor the **pointer** is over, falling back to the monitor holding keyboard
+focus, then to the primary when either is one the host ignores
+(`hypr/lib/bind.lua`'s `focused_output`, `hypr/lib/nav.lua`'s `monitor_at`).
+
+The pointer comes first because keyboard focus and the pointer drift apart
+routinely — an app activating itself, a dispatch that focused a window
+elsewhere — and keying off focus meant pressing a workspace key while looking
+at one monitor took the desk to whatever the OTHER monitor had in that
+position (live complaint, 2026-09-25). Where you are pointing is where you
+are.
+
+Crossing monitors is `mod+j` / `mod+k`'s job and nothing else's (plus the
+explicit monitor binds). If a workspace key ever moves you to another screen,
+that is a bug in this resolution, not a feature of the row.
+
+The row's positions are per monitor by construction: position N is the Nth
+scene the active mode places on THAT output, so the same key means different
+scenes on different screens, and a monitor with fewer scenes than a key's
+position makes that key a no-op rather than borrowing another screen's.
+
 ### Where `mod+h`/`mod+l` think you are
+
+Three sources answer "which monitor is the keyboard on", and none is right on
+its own, so `hypr/lib/nav.lua`'s `seat_of` reads them against each other:
+
+| Source                                                   | Lies when                                                                                                                         |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| the active **window**'s own monitor                      | after a cross onto a monitor with no windows — the window left behind keeps reading as active, or focus is on nothing at all      |
+| the compositor's focused **mark** (`monitors[].focused`) | it does not follow a focus that crossed outputs, and a focus dispatch onto an EMPTY monitor does not move it at all (spiked live) |
+| the **seat** (`hypr/events/seat.lua`)                    | nothing has fired since some earlier dispatch — measured live: `seat=DP-2` while the user was typing in a DP-1 window             |
+
+The rule: when the window and the mark **agree**, that is the seat, and the
+window carries the workspace and the tile to step from — a stale seat gets no
+vote. When they **disagree** (or there is no window at all, which is what an
+empty monitor leaves), the event-tracked seat is the tiebreaker, and a seat
+naming a monitor with nothing focused on it means there is no tile to step
+from, only a monitor to step out of.
+
+The seat is tracked from `monitor.focused`, `workspace.active` **and**
+`window.active`, plus `seat.claim` for a cross that lands where the
+compositor emits nothing.
+
+Standing on a non-scene workspace with nothing focused, `h`/`l` cross to the
+adjacent monitor rather than returning: that state IS the empty monitor, there
+is no tile to step between, and returning there is what made the cross
+one-way (live, 2026-09-25).
 
 The seat these two keys step out of is read off the **active window** — its
 own monitor and workspace — never `hl.get_active_monitor()` /
@@ -192,13 +242,12 @@ overwrites the claim, and a live window always outranks both.
 
 ## `focus` submap
 
-5 binds.
+4 binds.
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
 | `escape`       | Leave this submap, back one level             | system               |
-| `f`            | Start work                                    |                      |
-| `i`            | Focus mode status                             |                      |
+| `f`            | Cycle focus mode                              |                      |
 | `s`            | Back to neutral                               |                      |
 | `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
@@ -228,7 +277,7 @@ overwrites the claim, and a live window always outranks both.
 
 ## `logs` submap
 
-13 binds.
+15 binds.
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
@@ -241,20 +290,21 @@ overwrites the claim, and a live window always outranks both.
 | `h`            | hyprfocus decisions                           |                      |
 | `k`            | Kernel ring buffer                            |                      |
 | `l`            | Pick a log source                             |                      |
+| `o`            | Open a log group (picker)                     |                      |
 | `p`            | Previous boot                                 |                      |
 | `w`            | Warnings this boot                            |                      |
 | `x`            | Close all log sessions                        |                      |
+| `SHIFT+d`      | Close the focused log group                   |                      |
 | `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `modes` submap
 
-5 binds.
+4 binds.
 
 | Key            | Does                                          | Where it should live |
 | -------------- | --------------------------------------------- | -------------------- |
 | `escape`       | Leave this submap, back one level             | system               |
 | `g`            | Enter Gaming                                  |                      |
-| `s`            | Enter Study                                   |                      |
 | `w`            | Enter Work                                    |                      |
 | `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
@@ -350,24 +400,19 @@ overwrites the claim, and a live window always outranks both.
 
 ## `shell` submap
 
-14 binds.
+9 binds.
 
-| Key            | Does                                          | Where it should live                         |
-| -------------- | --------------------------------------------- | -------------------------------------------- |
-| `b`            | Toggle notifications                          | tree: shell                                  |
-| `c`            | Open the Control Centre                       | tree: shell                                  |
-| `d`            | Toggle do-not-disturb                         | tree: shell                                  |
-| `escape`       | Leave this submap, back one level             | system                                       |
-| `f`            | Focus mode…                                   | tree: focus (door)                           |
-| `h`            | IPC help                                      | tree: shell                                  |
-| `i`            | Theme info                                    | tree: theme                                  |
-| `m`            | Toggle system monitor                         | tree: shell                                  |
-| `n`            | Next wallpaper                                | tree: theme                                  |
-| `p`            | Previous wallpaper                            | tree: theme                                  |
-| `t`            | Cycle theme                                   | tree: theme                                  |
-| `u`            | Open the System Center                        | tree: shell                                  |
-| `x`            | Diagnose window placement                     | dev-only — does not belong beside daily keys |
-| `SHIFT+escape` | Leave the whole tree, back to the base submap | system                                       |
+| Key            | Does                                          | Where it should live |
+| -------------- | --------------------------------------------- | -------------------- |
+| `b`            | Toggle notifications                          | tree: shell          |
+| `d`            | Toggle do-not-disturb                         | tree: shell          |
+| `escape`       | Leave this submap, back one level             | system               |
+| `f`            | Focus mode…                                   | tree: focus (door)   |
+| `i`            | Theme info                                    | tree: theme          |
+| `m`            | Toggle system monitor                         | tree: shell          |
+| `n`            | Next wallpaper                                | tree: theme          |
+| `p`            | Previous wallpaper                            | tree: theme          |
+| `SHIFT+escape` | Leave the whole tree, back to the base submap | system               |
 
 ## `terminal` submap
 

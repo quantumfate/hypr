@@ -20,9 +20,21 @@
 #   * Icons. The stylesheet's icon paths are only as good as the last theme
 #     apply. If the file is missing entirely, re-render it before opening
 #     rather than showing a menu with no styling at all.
+#   * Size. wlogout stretches its button grid across whatever output it lands
+#     on, so the same menu was a compact panel on the small vertical screen
+#     and a wall of buttons across the ultrawide. The grid is a FIXED box
+#     here: margins are computed from the focused monitor's logical size so
+#     MENU_W x MENU_H of buttons sit centred, whatever the monitor.
 #
 # Exit codes are wlogout's own; the toggle path exits 0.
 set -euo pipefail
+
+# The fixed menu box, in logical pixels: three buttons per row, two rows.
+# Small enough for the narrow vertical panel, so no monitor needs a special
+# case -- a monitor too small for the box falls back to a zero margin.
+MENU_W=${LOGOUT_MENU_W:-600}
+MENU_H=${LOGOUT_MENU_H:-320}
+MENU_COLUMNS=${LOGOUT_MENU_COLUMNS:-3}
 
 CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}"
 LAYOUT="$CONFIG/wlogout/layout"
@@ -55,9 +67,37 @@ if [ ! -f "$STYLE" ] && [ -x "$THEME" ]; then
     "$THEME" apply >/dev/null 2>&1 || true
 fi
 
+# The focused monitor decides the margins, and `-n` keeps the surface on that
+# one output instead of spanning the desk. Without a compositor to ask (the
+# tests, a bare session) the menu opens with wlogout's own full-width grid
+# rather than failing.
+geometry=()
+if command -v "${LOGOUT_HYPRCTL:-hyprctl}" >/dev/null 2>&1; then
+    margins=$("${LOGOUT_HYPRCTL:-hyprctl}" monitors -j 2>/dev/null | MENU_W="$MENU_W" MENU_H="$MENU_H" python3 -c '
+import json, os, sys
+
+monitors = json.load(sys.stdin)
+if not monitors:
+    sys.exit(1)
+focused = next((m for m in monitors if m.get("focused")), monitors[0])
+# Logical pixels: a scaled output reports its physical mode, but wlogout lays
+# out (and takes its margins) in the scaled coordinate space.
+scale = focused.get("scale") or 1
+width = focused["width"] / scale
+height = focused["height"] / scale
+side = max(int((width - int(os.environ["MENU_W"])) / 2), 0)
+top = max(int((height - int(os.environ["MENU_H"])) / 2), 0)
+print(focused.get("id", 0), side, top)
+' 2>/dev/null) || margins=""
+    if [ -n "$margins" ]; then
+        read -r mon side top <<<"$margins"
+        geometry=(-n -P "$mon" -b "$MENU_COLUMNS" -L "$side" -R "$side" -T "$top" -B "$top")
+    fi
+fi
+
 if [ -f "$STYLE" ]; then
-    exec "$WLOGOUT" --protocol layer-shell -l "$LAYOUT" -C "$STYLE" "$@"
+    exec "$WLOGOUT" --protocol layer-shell -l "$LAYOUT" -C "$STYLE" "${geometry[@]}" "$@"
 fi
 
 note "opening unstyled: no stylesheet at $STYLE"
-exec "$WLOGOUT" --protocol layer-shell -l "$LAYOUT" "$@"
+exec "$WLOGOUT" --protocol layer-shell -l "$LAYOUT" "${geometry[@]}" "$@"

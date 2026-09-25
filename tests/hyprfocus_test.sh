@@ -93,7 +93,7 @@ check "neutral pulls in Obsidian's companions without naming them" \
 
 # neutral is hidden: the recovery fallback is never listed as a peer.
 check "every user-facing mode is listed, hidden ones are not" \
-    "gaming study work" \
+    "gaming work" \
     "$(run modes | sed 's/^[* ] *//' | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
 
 # A typo must fail loudly rather than resolving to a desk missing a workspace.
@@ -109,7 +109,7 @@ scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 
 check "seeding installs the declaration" \
-    "seeded $scratch/quantum-store/hyprfocus.json (4 modes)" \
+    "seeded $scratch/quantum-store/hyprfocus.json (3 modes)" \
     "$(QF_STORE=$scratch/quantum-store "$cli" seed "$declaration")"
 
 # The store is edited at runtime, so a seed that clobbered it would throw away

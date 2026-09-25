@@ -186,11 +186,10 @@ Signal, Vesktop, Steam, Lutris and the Ankama Launcher are shelves, not scenes
 
 ### Study
 
-| Monitor   | Workspace         | Scene           | Split                       |
-| --------- | ----------------- | --------------- | --------------------------- |
-| primary   | `code`            | code            | 0.67 group / 0.33 browser   |
-| secondary | `obsidian-linear` | obsidian-linear | 0.50 obsidian / 0.50 linear |
-| primary   | `proton`          | proton          | 0.50 mail / 0.50 pass       |
+Retired for now: the mode was work with one workspace moved, which is not a
+different desk. It is out of the declaration (both the seed and the store), so
+the modes tree offers `work` and `gaming` only. Re-adding it is a mode entry;
+no scene was removed with it.
 
 ### Neutral (hidden)
 
@@ -511,6 +510,12 @@ the contract below is the schema it edits against.
 | `gaps_in`                | number?               | scene-declared inner gap (LEO-397); wins over the host workspace-spec                               |
 |                          |                       | and the global `general:gaps_in` where set                                                          |
 | `gaps_out`               | number? \| CssGap?    | scene-declared outer gap, same precedence as `gaps_in`                                              |
+|                          |                       | Halving a scene's VISIBLE margin takes both rungs: the workspace rule's own `gaps_out` (host        |
+|                          |                       | workspace-spec, `conf/hosts/*.lua`) is stripped from the work area before the layout runs, so a     |
+|                          |                       | scene-only edit cannot shrink past it — `reference` and `media` declare the halved numbers in both  |
+|                          |                       | places. The rule's half needs a `hyprctl reload`; the scene's half lands on the next layout pass.   |
+|                          |                       | A workspace's own gaps never redefine its monitor's resting gap (`geometry.monitor_gaps` reads the  |
+|                          |                       | profile).                                                                                           |
 | `bar_follows_scene_gaps` | boolean?              | while this workspace is active, the bar on its screen subscribes to the gap this                    |
 |                          |                       | workspace actually tiles at (quickshell BarGaps) — the FINAL distance from the monitor edge to the  |
 |                          |                       | scene's outermost visible window. The layout's own gap is one term of that sum: the compositor      |

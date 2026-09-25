@@ -46,6 +46,26 @@ to land — which made the least predictable case the one case with no answer to
 scene, a fact about the mode rather than about how far the placing got, so it
 happens either way: a transition always ends on main.
 
+Landing is per DESK, not per keyboard. Before main is focused, every other
+monitor standing on a workspace the mode does not admit is stood on a scene
+the mode places on that output (`stand_monitors`, traced as
+`admit.monitor_stood`): the first one in declared order that HAS windows,
+else the first placed at all — a screen stood on an admitted but empty scene
+is a screen holding nothing, which `mod+h`/`mod+l` then have to cross into
+and back out of. Without it the second screen kept showing the previous
+mode's workspace — entering gaming left `reference` on the secondary, emptied
+of its windows and withdrawn, still the thing on screen. Monitors are stood
+first and main last, because each is a focus dispatch and the keyboard must
+end where the mode says. A screen already showing one of the mode's own scenes
+is left alone: that is where the user put it.
+
+The same settle re-admits the binding trees for the scene just landed on.
+`phase_binds` runs first in an apply, so it reads the workspace focused BEFORE
+anything moved; entering gaming from `code` therefore admitted code's trees
+and left the dofus submap withheld, and when main was already the active
+workspace no `workspace.active` event followed to correct it — the keys simply
+were not there until the user switched away and back.
+
 The failsafe behind that guards against a bracket that STOPPED, not one that
 is taking its time — each apply phase pets it (`transition.progress`), so a
 heavy swap (ten held windows coming back across two deck scenes) is not cut
@@ -102,7 +122,8 @@ owns the desk): a launcher with explicit focus dispatches pulls focus in the
 bracket's tail, and a service the CLI half just started can map seconds after
 the settle and take focus on open.
 
-The modes a user picks between are `work`, `study` and `gaming`. **Login
+The modes a user picks between are `work` and `gaming` (`study` is retired
+for now — see [scenes.md](scenes.md)). **Login
 always enters `work`**, unless the pointer names a timed mode that is still
 running (`until` in the future), in which case that mode resumes as itself
 and keeps its own `previous` — a stale/expired timed pointer, a missing

@@ -49,7 +49,20 @@ return {
       -- Reference: the browser, moved off `code` so the main monitor is all
       -- work and the second one carries what you read against it. Plain scene
       -- layout -- one window, no strip.
-      { workspace = "7", default_name = "reference", monitor = "secondary" },
+      --
+      -- Half the secondary profile's gaps, declared HERE and not only on the
+      -- scene: the workspace rule's `gaps_out` is subtracted from the work
+      -- area before the layout runs (hypr/lib/geometry.lua's `resolved_gaps`
+      -- walks all four rungs), so a scene-only change cannot shrink the
+      -- outer margin past what the rule already took. The scene declares the
+      -- same halved numbers for its own rung.
+      {
+        workspace = "7",
+        default_name = "reference",
+        monitor = "secondary",
+        gaps_in = 24,
+        gaps_out = { top = 28, right = 32, bottom = 32, left = 32 },
+      },
       -- Proton shared across gaming + work + study modes. The 50/50 split
       -- (mail left, pass companion right) is declared by the scene.
       { workspace = "3", default_name = "proton" },
@@ -70,8 +83,15 @@ return {
       { workspace = "6", default_name = "steam-games" },
       -- Obsidian + Linear side-by-side. Shared by work + study modes.
       { workspace = "8", default_name = "obsidian-linear" }, -- , monitor = "secondary"
-      -- Media: fullscreen media player.
-      { workspace = "11", default_name = "media", monitor = "secondary" },
+      -- Media: fullscreen media player. Halved gaps, both rungs -- see
+      -- `reference` above for why the workspace rule has to carry its half.
+      {
+        workspace = "11",
+        default_name = "media",
+        monitor = "secondary",
+        gaps_in = 24,
+        gaps_out = { top = 28, right = 32, bottom = 32, left = 32 },
+      },
       -- Logs: tmux log workspace, secondary.
       { workspace = "12", default_name = "logs", monitor = "secondary" },
     },

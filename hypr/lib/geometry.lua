@@ -75,20 +75,30 @@ local function side(gap, which, fallback)
   return tonumber(value) or 0
 end
 
----Per-monitor left/right outer gap, read off *resolved* workspace_specs
----(after `M.resolve` has filled each spec's `monitor` and `gaps_out`) rather
----than from any layout-specific option: workspace layouts are `scene` or
----`columns` only (docs/desktop-model.md). The base gap only — never the scene
----layout's own solo widen, which is a transient per-workspace correction, not
----part of a monitor's resting geometry.
+---Per-monitor left/right outer gap: a MONITOR's resting geometry, not any one
+---workspace's. The base gap only — never the scene layout's own solo widen,
+---which is a transient per-workspace correction.
 ---
----Specs share a monitor without disagreeing on its gap in every host file
----today, so the first spec seen for a monitor decides it.
+---The geometry profile is the answer where it has one (`role_gaps` keyed
+---"primary"/"secondary", resolved through `aliases` to output names), because
+---a single workspace that declares its own tighter gaps — `reference` and
+---`media` do — must not redefine the whole monitor for every other surface
+---reading this map. Only a monitor the profile does not name falls back to
+---the resolved specs, first spec seen wins.
 ---@param workspace_specs HL.WorkspaceRuleSpec[] already resolved by M.resolve
 ---@param default_gaps_out integer|table the global `general.gaps_out` a spec with no gap falls back to
+---@param role_gaps table<string, table>? the profile's `gaps_by_monitor`
+---@param aliases table<string, string>? {primary=<output>, secondary=<output>}
 ---@return table<string, {left: integer, right: integer}>
-function M.monitor_gaps(workspace_specs, default_gaps_out)
+function M.monitor_gaps(workspace_specs, default_gaps_out, role_gaps, aliases)
   local monitors = {}
+  for role, gaps in pairs(role_gaps or {}) do
+    local name = (aliases or {})[role]
+    if type(name) == "string" then
+      local left, right = left_right(gaps.gaps_out, default_gaps_out)
+      monitors[name] = { left = left, right = right }
+    end
+  end
   for _, spec in ipairs(workspace_specs) do
     local name = spec.monitor
     if type(name) == "string" and not monitors[name] then

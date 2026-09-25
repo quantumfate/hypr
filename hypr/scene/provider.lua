@@ -265,6 +265,15 @@ function M.publish_arrival(name)
   if not monitor then
     return
   end
+  -- The map this scene settled at last time it stood on this monitor, when
+  -- there is one: its block-docked isles were already correct, and handing
+  -- the bar the RESTING map instead made them fly to the screen frame and
+  -- back on every workspace switch. The arrival's own recalc follows in the
+  -- same breath and refines it if the geometry really changed -- and writes
+  -- nothing when it did not.
+  if dock_publish.republish(monitor.name, scene) then
+    return
+  end
   local gaps_in, gaps_out = gaps(scene)
   local top, right, bottom, left = layout.sides(gaps_out)
   dock_publish.publish({

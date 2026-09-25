@@ -40,6 +40,38 @@ local function ignored_monitors()
   return out
 end
 
+---The workspaces the mode standing right now admits, or nil when no desk has
+---been applied yet (session start, a refused mode).
+---
+---Alt-tab is a way back to something you were just working on, and a mode is
+---the statement that this set of scenes is the desk right now -- offering
+---the gaming windows while work stands makes the picker a list of everything
+---the machine happens to be running, which is what it looked like. The
+---applied desk is read, not the declaration: it is what is actually standing,
+---monitor fallbacks included.
+---
+---Nil, not an empty set, is the "do not filter" answer: a desk that has not
+---applied must show every window rather than none.
+---@return table<string, true>?
+local function mode_workspaces()
+  local ok, hyprfocus = pcall(require, "hypr.hyprfocus")
+  if not ok or not hyprfocus.applied_desk then
+    return nil
+  end
+  local desk = hyprfocus.applied_desk()
+  local scenes = desk and desk.scenes
+  if type(scenes) ~= "table" or #scenes == 0 then
+    return nil
+  end
+  local out = {}
+  for _, placement in ipairs(scenes) do
+    if placement.name then
+      out[placement.name] = true
+    end
+  end
+  return out
+end
+
 ---@param bind boolean
 function M:bind(bind)
   if bind then
@@ -93,11 +125,13 @@ function M:alttab(direction)
   end)
 
   local ignored = ignored_monitors()
+  local admitted = mode_workspaces()
   local lines = {}
   for _, w in ipairs(windows) do
     local ws = w.workspace
     local monitor = ws and ws.monitor and ws.monitor.name
-    if not is_special_workspace(ws) and not (monitor and ignored[monitor]) then
+    local in_mode = admitted == nil or (ws and ws.name and admitted[ws.name] == true)
+    if not is_special_workspace(ws) and not (monitor and ignored[monitor]) and in_mode then
       lines[#lines + 1] = w.address .. "\t" .. w.title
     end
   end

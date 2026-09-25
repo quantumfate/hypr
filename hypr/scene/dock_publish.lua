@@ -24,6 +24,39 @@ local geometry_store = Store.define("geometry")
 -- the published value is derived from live geometry either way.
 local last = {}
 
+-- The last map a REAL pass resolved, per monitor and scene, with the isle
+-- ids it was resolved for. A workspace arrival republishes that map instead
+-- of the resting one, so a scene's block-docked isles do not fly to the
+-- screen frame and back every time you switch to it (live, 2026-09-25).
+--
+-- Only passes carrying tiles feed it: a resting map is a placeholder, and
+-- caching one would hand the next arrival the same jump it is meant to fix.
+--
+-- It deliberately survives `invalidate` and `sweep`: remembering across
+-- visits is the whole point, and a stale entry costs at most one frame --
+-- the arrival's own recalc lands in the same breath and overwrites it. The
+-- isle ids are the one thing checked, because a declaration that added or
+-- removed an isle describes a different bar, not a moved one.
+---@type table<string, table<string, { map: table, ids: string }>>
+local settled = {}
+
+---The declared isle ids of a scene, sorted into one comparable string.
+---@param docks table<string, table>?
+---@return string
+local function isle_ids(docks)
+  local ids = {}
+  for id in pairs(docks or {}) do
+    ids[#ids + 1] = id
+  end
+  table.sort(ids)
+  return table.concat(ids, ",")
+end
+
+-- Forward declaration: `publish` and `republish` both write through it, and
+-- it is defined after them, next to the store it touches.
+---@type fun(monitor_name: string, scene_name: string, resolved: table)
+local write
+
 ---Two published maps, compared by value. Small tables (one entry per declared
 ---isle, five numbers each), so a plain walk is cheaper than encoding both.
 ---@param a table?
@@ -173,15 +206,49 @@ function M.publish(opts)
     gaps_in = opts.gaps_in or 0,
   })
 
-  if same(last[monitor.name], resolved) then
+  -- Only a pass with tiles describes where the isles really sit; a resting
+  -- map never becomes the answer a later arrival is given.
+  if #(opts.tiles or {}) > 0 then
+    settled[monitor.name] = settled[monitor.name] or {}
+    settled[monitor.name][scene.name] = { map = resolved, ids = isle_ids(scene.docks) }
+  end
+
+  write(monitor.name, scene.name, resolved)
+end
+
+---Republish the map this scene settled at last time it was laid out on this
+---monitor, if there is one and it still describes the same isles. Called
+---from a workspace arrival, before any layout pass has run for the scene
+---that just arrived.
+---@param monitor_name string
+---@param scene Scene.Spec
+---@return boolean published whether a remembered map was written
+function M.republish(monitor_name, scene)
+  if not (scene and scene.name) then
+    return false
+  end
+  local remembered = (settled[monitor_name] or {})[scene.name]
+  if not remembered or remembered.ids ~= isle_ids(scene.docks) then
+    return false
+  end
+  write(monitor_name, scene.name, remembered.map)
+  return true
+end
+
+---Write one monitor's resolved map, suppressing an unchanged one.
+---@param monitor_name string
+---@param scene_name string
+---@param resolved table
+function write(monitor_name, scene_name, resolved)
+  if same(last[monitor_name], resolved) then
     return
   end
-  last[monitor.name] = resolved
+  last[monitor_name] = resolved
 
   -- `set` shallow-merges the top-level key. `put` would REPLACE the whole
   -- document, taking `monitors`, `roles` and `workspaces` with it.
   local published = geometry_store:get("docks") or {}
-  published[monitor.name] = resolved
+  published[monitor_name] = resolved
   -- Which scene each monitor is standing in, written from the same pass that
   -- places its windows. The shell needs this to answer "what is on MY
   -- screen": it had been deriving that from workspace EVENTS, a cache that
@@ -191,7 +258,7 @@ function M.publish(opts)
   -- active workspace while a park is in flight. A store key rewritten by the
   -- layout pass cannot drift from the layout.
   local scenes = geometry_store:get("scenes") or {}
-  scenes[monitor.name] = scene.name
+  scenes[monitor_name] = scene_name
   geometry_store:set({ docks = published, scenes = scenes })
 end
 
@@ -214,6 +281,11 @@ function M.sweep(keep)
     if not keep[name] then
       published[name] = nil
       last[name] = nil
+      -- `settled` deliberately survives: remembering where a scene's isles
+      -- sat is the whole point of it, and a scene comes BACK to the monitor
+      -- a sweep just retired. Only a declaration change (`invalidate`) drops
+      -- it, because then the map it remembers may describe isles that no
+      -- longer exist.
       dropped = true
     end
   end

@@ -381,6 +381,167 @@ t.describe("entering a mode", function()
     end
     t.eq(1, lands2, "a desk that held main is not disturbed")
   end)
+
+  t.it("stands every monitor on a scene the mode admits, main last", function()
+    -- Entering a mode moved each scene's workspace to its role's output and
+    -- landed the keyboard on main, but never told the OTHER screen to stop
+    -- showing what it had: the secondary monitor sat on a withdrawn,
+    -- emptied workspace from the previous mode.
+    local declaration = {
+      version = 3,
+      base = DECLARATION.base,
+      modes = {
+        game = {
+          name = "Gaming",
+          main = "gaming",
+          scenes = { { name = "gaming", monitor = "primary" }, { name = "logs", monitor = "secondary" } },
+        },
+      },
+    }
+    local stub, hyprfocus = fresh(declaration)
+    stub.get_monitors = function()
+      return {
+        { name = "DP-1", active_workspace = { name = "code" } },
+        -- Standing on a workspace this mode does not admit.
+        { name = "DP-2", active_workspace = { name = "media" } },
+      }
+    end
+    _G.config = { host = { primary_monitor = "DP-1", secondary_monitor = "DP-2" } }
+    hyprfocus.enter("game")
+    stub:drain()
+
+    local order = {}
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.focus" and d.args[1] and d.args[1].workspace then
+        order[#order + 1] = d.args[1].workspace
+      end
+    end
+    local stood, landed
+    for i, ws in ipairs(order) do
+      if ws == "name:logs" and not stood then
+        stood = i
+      end
+      if ws == "name:gaming" then
+        landed = i
+      end
+    end
+    t.ok(stood, "the secondary monitor was never stood on the mode's own scene")
+    t.ok(landed and landed > stood, "main must be landed AFTER the other screens, or the keyboard ends elsewhere")
+  end)
+
+  t.it("stands a screen on a scene that has windows, not an empty first one", function()
+    -- A screen stood on an admitted-but-empty scene is a screen holding
+    -- nothing, which `mod+h`/`mod+l` then have to cross into and back out
+    -- of. The declared order still decides among occupied scenes.
+    local declaration = {
+      version = 3,
+      base = DECLARATION.base,
+      modes = {
+        game = {
+          name = "Gaming",
+          main = "gaming",
+          scenes = {
+            { name = "gaming", monitor = "primary" },
+            { name = "logs", monitor = "secondary" },
+            { name = "media", monitor = "secondary" },
+          },
+        },
+      },
+    }
+    local stub, hyprfocus = fresh(declaration)
+    stub.get_monitors = function()
+      return {
+        { name = "DP-1", active_workspace = { name = "gaming" } },
+        { name = "DP-2", active_workspace = { name = "code" } },
+      }
+    end
+    stub.get_workspaces = function()
+      return {
+        { name = "logs", windows = 0 },
+        { name = "media", windows = 2 },
+      }
+    end
+    _G.config = { host = { primary_monitor = "DP-1", secondary_monitor = "DP-2" } }
+    hyprfocus.enter("game")
+    stub:drain()
+
+    local stood
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.focus" and d.args[1] then
+        local ws = d.args[1].workspace
+        if ws == "name:logs" or ws == "name:media" then
+          stood = stood or ws
+        end
+      end
+    end
+    t.eq("name:media", stood, "the empty scene was stood on instead of the occupied one")
+  end)
+
+  t.it("leaves a monitor already standing on one of the mode's scenes alone", function()
+    local declaration = {
+      version = 3,
+      base = DECLARATION.base,
+      modes = {
+        game = {
+          name = "Gaming",
+          main = "gaming",
+          scenes = { { name = "gaming", monitor = "primary" }, { name = "logs", monitor = "secondary" } },
+        },
+      },
+    }
+    local stub, hyprfocus = fresh(declaration)
+    stub.get_monitors = function()
+      return {
+        { name = "DP-1", active_workspace = { name = "gaming" } },
+        -- Already on an admitted scene: where the user put it, not ours to
+        -- argue with.
+        { name = "DP-2", active_workspace = { name = "logs" } },
+      }
+    end
+    _G.config = { host = { primary_monitor = "DP-1", secondary_monitor = "DP-2" } }
+    hyprfocus.enter("game")
+    stub:drain()
+
+    local to_logs = 0
+    for _, d in ipairs(stub.dispatched) do
+      if d.name == "dsp.focus" and d.args[1] and d.args[1].workspace == "name:logs" then
+        to_logs = to_logs + 1
+      end
+    end
+    t.eq(0, to_logs, "a screen already on an admitted scene was re-stood anyway")
+  end)
+
+  t.it("admits the landing scene's trees, not the ones focused before the switch", function()
+    -- `phase_binds` runs first in an apply, so it reads the workspace focused
+    -- BEFORE the mode placed anything: entering game from `code` admitted
+    -- code's trees and left `dofus` withheld. When main is already the active
+    -- workspace no `workspace.active` event follows either, so the keys
+    -- stayed missing until the user switched away and back.
+    local declaration = {
+      version = 3,
+      base = DECLARATION.base,
+      modes = {
+        game = {
+          name = "Gaming",
+          main = "gaming",
+          scenes = { { name = "gaming", monitor = "primary" }, { name = "logs", monitor = "secondary" } },
+          bindings = { remove = { "llm" } },
+        },
+      },
+    }
+    local stub, hyprfocus = fresh(declaration)
+    -- Standing on `code` when the switch is asked for, and nothing moves the
+    -- keyboard afterwards — the compositor answers the same either way.
+    stub.get_active_workspace = function()
+      return { name = "code" }
+    end
+    hyprfocus.enter("game")
+    stub:drain()
+
+    local loaded = require("hypr.hyprfocus.binds").loaded()
+    t.ok(loaded["dofus"], "the landing scene's own tree is admitted at the settle")
+    t.ok(not loaded["llm"], "and the mode's removal still holds")
+  end)
 end)
 
 t.describe("scene-set refusal", function()

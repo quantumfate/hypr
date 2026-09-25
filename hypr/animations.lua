@@ -42,17 +42,26 @@ hl.animation({ leaf = "layersIn", enabled = true, speed = 4, bezier = "easeOutQu
 hl.animation({ leaf = "layersOut", enabled = true, speed = 1.5, bezier = "linear", style = "fade" })
 hl.animation({ leaf = "fadeLayersIn", enabled = true, speed = 1.79, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeLayersOut", enabled = true, speed = 1.39, bezier = "almostLinear" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "default" })
--- Vertical slide, load-bearing for the deck now (LEO-402), not merely
--- decorative: every deck member lives on one workspace, and scrolling is
--- exactly a member's box moving from the visible slot to off-screen (and
--- back) -- an ordinary reposition, so `windowsMove` is the only leaf that
--- ever fires for it. `slide top` (07a8540) landed before that mechanism
--- existed and was unverified for ordinary horizontal moves elsewhere on
--- the desk (a scene block re-tiling, say); it stands unchanged here because
--- removing it would silence the deck's scroll entirely, but it is still the
--- one thing worth checking live if some other window's move ever reads
--- wrong -- see docs/deck.md's live-verification note.
-hl.animation({ leaf = "windowsMove", enabled = true, speed = 4, bezier = "default", style = "slide top" })
+-- A workspace change is a cut, not a slide. The workspace animation moved
+-- the whole scene in from an edge, and with `windowsMove`'s `slide top` gone
+-- it was the rest of the same complaint: the desk jumped on every switch
+-- (live, 2026-09-25). Disabling the parent leaf takes `workspacesIn`/
+-- `workspacesOut` with it -- neither is overridden here, so both inherit it.
+-- Window moves WITHIN a workspace still animate (`windowsMove` below); this
+-- is only about the workspace arriving.
+hl.animation({ leaf = "workspaces", enabled = false })
+-- No `style`: a move animates from where the window WAS to where it is
+-- going. `slide top` (07a8540) forced every move to come from the top edge
+-- instead, and that fires for far more than the deck -- a workspace change
+-- re-tiles its windows, so the whole scene was dragged up and dropped back
+-- on every switch (live complaint, 2026-09-25, and the previous comment
+-- here named this as the thing to check if a move ever read wrong).
+--
+-- The deck's scroll (LEO-402) does not need the style and keeps its slide:
+-- flipping is an ordinary `window.move` between the visible slot and the
+-- off-screen hold, and this leaf animates that reposition either way --
+-- docs/deck.md's "the slide is therefore free" is about the leaf, never
+-- about its style.
+hl.animation({ leaf = "windowsMove", enabled = true, speed = 4, bezier = "default" })
 hl.animation({ leaf = "specialWorkspaceIn", enabled = true, speed = 5, bezier = "default", style = "slidefadevert" })
 hl.animation({ leaf = "specialWorkspaceOut", enabled = true, speed = 5, bezier = "defout", style = "slidefadevert" })

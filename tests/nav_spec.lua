@@ -376,6 +376,87 @@ t.describe("ignored monitors", function()
     t.eq("DP-2", nav.adjacent_monitor(ordered, "DP-1", "left").name)
   end)
 
+  t.it("read the seat off the tracked monitor, not off a window left behind", function()
+    -- The regression this pins: crossing `mod+l` onto a monitor with no
+    -- windows leaves the previous monitor's window still reading as active
+    -- (`no_focus_fallback` puts the keyboard on nothing), so preferring the
+    -- window sent the opposite key back into the monitor just left -- "no
+    -- coming back with mod+l". The compositor's mark HAS followed the cross
+    -- here, so window and mark disagree and the seat breaks the tie.
+    local monitors = {
+      { name = "DP-2", focused = true, active_workspace = { name = "logs" } },
+      { name = "DP-1", active_workspace = { name = "code" } },
+    }
+    local left_behind = { address = "0x1", monitor = { name = "DP-1" }, workspace = { name = "code" } }
+
+    local monitor, ws, w = nav.seat_of(monitors, "DP-2", left_behind, nil)
+    t.eq("DP-2", monitor.name, "the seat names the monitor")
+    t.eq("logs", ws, "and the workspace is the one that monitor shows")
+    t.eq(nil, w, "there is no window to step from on an empty monitor")
+  end)
+
+  t.it("ignore a stale seat while the window and the compositor agree", function()
+    -- The other direction, and the reason the seat is not simply trusted:
+    -- nothing has fired since an earlier dispatch left the seat on DP-2,
+    -- while the keyboard is demonstrably in a window on DP-1 (measured live:
+    -- seat=DP-2 with DP-1 focused and typing).
+    local monitors = {
+      { name = "DP-2", active_workspace = { name = "logs" } },
+      { name = "DP-1", focused = true, active_workspace = { name = "code" } },
+    }
+    local here = { address = "0x9", monitor = { name = "DP-1" }, workspace = { name = "code" } }
+
+    local monitor, ws, w = nav.seat_of(monitors, "DP-2", here, nil)
+    t.eq("DP-1", monitor.name, "a stale seat does not get a vote when the two fresh sources agree")
+    t.eq("code", ws)
+    t.eq("0x9", w.address)
+  end)
+
+  t.it("prefer the window's own monitor when the compositor's mark is stale", function()
+    -- LEO-372's half: the mark does not follow a focus that crossed outputs,
+    -- so it still says DP-1 while the keyboard is in a DP-2 window. The seat
+    -- (event-tracked) has seen the crossing and agrees with the window.
+    local monitors = {
+      { name = "DP-2", active_workspace = { name = "reference" } },
+      { name = "DP-1", focused = true, active_workspace = { name = "code" } },
+    }
+    local w = { address = "0x7", monitor = { name = "DP-2" }, workspace = { name = "reference" } }
+
+    local monitor, ws, window = nav.seat_of(monitors, "DP-2", w, nil)
+    t.eq("DP-2", monitor.name)
+    t.eq("reference", ws)
+    t.eq("0x7", window.address, "the window is still the tile to step from")
+  end)
+
+  t.it("fall back to the window, then the pointer, when no seat was recorded", function()
+    local monitors = {
+      { name = "DP-2", active_workspace = { name = "reference" } },
+      { name = "DP-1", active_workspace = { name = "code" } },
+    }
+    local w = { address = "0x3", monitor = { name = "DP-1" }, workspace = { name = "code" } }
+    -- A fresh config load: no focus event has been seen yet, and the
+    -- compositor marks nothing in this fixture.
+    t.eq("DP-1", (nav.seat_of(monitors, nil, w, "DP-2")).name, "the window answers before the pointer")
+    t.eq("DP-2", (nav.seat_of(monitors, nil, nil, "DP-2")).name, "and the pointer answers when nothing is focused")
+    t.eq(nil, nav.seat_of(monitors, nil, nil, nil), "nothing at all is nil, never a guess")
+  end)
+
+  t.it("resolve the monitor a point sits on, in LAYOUT coordinates", function()
+    local monitors = {
+      { name = "DP-2", x = 0, y = 0, width = 2560, height = 1440, scale = 1 },
+      { name = "DP-1", x = 2560, y = 0, width = 5120, height = 1440, scale = 1 },
+      -- A scaled output covers width/scale of the layout, not its pixels:
+      -- read raw, this 1280-wide panel would claim twice its real strip and
+      -- swallow points that belong to nothing.
+      { name = "HDMI-A-1", x = 7680, y = 0, width = 1280, height = 1600, scale = 2 },
+    }
+    t.eq("DP-2", nav.monitor_at(monitors, 10, 10))
+    t.eq("DP-1", nav.monitor_at(monitors, 2560, 700), "the left edge belongs to the monitor it starts")
+    t.eq("HDMI-A-1", nav.monitor_at(monitors, 7700, 100))
+    t.eq(nil, nav.monitor_at(monitors, 8400, 100), "past the scaled panel's real width is no monitor")
+    t.eq(nil, nav.monitor_at(monitors, nil, nil), "no pointer, no answer")
+  end)
+
   t.it("redirect a targeted action to the primary", function()
     t.eq("DP-1", nav.target_monitor(IGNORED, "HDMI-A-1", "DP-1"))
     t.eq("DP-2", nav.target_monitor(IGNORED, "DP-2", "DP-1"))

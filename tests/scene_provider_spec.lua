@@ -317,6 +317,24 @@ t.describe("arrival dock publish", function()
     local docks = geometry()["DP-9"] or {}
     t.eq("resting", (docks["bar.workspaces"] or {}).state, "no boxes yet: the isle rests, it does not guess")
   end)
+
+  t.it("republishes the map the scene settled at, rather than resting again", function()
+    local provider = fresh_arrival("code")
+    -- One real pass, so the block-docked isle resolves against a live box.
+    local window = target("0x1", "Kitty-Main", "code")
+    _G.hl.layouts.scene.recalculate({ area = { x = 0, y = 0, w = 2560, h = 1440 }, targets = { window } })
+    local settled = geometry()["DP-9"]["bar.workspaces"]
+    t.eq("docked", settled.state, "the pass docked the isle")
+
+    -- Leaving and coming back must not walk it to the screen frame and back:
+    -- an arrival hands the bar the map this scene already settled at.
+    require("hypr.scene.dock_publish").sweep({})
+    provider.publish_arrival("code")
+
+    local docks = geometry()["DP-9"] or {}
+    t.eq("docked", (docks["bar.workspaces"] or {}).state, "the remembered map is published, not a resting one")
+    t.eq(settled.anchor, (docks["bar.workspaces"] or {}).anchor, "at the same anchor the pass resolved")
+  end)
 end)
 
 t.describe("edges", function()

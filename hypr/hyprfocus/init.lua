@@ -934,15 +934,107 @@ end
 ---main only if the landing was actually stolen; a desk that stayed put is
 ---left alone.
 ---@param desk Hyprfocus.Desk?
+---Leave every OTHER monitor standing on a scene this mode admits.
+---
+---`M.place` moves each scene's workspace onto its role's output, and
+---`focus_mode_entry` lands the keyboard on the mode's `main` -- but nothing
+---told the second monitor to stop showing the workspace it had. Entering
+---gaming from work left the secondary screen displaying `reference`: a
+---workspace this mode withdrew, emptied of its windows, still the one on
+---screen (live, 2026-09-25). The same happened in reverse going back to work.
+---
+---Only a monitor whose current workspace the mode does NOT admit is moved: a
+---screen already standing on one of the mode's own scenes is where the user
+---put it, and re-standing that would be the desk arguing with them.
+---
+---Every dispatch here focuses, so this runs BEFORE main is landed -- the
+---keyboard ends on main, and each other screen keeps the scene it was just
+---given.
+---@param desk Hyprfocus.Desk
+local function stand_monitors(desk)
+  local admitted = {}
+  for _, name in ipairs(desk.workspaces or {}) do
+    admitted[name] = true
+  end
+
+  -- How many windows each workspace holds, so a screen can be stood on a
+  -- scene that actually has something on it.
+  local occupancy = {}
+  for _, workspace in ipairs(hl.get_workspaces() or {}) do
+    if workspace.name then
+      occupancy[workspace.name] = tonumber(workspace.windows) or 0
+    end
+  end
+
+  -- Which scene each output is stood on: the first one the mode places there
+  -- that HAS windows, else the first placed at all. Declared order is the
+  -- same order the workspace row numbers them in, so this is "the first
+  -- thing on this screen", preferring the one with something to look at --
+  -- standing a monitor on an admitted but empty scene is how the desk ends
+  -- up with a screen holding nothing, which `mod+h`/`mod+l` then have to
+  -- cross into and back out of.
+  local first_for, occupied_for = {}, {}
+  for _, placement in ipairs(desk.scenes or {}) do
+    local output = output_for(placement.monitor)
+    if output then
+      if not first_for[output] then
+        first_for[output] = placement.name
+      end
+      if not occupied_for[output] and (occupancy[placement.name] or 0) > 0 then
+        occupied_for[output] = placement.name
+      end
+    end
+  end
+  for output, name in pairs(occupied_for) do
+    first_for[output] = name
+  end
+
+  for _, monitor in ipairs(hl.get_monitors() or {}) do
+    local active = monitor.active_workspace or monitor.activeWorkspace
+    local standing = active and (active.name or active)
+    local want = first_for[monitor.name]
+    if want and type(standing) == "string" and standing ~= want and not admitted[standing] then
+      pcall(function()
+        hl.dispatch(hl.dsp.focus({ workspace = "name:" .. want }))
+      end)
+      trace.emit({
+        stage = "admit",
+        event = "monitor_stood",
+        decision = "focus",
+        reason = ("%s was standing on %s, which this mode does not admit"):format(monitor.name, standing),
+        mode = desk.mode,
+        monitor = monitor.name,
+        workspace = want,
+      })
+    end
+  end
+end
+
 local function focus_mode_entry(desk)
   if not desk or not desk.main then
     return
   end
   local main = desk.main
+  -- Other screens first, main last: every one of these is a focus dispatch,
+  -- so the order is what leaves the keyboard where the mode says it belongs.
+  stand_monitors(desk)
   local function land(decision, reason)
     local ok = pcall(function()
       hl.dispatch(hl.dsp.focus({ workspace = "name:" .. main }))
     end)
+    -- Re-admit for the scene we just landed on. `phase_binds` runs FIRST in
+    -- an apply, so it reads the workspace focused BEFORE the mode placed
+    -- anything -- entering gaming from code admitted code's trees, and the
+    -- dofus submap stayed withheld until some later `workspace.active`
+    -- happened to re-admit it. When main was already the active workspace no
+    -- such event ever fires, so the keys simply were not there until the user
+    -- switched away and back (live complaint, 2026-09-25).
+    --
+    -- `main` rather than a fresh read of the active workspace: the dispatch
+    -- above is queued, so reading the compositor in the same breath answers
+    -- with the desk as it was. What we asked focus to land on is what the
+    -- keys should be for.
+    pcall(M.apply_bindings, desk.mode, main)
     trace.emit({
       stage = "admit",
       event = "main_focused",

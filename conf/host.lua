@@ -136,7 +136,12 @@ function M.build()
       -- `default_gaps` can't silently drift from what the compositor
       -- actually has loaded; the literal only backs a cold start with
       -- nothing loaded yet.
-      default_gaps_out
+      default_gaps_out,
+      -- The profile decides a monitor's resting gap; a workspace that
+      -- declares tighter gaps of its own (`reference`, `media`) is that
+      -- workspace's business and must not redefine its whole monitor.
+      (config.geometry_profiles[config.profile] or {}).gaps_by_monitor,
+      { primary = config.host.primary_monitor, secondary = config.host.secondary_monitor }
     ),
     -- The scene-aligned bar (`bar_follows_scene_gaps`) subscribes to the value
     -- hyprland actually tiles at: the engine's ladder (scene gaps_out, then the

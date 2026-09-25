@@ -190,7 +190,13 @@ is executed as an ordinary `window.move` dispatch (see "Why hidden windows
 are HELD" below) — moving the newly-visible thing onto the workspace and
 the outgoing one onto the hold workspace — and Hyprland's existing
 `windowsMove` animation leaf (`hypr/animations.lua`, `speed = 4`, default
-bezier) already animates every window move on this desk, this one included.
+bezier) already animates every window move on this desk, this one included. The leaf
+carries no `style`: a style like `slide top` makes every move on the desk
+come from the screen's top edge, which read as the whole scene being dragged
+up and dropped on each workspace change (live complaint, 2026-09-25). The
+flip keeps its slide without one — the leaf animates the reposition itself.
+The `workspaces` leaf is disabled outright for the same reason: a workspace
+arriving is a cut, and sliding the whole scene in made every switch jump.
 The slide is therefore free: nothing in the `flip` module or its provider
 schedules or times an animation, because the compositor already does that
 for the dispatch it issues.

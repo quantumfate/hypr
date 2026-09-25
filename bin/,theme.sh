@@ -751,7 +751,7 @@ apply_wlogout() {
 * {
   font-family: "JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono";
   font-weight: 600;
-  font-size: 15px;
+  font-size: 13px;
   background-image: none;
   box-shadow: none;
   transition: all 0.2s ease;
@@ -761,15 +761,18 @@ window {
   background-color: transparent;
 }
 
+/* The grid's outer size is fixed by \`,logout.sh' (its margins centre a
+   MENU_W x MENU_H box), so these are the paddings INSIDE that box: a tight
+   margin keeps six buttons compact rather than letting them drift apart. */
 button {
   color: $base05;
   background-color: $btn_bg;
   border: 1px solid $btn_border;
-  border-radius: 18px;
-  margin: 10px;
+  border-radius: 14px;
+  margin: 5px;
   background-repeat: no-repeat;
-  background-position: center 30%;
-  background-size: 26%;
+  background-position: center 32%;
+  background-size: 30%;
   outline: none;
 }
 

@@ -46,6 +46,21 @@ hl.on("workspace.active", function(workspace)
   end
 end)
 
+-- A window taking focus is the third event that moves the seat, and the one
+-- that keeps this authoritative rather than merely helpful: without it the
+-- seat could sit on a monitor the keyboard had already left (an app
+-- activating itself elsewhere, a dispatch that focused a window on another
+-- output), and `mod+h`/`mod+l` -- which now trust the seat over the active
+-- window, so that crossing onto an EMPTY monitor is not undone by a window
+-- still reading as active on the monitor just left -- would navigate the
+-- wrong screen.
+hl.on("window.active", function(window)
+  local monitor = window and window.monitor
+  if monitor and monitor.name then
+    monitor_name = monitor.name
+  end
+end)
+
 ---The monitor the keyboard is on, as far as the compositor's events go.
 ---@return string?
 function M.monitor()

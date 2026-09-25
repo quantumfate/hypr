@@ -12,6 +12,18 @@ integrate with the shared state / UI:
   (`qfs theme cycle`, `qfs window rename "..."`, `qfs show`, …). Zsh completion
   `_qfs` lives in the quickshell repo's `completions/`.
 
+- `bin/,logout.sh` — the one entry point for the power menu (the bar's power
+  button, `CTRL+SUPER+e`). It toggles wlogout, names the layout/stylesheet
+  explicitly, and fixes the menu's SIZE: wlogout otherwise stretches its grid
+  over whatever output it lands on, so the same menu was a compact panel on
+  the vertical screen and a wall of buttons across the ultrawide. The script
+  reads the focused monitor's logical size and computes margins that centre a
+  `MENU_W` x `MENU_H` box (600x320 by default, three buttons per row;
+  `LOGOUT_MENU_W`/`LOGOUT_MENU_H`/`LOGOUT_MENU_COLUMNS` override). Without a
+  compositor to ask, it opens with wlogout's own full-width grid rather than
+  failing. The stylesheet is rendered per palette by `,theme.sh
+apply_wlogout`, which owns the paddings INSIDE that box.
+
 - `bin/,proj.sh` — the project manager (tmux is gone from
   here). A project is a set of kitty windows in one Hyprland group on the
   `code` scene — no sessions, no sockets; the project ends when its last

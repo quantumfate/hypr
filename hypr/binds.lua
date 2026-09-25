@@ -5,8 +5,8 @@ local layout_lib = require("hypr.lib.layout")
 local notify = require("hypr.lib.notify")
 local qs = require("hypr.lib.qs")
 local focus_gate = require("hypr.lib.focus_gate")
-local diag = require("hypr.services.diag")
 local hyprfocus_binds = require("hypr.hyprfocus.binds")
+local handlers = require("hypr.lib.handlers")
 
 -- Bumped by every deck-column scroll; the scroll's focus re-asserts are
 -- generation-guarded against it, so a rapid second scroll invalidates the
@@ -538,31 +538,20 @@ do
   ---@param monitors table[] from `hl.get_monitors()`
   ---@return table? monitor, string? workspace_name, HL.Window? active
   local function focused_seat(monitors)
-    local function by_name(name)
-      for _, m in ipairs(monitors) do
-        if m.name == name then
-          return m
-        end
-      end
-      return nil
-    end
-
-    local w = hl.get_active_window()
-    if w and w.monitor and w.monitor.name then
-      local monitor = by_name(w.monitor.name) or hl.get_active_monitor()
-      return monitor, (w.workspace and w.workspace.name) or nav.monitor_workspace(monitor), w
-    end
-
-    local tracked = by_name(seat.monitor())
-    if tracked then
-      return tracked, nav.monitor_workspace(tracked), nil
-    end
-
-    -- Nothing focused and no focus event seen yet (a fresh config load): the
-    -- pointer is the last thing that says where the user is.
+    -- The seat decides the monitor; the active window only supplies the
+    -- workspace and the tile to step from, and only while it is on that
+    -- monitor. `nav.seat_of` holds the whole rule (and its tests) -- see its
+    -- header for why the window cannot be trusted to name the monitor after
+    -- a cross onto an empty one.
     local ok, at_cursor = pcall(hl.get_monitor_at_cursor)
-    local monitor = (ok and at_cursor and by_name(at_cursor.name)) or hl.get_active_monitor()
-    return monitor, monitor and nav.monitor_workspace(monitor), nil
+    local cursor_name = ok and at_cursor and at_cursor.name or nil
+    local monitor, ws_name, w = nav.seat_of(monitors, seat.monitor(), hl.get_active_window(), cursor_name)
+    if monitor then
+      return monitor, ws_name, w
+    end
+    -- Nothing anywhere: the compositor's own mark is the last resort.
+    local marked = hl.get_active_monitor()
+    return marked, marked and nav.monitor_workspace(marked), nil
   end
 
   ---@param dir "left"|"right"
@@ -576,6 +565,16 @@ do
 
     if not scene then
       if not w then
+        -- Standing on a non-scene workspace with nothing focused -- the state
+        -- a cross onto an empty monitor lands in. There is no tile to step
+        -- between, so the only meaningful move is the next monitor over;
+        -- returning here is what made that cross one-way ("no coming back
+        -- with mod+l", live 2026-09-25).
+        local adjacent = adjacent_monitor(monitor, dir)
+        if adjacent then
+          seat.claim(adjacent.name)
+          hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
+        end
         return
       end
       -- Off a scene workspace (scrolling): try the layout's own directional
@@ -956,6 +955,11 @@ submap.tree({
   entries = layout_groups,
 })
 
+-- Forward declaration: the layout-cycle bind below fires this, and it is
+-- defined with the tree it governs (further down, next to the keys).
+---@type fun()
+local refresh_window_management
+
 local function cycle_workspace_layout()
   local layouts = { "scrolling", "scene" }
   local workspace = hl.get_active_special_workspace() or hl.get_active_workspace()
@@ -988,7 +992,12 @@ end
 
 -- Repeatable on purpose: cycling layouts is a "try it and see" action, and
 -- reopening a menu between tries is what made it feel like work.
-hyprfocus_binds.bind(config.main_mod .. " + x", cycle_workspace_layout, {
+hyprfocus_binds.bind(config.main_mod .. " + x", function()
+  cycle_workspace_layout()
+  -- The resize keys follow the layout (see window-management below): the
+  -- cycle is the one moment the layout changes without a workspace event.
+  refresh_window_management()
+end, {
   description = "Cycle the workspace layout",
   submap_universal = true,
 })
@@ -1010,6 +1019,51 @@ submap.tree({
     -- cheatsheet has to explain without offering anything new.
   },
 })
+
+-- Resizing and the layout submap are both meaningless where the scene owns
+-- the geometry. Under the `scene` and `deck` providers every box comes from
+-- the declaration's `share` and is recomputed on the next pass, so a resize
+-- dispatch (or a `layoutmsg` meant for a compositor layout) either does
+-- nothing or is undone a frame later -- keys that press and are ignored,
+-- which is exactly what withholding a tree exists to prevent (AGENTS.md,
+-- which-key renders the set that fires). On a compositor layout (scrolling,
+-- dwindle, ...) they come back.
+do
+  -- The trees that only mean something under a compositor layout: resizing a
+  -- tile, and the per-layout `layoutmsg` ops. Under `scene`/`deck` the
+  -- declaration owns every box, so both are keys that press and do nothing.
+  local SCENE_OWNED = { scene = true, deck = true }
+  local held_trees = { "window-management", "layout" }
+  for _, ls in ipairs(layout_lib.get_submaps()) do
+    -- The layout submap's own children: holding the parent takes the door,
+    -- and naming the children takes their keys with it rather than leaving
+    -- a live tree behind an unreachable room.
+    held_trees[#held_trees + 1] = "layout-" .. ls.layout
+  end
+
+  ---@type boolean?
+  local resizable
+  function refresh_window_management()
+    local ws = hl.get_active_special_workspace() or hl.get_active_workspace()
+    local layout = ws and layout_lib.bare_layout(ws.tiled_layout)
+    local wanted = not (layout and SCENE_OWNED[layout])
+    if wanted == resizable then
+      return
+    end
+    resizable = wanted
+    for _, tree in ipairs(held_trees) do
+      hyprfocus_binds.hold(tree, not wanted)
+    end
+    pcall(require("hypr.lib.whichkey").dump, hyprfocus_binds.loaded())
+  end
+
+  -- The workspace is what carries the layout, so its change is the signal;
+  -- `SUPER+x` cycles the layout under a standing workspace and never fires
+  -- one, so it recomputes on its own.
+  handlers.on("workspace.active", refresh_window_management)
+  handlers.on("monitor.focused", refresh_window_management)
+  refresh_window_management()
+end
 
 -- === Mouse bindings ===
 
@@ -1222,20 +1276,63 @@ bind.exec("slash", "qs -c quantumfate ipc call cheatsheet toggle", {
   submap_universal = true,
 })
 
--- Quickshell control: which-key menu exposing the rest of the shell's IPC
--- surface (theme, cheatsheet, system center). Scene-specific actions live in
--- their own trees; the Dofus tree carries team panel, roster, and store reload.
--- `theme set <palette>` is covered here by `cycle`.
 -- Modes (SUPER+f): entering one is a single action that drives both halves of
 -- the desk — this runtime's workspaces and binding trees, and the command
--- line's background work.
---
--- The entries are built from the declaration rather than listed here, so
--- adding a mode to the store puts it on the key tree without touching this
--- file. Keys are the first free letter of the mode's id, which keeps them
--- predictable without a second table to maintain.
+-- line's background work. Scene-specific actions live in their own trees; the
+-- Dofus tree carries team panel, roster, and store reload.
 local hyprfocus = require("hypr.hyprfocus")
 
+---Enter a mode, reporting the engine's refusal rather than swallowing it.
+---Every key that changes mode goes through here: a mode is both halves of
+---the desk (workspaces and binding trees), so setting the pointer alone
+---would leave the desk describing a mode it is not in.
+---@param id string
+local function enter_mode(id)
+  local _, err = hyprfocus.enter(id)
+  if err then
+    notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
+  end
+end
+
+---The modes a person can ask for, sorted. Hidden modes (neutral) are the
+---resting state, reached by the way-out bind, never offered as a peer.
+---@return string[]
+local function offered_modes()
+  local declaration = hyprfocus.declaration()
+  local ids = {}
+  for id, spec in pairs((declaration or {}).modes or {}) do
+    if not spec.hidden then
+      ids[#ids + 1] = id
+    end
+  end
+  table.sort(ids)
+  return ids
+end
+
+---Step to the next offered mode, wrapping. From neutral (or any mode not in
+---the list) that is the first one, so the key always lands somewhere.
+local function cycle_mode()
+  local ids = offered_modes()
+  if #ids == 0 then
+    notify:notify("hyprfocus: no modes declared", 5000, notify.level.WARNING)
+    return
+  end
+  local current = hyprfocus.active()
+  local next_id = ids[1]
+  for i, id in ipairs(ids) do
+    if id == current then
+      next_id = ids[i % #ids + 1]
+      break
+    end
+  end
+  enter_mode(next_id)
+end
+
+---One explicit key per offered mode, built from the declaration rather than
+---listed here: adding a mode to the store puts it on the tree without
+---touching this file. Keys are the first free letter of the mode's id, which
+---keeps them predictable without a second table to maintain.
+---@return SubmapEntry[]
 local function mode_entries()
   local declaration = hyprfocus.declaration()
   if not declaration then
@@ -1252,16 +1349,7 @@ local function mode_entries()
     }
   end
 
-  local ids = {}
-  for id, spec in pairs(declaration.modes or {}) do
-    -- Hidden modes (neutral) are the fallback, reached by the way-out bind
-    -- below, never offered as a peer.
-    if not spec.hidden then
-      ids[#ids + 1] = id
-    end
-  end
-  table.sort(ids)
-
+  local ids = offered_modes()
   local entries, taken = {}, {}
   for _, id in ipairs(ids) do
     local key
@@ -1278,10 +1366,7 @@ local function mode_entries()
         key = key,
         desc = "Enter " .. (spec.name or id),
         action = function()
-          local _, err = hyprfocus.enter(id)
-          if err then
-            notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
-          end
+          enter_mode(id)
         end,
       }
     end
@@ -1313,10 +1398,7 @@ hyprfocus_binds.bind(
   -- an unknown key — and a bind that fails to create takes the config down.
   bind.parse_mods({ config.main_mod, config.primary_mod, config.secondary_mod, "escape" }),
   function()
-    local _, err = hyprfocus.enter("neutral")
-    if err then
-      notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
-    end
+    enter_mode("neutral")
   end,
   { description = "Modes: return to neutral", submap_universal = true }
 )
@@ -1328,34 +1410,15 @@ submap.tree({
   entries = mode_entries(),
 })
 
+-- No door to the control centre or the system center here: `SUPER+,` opens
+-- the control centre at the root, and a second key for the same window is one
+-- more row the cheatsheet has to explain. Theme cycling and the IPC help dump
+-- are gone with them -- the control centre owns the palette, and the help dump
+-- was a notification nobody read.
 submap.tree({
   name = "shell",
   desc = "Shell / Quickshell",
   entries = {
-    -- The on-demand System Center (LEO-226): settings/actions live in the
-    -- widget, which-key carries the door.
-    {
-      key = "u",
-      desc = "Open the System Center",
-      action = function()
-        qs.call("systemcenter", "toggle")
-      end,
-    },
-    {
-      key = "c",
-      desc = "Open the Control Centre",
-      action = function()
-        qs.call("control", "toggle")
-      end,
-    },
-    {
-      key = "t",
-      desc = "Cycle theme",
-      stay = true,
-      action = function()
-        qs.call("theme", "cycle")
-      end,
-    },
     {
       key = "i",
       desc = "Theme info",
@@ -1379,24 +1442,10 @@ submap.tree({
       action = hl.dsp.exec_cmd(",wallpaper.sh prev"),
     },
     {
-      key = "h",
-      desc = "IPC help",
-      action = function()
-        qs.notify("Quickshell IPC", "help", "all")
-      end,
-    },
-    {
       key = "m",
       desc = "Toggle system monitor",
       action = function()
         qs.call("sysmon", "toggle")
-      end,
-    },
-    {
-      key = "x",
-      desc = "Diagnose window placement",
-      action = function()
-        diag.run()
       end,
     },
     {
@@ -1419,38 +1468,21 @@ submap.tree({
       name = "focus",
       desc = "Focus mode",
       entries = {
-        -- Open-ended work mood (Focus.qml `set work 0`). The explicit "stop"
-        -- bind below is the deliberate way out — firm semantics, no silent
-        -- timeout. The mood centre is the primary picker; this is the
-        -- keyboard's quick entry into the work mood.
-        -- Both go through hyprfocus.enter, not the shell. Setting the
-        -- pointer alone leaves the compositor's half unapplied, so the desk
-        -- would describe a mode it is not actually in.
+        -- Two offered modes is a toggle, not a menu: one key walks the list
+        -- and the state is legible on the bar, so naming each mode here would
+        -- be two keys saying what one already says. The explicit per-mode
+        -- keys live in the modes tree (SUPER+f), built from the declaration.
         {
           key = "f",
-          desc = "Start work",
-          action = function()
-            local _, err = hyprfocus.enter("work")
-            if err then
-              notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
-            end
-          end,
+          desc = "Cycle focus mode",
+          stay = true,
+          action = cycle_mode,
         },
         {
           key = "s",
           desc = "Back to neutral",
           action = function()
-            local _, err = hyprfocus.enter("neutral")
-            if err then
-              notify:notify("hyprfocus: " .. err, 5000, notify.level.ERROR)
-            end
-          end,
-        },
-        {
-          key = "i",
-          desc = "Focus mode status",
-          action = function()
-            qs.notify("Focus mode", "focus", "status")
+            enter_mode("neutral")
           end,
         },
       },

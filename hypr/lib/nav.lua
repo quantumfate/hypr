@@ -534,6 +534,117 @@ function M.target_monitor(ignored, name, primary)
   return name
 end
 
+---The monitor whose logical rect contains a point, or nil when none does.
+---
+---Layout coordinates: a monitor's `x`/`y` are already in them, while
+---`width`/`height` are the mode's pixels, so a scaled output covers
+---width/scale by height/scale of the layout. Reading the raw pixels would
+---make a 1.5x output claim half a screen of space it does not occupy, and a
+---cursor in that phantom strip would resolve to the wrong monitor.
+---@param monitors table[]?
+---@param x number?
+---@param y number?
+---@return string?
+function M.monitor_at(monitors, x, y)
+  if x == nil or y == nil then
+    return nil
+  end
+  for _, monitor in ipairs(monitors or {}) do
+    local scale = tonumber(monitor.scale) or 1
+    if scale <= 0 then
+      scale = 1
+    end
+    local mx, my = monitor.x or 0, monitor.y or 0
+    local w = (tonumber(monitor.width) or 0) / scale
+    local h = (tonumber(monitor.height) or 0) / scale
+    if x >= mx and x < mx + w and y >= my and y < my + h then
+      return monitor.name
+    end
+  end
+  return nil
+end
+
+---Where the keyboard is, for `mod+h`/`mod+l`: the monitor to step out of,
+---the workspace showing on it, and the window to step from (nil when nothing
+---holds the keyboard there).
+---
+---Three sources, none of which is right on its own:
+---
+---  * the active WINDOW knows its own monitor, but it keeps reading as
+---    active after a cross onto a monitor with no windows
+---    (`misc.no_focus_fallback` leaves the keyboard on nothing there), which
+---    is what made that cross one-way -- "no coming back with mod+l";
+---  * the compositor's focused MARK (`monitors[].focused`) does not follow a
+---    focus that crossed outputs, which is the older half of the same story
+---    ("mod+l cannot leave the left monitor");
+---  * the SEAT (`hypr/events/seat.lua`) is tracked from the focus events
+---    themselves and can be claimed ahead of an event that never comes, but
+---    it goes stale when nothing has fired since.
+---
+---So they are read against each other: when the window and the mark AGREE,
+---that is the seat and the window carries the tile context. When they
+---disagree -- exactly the two crossing cases -- the event-tracked seat is
+---the tiebreaker, and a seat that names a monitor with no window on it means
+---there is no tile to step from, only a monitor to step out of.
+---@param monitors table[] from `hl.get_monitors()`
+---@param seat_name string? `seat.monitor()`
+---@param active table? `hl.get_active_window()`
+---@param cursor_name string? the monitor under the pointer, if known
+---@return table? monitor, string? workspace_name, table? window
+function M.seat_of(monitors, seat_name, active, cursor_name)
+  local function by_name(name)
+    for _, m in ipairs(monitors or {}) do
+      if name and m.name == name then
+        return m
+      end
+    end
+    return nil
+  end
+
+  local marked
+  for _, m in ipairs(monitors or {}) do
+    if m.focused then
+      marked = m.name
+      break
+    end
+  end
+
+  local window_monitor = active and active.monitor and active.monitor.name or nil
+  local function with_window(monitor)
+    return monitor, (active.workspace and active.workspace.name) or M.monitor_workspace(monitor), active
+  end
+
+  -- The window and the compositor agree: the ordinary case, and the one
+  -- where a stale seat must not get a vote.
+  if window_monitor and window_monitor == marked then
+    local monitor = by_name(window_monitor)
+    if monitor then
+      return with_window(monitor)
+    end
+  end
+
+  local seat = by_name(seat_name)
+  if seat then
+    if window_monitor == seat.name then
+      return with_window(seat)
+    end
+    return seat, M.monitor_workspace(seat), nil
+  end
+
+  if window_monitor then
+    local monitor = by_name(window_monitor)
+    if monitor then
+      return with_window(monitor)
+    end
+  end
+
+  local monitor = by_name(cursor_name)
+  if monitor then
+    return monitor, M.monitor_workspace(monitor), nil
+  end
+  return nil, nil, nil
+end
+
 ---The monitor focus should return to after a special was relocated off an
 ---ignored monitor: the monitor the user was already on, when it is usable and
 ---not the primary the relocation flashed through. Nil when there is nothing to

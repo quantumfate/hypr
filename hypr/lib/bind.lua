@@ -27,11 +27,26 @@ local function scenes_on_monitor(monitor_output)
   return nav.workspaces_on_monitor(placements, monitor_output)
 end
 
----The output workspace keys act on: the focused monitor, or the primary when
----the focused one is ignored (`config.host.ignored_monitors`).
+---The output workspace keys act on: the monitor the POINTER is over, then the
+---monitor holding keyboard focus, then the primary when either is ignored
+---(`config.host.ignored_monitors`).
+---
+---The pointer comes first because a workspace key must never move you to
+---another screen. Keyboard focus and the pointer drift apart routinely -- an
+---app activating itself, a dispatch that focused a window elsewhere -- and
+---keying off focus meant pressing a workspace key while looking at the left
+---monitor took the desk to whatever the OTHER monitor had in that position
+---(live complaint, 2026-09-25). Where you are pointing is where you are;
+---crossing monitors is `mod+j`/`mod+k`'s job and nothing else's.
 ---@return string?
 function M.focused_output()
   local host = config.host
+  local monitors = hl.get_monitors() or {}
+  local ok, cursor = pcall(hl.get_cursor_pos)
+  local under_cursor = ok and cursor and nav.monitor_at(monitors, cursor.x, cursor.y) or nil
+  if under_cursor and not nav.is_ignored(host.ignored_monitors, under_cursor) then
+    return under_cursor
+  end
   local monitor = hl.get_active_monitor()
   return nav.target_monitor(host.ignored_monitors, monitor and monitor.name, host.primary_monitor)
 end

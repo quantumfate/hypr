@@ -116,6 +116,46 @@ t.describe("alttab", function()
     t.eq({ "0x1" }, picked(dir))
   end)
 
+  t.it("shows only the windows of the mode standing right now", function()
+    local windows = {
+      win("0x1", 1, { id = 1, name = "code", monitor = { name = "DP-1" } }),
+      -- A gaming workspace, still holding its windows while work stands: the
+      -- picker is a way back to what you were working on, not an inventory
+      -- of everything the machine is running.
+      win("0x2", 2, { id = 4, name = "dofus", monitor = { name = "DP-1" } }),
+      win("0x3", 3, { id = 7, name = "reference", monitor = { name = "DP-2" } }),
+    }
+    local press, dir = fresh(windows)
+    package.loaded["hypr.hyprfocus"] = {
+      applied_desk = function()
+        return { scenes = { { name = "code", monitor = "primary" }, { name = "reference", monitor = "secondary" } } }
+      end,
+    }
+
+    press()
+
+    t.eq({ "0x1", "0x3" }, picked(dir))
+  end)
+
+  t.it("shows every window when no desk has been applied yet", function()
+    local windows = {
+      win("0x1", 1, { id = 1, name = "code", monitor = { name = "DP-1" } }),
+      win("0x2", 2, { id = 4, name = "dofus", monitor = { name = "DP-1" } }),
+    }
+    local press, dir = fresh(windows)
+    -- Session start, or a mode that was refused: filtering to nothing would
+    -- leave the picker empty, which is worse than unfiltered.
+    package.loaded["hypr.hyprfocus"] = {
+      applied_desk = function()
+        return nil
+      end,
+    }
+
+    press()
+
+    t.eq({ "0x1", "0x2" }, picked(dir))
+  end)
+
   t.it("treats a nil host.ignored_monitors as no exclusions", function()
     local windows = {
       win("0x1", 1, { id = 1, name = "code", monitor = { name = "DP-1" } }),
