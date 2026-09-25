@@ -514,17 +514,9 @@ do
     hl.dispatch(hl.dsp.focus({ window = "address:" .. address }))
   end
 
-  ---`mod+h`/`mod+l`: gather both monitors' state and hand it to the pure
-  ---decision (`hypr/lib/nav.lua` `M.decide`, LEO-380). Reading the focused
-  ---workspace from `hl.get_active_workspace()` rather than the active
-  ---window's own workspace is what lets this run from an empty workspace,
-  ---where there is no active window to read a workspace off at all
-  ---(`hl.get_active_monitor()`'s object never populates its active workspace —
-  ---unlike an entry from `hl.get_monitors()` — so that field is not a route
-  ---to it either).
-  -- The monitor `mod+h/l` last crossed ONTO when it had nothing to focus
-  -- there. See `focused_seat` for why this is remembered rather than asked.
-  local crossed_to = nil
+  -- Where the keyboard is, tracked from the compositor's own focus events
+  -- (see `focused_seat`).
+  local seat = require("hypr.events.seat")
 
   ---Where the keyboard is, for the purpose of these two keys: the monitor and
   ---the workspace a move steps out of.
@@ -538,13 +530,11 @@ do
   ---left monitor" (live, 2026-09-25).
   ---
   ---The active WINDOW carries its own monitor and workspace, and that is the
-  ---truth whenever something holds the keyboard. When nothing does -- the
-  ---seat just crossed onto an empty monitor, and `no_focus_fallback` means
-  ---the keyboard stays nowhere -- there is nothing in the compositor left to
-  ---ask: the focused-monitor mark did not move, and neither
-  ---`focus({monitor})` nor a workspace focus warps the cursor here. So the
-  ---cross remembers where it went, which is what makes the opposite key come
-  ---back instead of stranding focus on an empty screen forever.
+  ---truth whenever something holds the keyboard. When nothing does -- an
+  ---empty workspace, where `no_focus_fallback` leaves the keyboard on nothing
+  ---at all -- `hypr/events/seat.lua` answers instead: it records the monitor
+  ---from the compositor's own `monitor.focused`/`workspace.active` events,
+  ---which fire correctly in exactly the cases the getters do not.
   ---@param monitors table[] from `hl.get_monitors()`
   ---@return table? monitor, string? workspace_name, HL.Window? active
   local function focused_seat(monitors)
@@ -559,16 +549,17 @@ do
 
     local w = hl.get_active_window()
     if w and w.monitor and w.monitor.name then
-      crossed_to = nil
       local monitor = by_name(w.monitor.name) or hl.get_active_monitor()
       return monitor, (w.workspace and w.workspace.name) or nav.monitor_workspace(monitor), w
     end
 
-    local remembered = crossed_to and by_name(crossed_to)
-    if remembered then
-      return remembered, nav.monitor_workspace(remembered), nil
+    local tracked = by_name(seat.monitor())
+    if tracked then
+      return tracked, nav.monitor_workspace(tracked), nil
     end
 
+    -- Nothing focused and no focus event seen yet (a fresh config load): the
+    -- pointer is the last thing that says where the user is.
     local ok, at_cursor = pcall(hl.get_monitor_at_cursor)
     local monitor = (ok and at_cursor and by_name(at_cursor.name)) or hl.get_active_monitor()
     return monitor, monitor and nav.monitor_workspace(monitor), nil
@@ -601,7 +592,7 @@ do
           -- Same crossing memory as the scene branch: the compositor's
           -- focused-monitor mark does not follow onto a monitor with nothing
           -- to focus, so the way back is remembered here.
-          crossed_to = adjacent.name
+          seat.claim(adjacent.name)
           hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
         end
       end
@@ -641,7 +632,6 @@ do
       target = target,
     })
     if action.kind == "window" then
-      crossed_to = nil
       -- A deck member the strip is hiding is parked on the deck hold and has
       -- to be brought home first -- to ITS OWN scene. Passing this monitor's
       -- workspace name would have moved the neighbour's window onto the
@@ -655,7 +645,7 @@ do
       -- Nothing to focus over there, so the compositor has nowhere to put the
       -- keyboard and its own focused-monitor mark will not move. Remember the
       -- crossing ourselves; the opposite key reads it back.
-      crossed_to = action.name
+      seat.claim(action.name)
       hl.dispatch(hl.dsp.focus({ monitor = action.name }))
     end
   end
@@ -1301,7 +1291,7 @@ end
 
 -- Power menu: root bind, always available, not part of any tree so modes
 -- cannot withhold the way out of the session.
-bind.exec("e", "uwsm app -- wlogout", {
+bind.exec("e", "uwsm app -- ,logout.sh", {
   no_main = true,
   mods = { config.main_mod, config.primary_mod },
   description = "Open the power menu (wlogout)",

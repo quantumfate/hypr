@@ -1,3 +1,4 @@
+require("hypr.events.seat")
 require("hypr.events.start")
 require("hypr.events.opacity")
 require("hypr.events.layout_opts")

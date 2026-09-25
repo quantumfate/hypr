@@ -24,14 +24,20 @@ keys walked the other monitor's tile list and, at that monitor's outer edge,
 found no adjacent monitor and did nothing — "mod+l cannot leave the left
 monitor" (2026-09-25).
 
-When nothing holds the keyboard at all — the seat just crossed onto a monitor
-whose workspace is empty, and `misc.no_focus_fallback` leaves the keyboard
-nowhere — there is nothing left to ask: the compositor's focused-monitor mark
-does not move onto an empty output, and neither `focus({monitor})` nor a
-workspace focus warps the cursor. So the crossing remembers where it went
-(`crossed_to` in `hypr/binds.lua`), and the opposite key reads it back. That
-memory is dropped the moment any window holds focus again — a live window is
-always the truth.
+When nothing holds the keyboard at all — an empty workspace, where
+`misc.no_focus_fallback` leaves the keyboard on nothing — the answer comes
+from [`hypr/events/seat.lua`](../hypr/events/seat.lua), which records the
+monitor from the compositor's own `monitor.focused` and `workspace.active`
+events. Those fire correctly in exactly the cases the getters do not (spiked
+live: focusing another monitor's workspace emitted `monitor.focused(DP-2)`
+while `get_active_monitor()` kept answering DP-1), and
+`hypr/events/layout_opts.lua` names the same trap from its own side.
+
+A cross onto a monitor with nothing to focus claims the seat up front
+(`seat.claim`), because the compositor may emit nothing at all when it has
+nowhere to put the keyboard — without that, the opposite key would navigate
+the monitor being left and find no way back. The next real focus event
+overwrites the claim, and a live window always outranks both.
 
 ## Root — always live
 
