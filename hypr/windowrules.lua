@@ -464,6 +464,33 @@ hl.window_rule({
   no_initial_focus = true,
 })
 
+-- The picker and the confirm prompt are `Proj-` classed too ("picker" and
+-- "confirm" are valid suffixes of the project class pattern), and the rule
+-- above therefore opened both without focus: a prompt the keyboard never
+-- reached. They are asked for directly, one at a time, and a later rule is
+-- the one that stands, so they take their focus back here.
+for _, cls in ipairs(config.apps.declared_group_prompts) do
+  -- A prompt takes the keyboard. It wears the group prefix, so the no-steal
+  -- rule above catches it too, and a picker you cannot type into is useless.
+  hl.window_rule({
+    name = "prompt-takes-focus-" .. cls,
+    match = { initial_class = cls },
+    no_initial_focus = false,
+  })
+  -- ...and a prompt is never a group member. `auto_group` swallows a window
+  -- that opens beside a group whatever its class, and the executor's answer
+  -- to a foreigner in a block's group is to EJECT it -- an `HL.Group:remove`,
+  -- which re-assigns the window's space and is the one call that has taken
+  -- the session down. Opening the picker beside a project group was therefore
+  -- a reliable way to break the formation (live, 2026-09-24). Barring the
+  -- class means the swallow never happens and no eject is ever needed.
+  hl.window_rule({
+    name = "prompt-never-grouped-" .. cls,
+    match = { class = cls },
+    group = "barred",
+  })
+end
+
 -- Hidden holding places stay silent. A window parked on one of these special
 -- workspaces is intentionally out of sight; it must not ask for focus or
 -- respond to activation requests, and if the special workspace itself becomes

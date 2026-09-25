@@ -384,7 +384,22 @@ function M.register(scenes)
   end
   hl.layout.register(NAME, {
     recalculate = function(ctx)
-      place(get_scenes, ctx)
+      -- Contained, always. A raise here does not merely skip one pass: the
+      -- compositor asked this layout where its windows go and got an error
+      -- instead, so the windows of that pass are never placed and fall out of
+      -- the tiling -- which on the desk is a window snapping to floating and
+      -- covering the screen (live complaint, 2026-09-24). One bad pass must
+      -- cost a frame, not the layout. The failure is traced rather than
+      -- swallowed: `,hyprfocus log` shows `arrange.layout_failed`.
+      local ok, err = pcall(place, get_scenes, ctx)
+      if not ok then
+        require("hypr.lib.trace").emit({
+          stage = "arrange",
+          event = "layout_failed",
+          decision = "skip",
+          reason = ("scene layout raised: %s"):format(tostring(err)),
+        })
+      end
     end,
     -- Exists so `hyprctl dispatch layoutmsg <name> recalc` reaches this
     -- provider: Hyprland's CLuaTiledAlgorithm::layoutMsg only calls its own

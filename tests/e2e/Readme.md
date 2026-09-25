@@ -18,6 +18,14 @@ is not headless.
 
 ## Isolation
 
+Two guards stand outside the sandbox itself, because a scenario that never
+reaches `e2e_start` has none of it: `run.sh` refuses any scenario outside
+`tests/e2e/scenarios/`, and it poisons `QF_STORE` before each run so a
+scenario missing the harness writes to a dead path instead of the live
+desk's store. A copy of a scenario run from elsewhere is how that store was
+overwritten once -- its `. ../lib.sh` resolved to nothing and the script
+kept going. `e2e_boot` then asserts `QF_STORE` really is inside its root.
+
 `lib.sh` `e2e_start`:
 
 - makes one `mktemp` root holding `XDG_RUNTIME_DIR`, `XDG_STATE_HOME`,

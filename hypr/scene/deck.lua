@@ -219,6 +219,34 @@ end
 ---@return Scene.Box[] boxes one per visible tile
 ---@return string[] hold addresses of every non-visible deck member — the
 ---executor's cue to move them off the workspace (see module comment)
+---What a tile belongs to on a strip: its DECLARED identity when one applies,
+---the live Hyprland group otherwise.
+---
+---A declared group (`docs/declared-groups.md`) is one thing from its first
+---window's first frame. Reading the live group instead made a project four
+---separate things while its windows were still mapping, and the strip parked
+---three of them before the group could form -- after which they could never
+---join it, because a parked window must not be handed to `HL.Group`. Only a
+---block that actually groups counts: a `group = false` block (the ad-hoc
+---terminals) keeps one thing per window, as before.
+---@param spec Scene.Spec
+---@param tile Scene.Tile
+---@return string?
+function M.thing_key(spec, tile)
+  for _, tag in ipairs(tile.tags or {}) do
+    -- Hyprland renders a tag it applied itself with a trailing `*`.
+    local scene, order = tag:match("^block:([^/]+)/(%d+)")
+    if scene and order then
+      for _, block in ipairs(spec.blocks or {}) do
+        if block.group and tostring(block.order) == order then
+          return ("block:%s/%s"):format(scene, order)
+        end
+      end
+    end
+  end
+  return tile.group
+end
+
 function M.boxes(spec, tiles, area, opts)
   opts = opts or {}
   local gaps_in = opts.gaps_in or 0
@@ -261,11 +289,13 @@ function M.boxes(spec, tiles, area, opts)
   for i, column in ipairs(columns) do
     local width = (i == #columns) and (inner_x + inner_w - cursor) or math.floor(usable * shares[i] + 0.5)
     local stack = stacks[column.order] or {}
-    local representatives, members = layout.collapse_groups(stack)
+    local representatives, members = layout.collapse_groups(stack, function(tile)
+      return M.thing_key(spec, tile)
+    end)
     local index = M.clamp_scroll(scroll[column.order], #representatives)
     for j, rep in ipairs(representatives) do
       if j == index then
-        local group_members = rep.group and members[rep.group]
+        local group_members = members[M.thing_key(spec, rep)]
         if group_members then
           for _, member in ipairs(group_members) do
             boxes[#boxes + 1] = { address = member.address, x = cursor, y = inner_y, w = width, h = inner_h }
@@ -274,7 +304,7 @@ function M.boxes(spec, tiles, area, opts)
           boxes[#boxes + 1] = { address = rep.address, x = cursor, y = inner_y, w = width, h = inner_h }
         end
       else
-        local group_members = rep.group and members[rep.group]
+        local group_members = members[M.thing_key(spec, rep)]
         if group_members then
           for _, member in ipairs(group_members) do
             hold[#hold + 1] = member.address

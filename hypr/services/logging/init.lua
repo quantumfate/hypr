@@ -42,6 +42,25 @@ windowrule.tag_props({
   { initial_class = "(logviewer)" },
 }, "+logs")
 
+-- A log group's windows are `Log-<name>` kitties (`bin/,logs.sh`). They map
+-- unfocused for the same reason a project's do: a group opens because a GROUP
+-- was asked for, and letting each source's window take focus as it maps drags
+-- the keyboard along behind the spawn order (hypr/windowrules.lua's
+-- `project-window-no-steal`). `,logs.sh` focuses the group once, at the end.
+hl.window_rule({
+  name = "log-window-no-steal",
+  match = { initial_class = "Log-[A-Za-z0-9_-]+" },
+  no_initial_focus = true,
+})
+
+-- ...except the picker, which is a prompt: it wears the same class prefix and
+-- would otherwise open without the keyboard (the mistake `Proj-picker` made).
+hl.window_rule({
+  name = "log-prompt-takes-focus",
+  match = { initial_class = "Log-picker" },
+  no_initial_focus = false,
+})
+
 windowrule.tag_set_effects("logs", {
   static = {
     workspace = WORKSPACE,
@@ -72,6 +91,18 @@ submap.tree({
     { key = "p", desc = "Previous boot", action = open("prev") },
     { key = "a", desc = "Audit / denials", action = open("audit") },
     { key = "h", desc = "hyprfocus decisions", action = open_hyprfocus() },
+    -- Declared log GROUPS (docs/logs.md): a document names a group's
+    -- sources, `,logs.sh` instantiates it as one Hyprland group on this
+    -- scene, and the deck column strips the groups one at a time. The
+    -- `logview` entries above are the tmux-backed fixed journal views and
+    -- stay until this has replaced what they do.
+    { key = "o", desc = "Open a log group (picker)", action = hl.dsp.exec_cmd(",logs.sh pick") },
+    {
+      key = "d",
+      mods = { config.secondary_mod },
+      desc = "Close the focused log group",
+      action = hl.dsp.exec_cmd(",logs.sh kill"),
+    },
     {
       key = "g",
       desc = "Go to the logs workspace",

@@ -52,9 +52,17 @@ local function same(a, b)
 end
 
 ---The targets a dock's `of` can name, built from what the layout just placed:
----`block:<order>`, `slot:<slot>` and `class:<class>`, each pointing at the box
----of the first tile that answers to it. A block with no live window names no
----target at all, which is exactly what makes its dock collapse.
+---`block:<order>`, `slot:<slot>`, `class:<class>` and -- on a deck --
+---`column:<order>`, each pointing at the box of the first tile that answers
+---to it. A block with no live window names no target at all, which is exactly
+---what makes its dock collapse.
+---
+---`column:<order>` exists because a deck column is a PLACE and its blocks are
+---not: the strip shows one thing at a time, so `block:6` names a box only
+---while that block's window happens to be the one on screen. An isle anchored
+---to the project column (the tab strip) would therefore dock only when an
+---ad-hoc terminal was the visible thing, and rest wherever it liked the rest
+---of the time. The column is there in every pass.
 ---@param scene Scene.Spec
 ---@param tiles Scene.Tile[]
 ---@param boxes Scene.Box[]
@@ -82,6 +90,12 @@ function M.targets(scene, tiles, boxes, spec_lib)
       if block and block.order then
         local key_block = "block:" .. tostring(block.order)
         targets[key_block] = targets[key_block] or box
+      end
+      -- Nil off a deck, so a plain scene publishes exactly what it did before.
+      local column = require("hypr.scene.deck").column_for(scene, tile)
+      if column and column.order then
+        local key_column = "column:" .. tostring(column.order)
+        targets[key_column] = targets[key_column] or box
       end
     end
   end
@@ -168,7 +182,17 @@ function M.publish(opts)
   -- document, taking `monitors`, `roles` and `workspaces` with it.
   local published = geometry_store:get("docks") or {}
   published[monitor.name] = resolved
-  geometry_store:set({ docks = published })
+  -- Which scene each monitor is standing in, written from the same pass that
+  -- places its windows. The shell needs this to answer "what is on MY
+  -- screen": it had been deriving that from workspace EVENTS, a cache that
+  -- goes stale the moment one is missed (measured: the shell read `loose`
+  -- for a screen standing on `code-deck`, so every scene-scoped widget
+  -- filtered itself down to nothing) and that reports the deck's hold as the
+  -- active workspace while a park is in flight. A store key rewritten by the
+  -- layout pass cannot drift from the layout.
+  local scenes = geometry_store:get("scenes") or {}
+  scenes[monitor.name] = scene.name
+  geometry_store:set({ docks = published, scenes = scenes })
 end
 
 ---Drop the published docks of every monitor not named in `keep`.
@@ -193,8 +217,18 @@ function M.sweep(keep)
       dropped = true
     end
   end
+  -- The scene map goes with the docks: a monitor whose workspace declares no
+  -- docks is not standing in a scene this publishes for either, and a stale
+  -- name there would tell the shell to describe a scene that left.
+  local scenes = geometry_store:get("scenes") or {}
+  for name in pairs(scenes) do
+    if not keep[name] then
+      scenes[name] = nil
+      dropped = true
+    end
+  end
   if dropped then
-    geometry_store:set({ docks = published })
+    geometry_store:set({ docks = published, scenes = scenes })
   end
 end
 

@@ -24,6 +24,8 @@ return {
   workspaces = {
     workspace_specs = {
       { workspace = "1", default = true, default_name = "code" },
+      { workspace = "2", default_name = "knowledge" },
+      { workspace = "7", default_name = "reference", monitor = "secondary" },
       { workspace = "3", default_name = "proton" },
       { workspace = "4", default_name = "dofus" },
       { workspace = "5", default_name = "pokemon" },

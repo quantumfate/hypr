@@ -48,8 +48,16 @@ thing is determined one of two ways:
 
 - **Declared**: an explicit class pattern or self-declared tag names which
   things join a column (the three subscription mechanisms below).
+- **Declared group**: every window carrying the same block identity
+  (`block:<scene>/<order>`, stamped at open) is **one** thing from its first
+  frame, before Hyprland has grouped anything — see
+  [declared-groups.md](declared-groups.md). Identity cannot wait for the
+  compositor: the strip parks what it does not show within milliseconds of a
+  window mapping, so a thing derived from a live group would be parted out
+  before it ever formed.
 - **Derived**: when Hyprland forms a group among a column's subscribed
-  windows, the group itself is the thing from that point on — it counts as
+  windows that no block identity already names, the group itself is the thing
+  from that point on — it counts as
   **one** entry in the strip, never as N. The group keeps its own groupbar
   and its own internal navigation exactly as it does today
   ([scenes.md](scenes.md)'s "Group" and "Group adapters" sections,
@@ -288,6 +296,33 @@ never dispatches. That wiring — the hold workspace, the move on scroll, and
 the bind that changes the scroll index — is the provider chunk's job (see
 columns.md §12 for its merged shape), not this module's.
 
+## A failing pass costs a frame, never the tiling
+
+`recalculate` is wrapped: a raise inside it is traced (`arrange.layout_failed`)
+and the pass is skipped. Unwrapped, the compositor asks the layout where its
+windows go and gets an error instead — so that pass places nothing and its
+windows fall out of the tiling, which on the desk is a window snapping to
+floating and covering the screen. Both providers do this
+(`hypr/scene/provider.lua`, `hypr/scene/deck_provider.lua`).
+
+## Moves leave the layout pass before they are dispatched
+
+`recalculate` **decides** which windows come home and which are parked; it
+never dispatches either. `hypr/scene/deck_provider.lua` queues those moves
+and flushes them a tick later (`queue_move`), outside the callback.
+
+A window move re-enters the layout, and a move dispatched from inside a pass
+lands in `Layout::CWindowTarget::assignToSpace` while the current assignment
+is still in flight — an assert, a SIGSEGV, the session gone. It reached the
+desk as _"a project does not open as a group"_: the grouping executor's
+`HL.Group` call recalculates the deck, the deck moved a window from inside
+that recalculate, and the compositor died mid-grouping (crash report:
+`CGroup::remove` → `assignToSpace`). It is the same rule the grouping
+executor already follows for bringing a held member home, and it now holds
+on both sides of the seam. `hypr/events/scene.lua` also refuses to hand a
+window that is still parked to `HL.Group:add`/`:remove` at all — `unhold`
+asks for the move, but the move lands after the pass.
+
 ## Navigation
 
 **Correction to an earlier revision of this document**: `mod+j/k` scrolling
@@ -303,7 +338,11 @@ on every column, `flip` included; scrolling the strip gets its own pair.
   scroll index already names) — if that thing is a group, the group's own
   recorded/adapter-picked member, the same way entering a group tile
   focuses its recorded member on a `stack` column today (LEO-380). No
-  change from before this revision.
+  change from before this revision. `M.decide` resolves the pressing
+  window's tile by the **window**, not by its address alone: a deck tile
+  names one address per thing, so focus on any other member of a group
+  matched no tile and the press decided `none` in both directions until
+  focus wandered back to the shown member.
 - `mod+j/k` moves **within a thing**, unchanged by `presentation` and
   unchanged by this document: inside a `stack` column it changes focus
   among already-visible windows (`hypr/lib/nav.lua`'s `M.window_neighbor`);

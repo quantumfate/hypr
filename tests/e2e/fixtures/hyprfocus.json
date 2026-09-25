@@ -175,7 +175,7 @@
             ],
             "group": true,
             "order": 1,
-            "share": 0.25
+            "share": 0.167
           },
           {
             "classes": [
@@ -183,7 +183,7 @@
             ],
             "group": true,
             "order": 2,
-            "share": 0.25
+            "share": 0.167
           },
           {
             "classes": [
@@ -191,7 +191,7 @@
             ],
             "group": true,
             "order": 3,
-            "share": 0.25
+            "share": 0.167
           },
           {
             "classes": [
@@ -199,7 +199,23 @@
             ],
             "group": true,
             "order": 4,
-            "share": 0.25
+            "share": 0.167
+          },
+          {
+            "classes": [
+              "Proj-ordered"
+            ],
+            "group": true,
+            "order": 5,
+            "share": 0.167
+          },
+          {
+            "classes": [
+              "Proj-pickalt"
+            ],
+            "group": true,
+            "order": 6,
+            "share": 0.167
           }
         ],
         "barred": [],
@@ -216,7 +232,10 @@
               "e2e-proj-alpha-a",
               "e2e-proj-alpha-b",
               "e2e-proj-beta",
-              "e2e-proj-gamma"
+              "e2e-proj-gamma",
+              "Proj-deckdemo",
+              "Proj-deckalt",
+              "e2e-deck-term"
             ],
             "deck": "projects"
           },
@@ -253,13 +272,100 @@
           },
           {
             "classes": [
+              "Proj-deckdemo"
+            ],
+            "order": 4,
+            "group": true
+          },
+          {
+            "classes": [
+              "Proj-deckalt"
+            ],
+            "order": 5,
+            "group": true
+          },
+          {
+            "classes": [
               "e2e-browser"
             ],
-            "order": 4
+            "order": 6
+          },
+          {
+            "classes": [
+              "e2e-deck-term"
+            ],
+            "order": 7
           }
         ],
         "barred": [],
-        "bindings": []
+        "bindings": [],
+        "docks": {
+          "bar.workspaces": {
+            "at": "top-left",
+            "of": "column:1"
+          },
+          "bar.projects": {
+            "at": "top-right",
+            "of": "column:1"
+          },
+          "bar.center": {
+            "at": "top-left",
+            "of": "column:2"
+          },
+          "bar.clock": {
+            "at": "top-right",
+            "of": "column:2"
+          }
+        }
+      },
+      "logs": {
+        "icon": "",
+        "layout": "deck",
+        "strays": "float",
+        "barred": [],
+        "bindings": [],
+        "blocks": [
+          {
+            "classes": [
+              "Log-[A-Za-z0-9_-]+"
+            ],
+            "group": true,
+            "order": 1
+          },
+          {
+            "classes": [
+              "Kitty-logs"
+            ],
+            "order": 2
+          }
+        ],
+        "columns": [
+          {
+            "order": 1,
+            "share": 0.67,
+            "deck": "logs",
+            "classes": [
+              "Log-[A-Za-z0-9_-]+"
+            ]
+          },
+          {
+            "order": 2,
+            "share": 0.33,
+            "classes": [
+              "Kitty-logs"
+            ]
+          }
+        ],
+        "docks": {
+          "bar.workspaces": {
+            "at": "top-left",
+            "of": "column:1"
+          },
+          "bar.clock": {
+            "at": "top-right",
+            "of": "column:1"
+          }
+        }
       }
     }
   },
@@ -291,6 +397,10 @@
         },
         {
           "name": "code-deck",
+          "monitor": "primary"
+        },
+        {
+          "name": "logs",
           "monitor": "primary"
         }
       ]
@@ -329,6 +439,10 @@
         },
         {
           "name": "claim-dofus",
+          "monitor": "primary"
+        },
+        {
+          "name": "logs",
           "monitor": "primary"
         }
       ]

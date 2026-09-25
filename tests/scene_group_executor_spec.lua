@@ -153,6 +153,9 @@ t.describe("group executor", function()
     t.ok(foreign.group, "the swallow already happened before this event")
 
     open(stub, foreign)
+    -- The eject itself runs a tick later, outside the event pass (a group
+    -- remove from inside it crashes the compositor), so drain the timer.
+    stub.drain()
 
     t.eq(nil, foreign.group, "ejected")
     t.eq(1, #a.group.members, "the block's group keeps only its own member")

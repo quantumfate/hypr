@@ -43,10 +43,14 @@ chmod +x "$E2E_ROOT/bin/fzf"
 PROJECT_DIR="$E2E_ROOT/picker-repo"
 mkdir -p "$PROJECT_DIR"
 cat >"$QF_STORE/projects.json" <<JSON
-{"projects":{"pickme":{"path":"$PROJECT_DIR","windows":["one","two"],"workspace":"code","kind":"repo","study":false,"priority":0}}}
+{"projects":{"pickme":{"path":"$PROJECT_DIR","windows":["one","two"],"workspace":"code","kind":"repo","study":false,"priority":0},"pickalt":{"path":"$PROJECT_DIR","windows":["one"],"workspace":"code","kind":"repo","study":false,"priority":0}}}
 JSON
 
+# The picker lists only projects that are NOT open (bin/,proj.sh's
+# `fzf_pick`), so the project it can actually choose is "pickalt" — "pickme"
+# is opened first precisely so the picker has a live group to stay out of.
 proj_clients() { clients | jq -c '[.[] | select(.class == "Proj-pickme" or .class == "Proj-picker")]'; }
+alt_clients() { clients | jq -c '[.[] | select(.class == "Proj-pickalt")]'; }
 picker_clients() { clients | jq -c '[.[] | select(.class == "Proj-picker")]'; }
 class_count() { [ "$(proj_clients | jq 'length')" = "$1" ]; }
 pickme_tags_match() { [ "$(proj_clients | jq -r '[.[] | select(.class == "Proj-pickme") | .tags[]? | select(startswith("slot:"))] | sort | join(",")')" = "$1" ]; }
@@ -91,5 +95,22 @@ e2e_log "PASS: the picker floats on the code workspace, outside the project's gr
 # and stay — on the template's default window ("one"), not bounce back to
 # wherever the picker's own close would otherwise send it.
 wait_until 60 class_count 2 || e2e_fail "the picker window outlived making its choice: $(proj_clients)"
-wait_until 60 focused_is "$one_addr" || e2e_fail "closing the picker did not leave focus on the chosen window: $(hc -j activewindow)"
+wait_until 100 sh -c '[ "$(hyprctl -i "$E2E_SIG" -j clients | jq "[.[] | select(.class == \"Proj-pickalt\")] | length")" = 1 ]' ||
+    e2e_fail "the chosen project never spawned: $(alt_clients)"
+alt_addr=$(alt_clients | jq -r '.[0].address')
+wait_until 60 focused_is "$alt_addr" || e2e_fail "closing the picker did not leave focus on the chosen window: $(hc -j activewindow)"
 e2e_log "PASS: choosing a project in the picker focuses it and the picker's own close does not steal focus back"
+
+# Cancelling is the other half: with every project open the picker's list is
+# empty, so it exits without a choice and closes its own window. Focus must
+# come back to where the picker was opened from, not be left on nothing --
+# a desk with no focused window is deaf to every contextual bind.
+hc dispatch "hl.dsp.focus({ window = [[address:$two_addr]] })" >/dev/null
+wait_until 30 focused_is "$two_addr" || e2e_fail "could not focus 'two' before cancelling a picker"
+,proj.sh pick >/dev/null 2>&1
+no_picker() { [ "$(picker_clients | jq 'length')" = 0 ]; }
+wait_until 100 sh -c '[ "$(hyprctl -i "$E2E_SIG" -j clients | jq "[.[] | select(.class == \"Proj-picker\")] | length")" -ge 1 ]' ||
+    e2e_fail "the cancelling picker never appeared"
+wait_until 100 no_picker || e2e_fail "the picker with nothing to offer never closed: $(picker_clients)"
+wait_until 60 focused_is "$two_addr" || e2e_fail "a cancelled picker left focus nowhere: $(hc -j activewindow)"
+e2e_log "PASS: a picker that ends without a choice gives focus back to where it came from"

@@ -137,6 +137,52 @@ TEMPLATE_WINDOWS=(nvim yazi zsh run)
 # Where a project window is mapped unless it asks for somewhere else. Both
 # hosts name workspace 1 "code"; a project overrides it with `workspace =`.
 DEFAULT_WORKSPACE=code
+
+# The workspace a picker opens on: a PROJECT SCENE, never wherever the
+# keyboard happens to be.
+#
+# A picker is about projects, so it belongs on a scene that holds them — and
+# therefore on that scene's monitor. Pressing the key while reading on the
+# second screen used to open the prompt there (and the project it chose
+# somewhere else again), which is the "it opens on the other monitor"
+# complaint. So: the focused workspace when that workspace is itself a
+# project scene (`mod+p` on `knowledge` stays on `knowledge`), and the
+# declared default otherwise.
+#
+# "Holds projects" is read from the declaration, not hardcoded: a scene whose
+# blocks name a `Proj-` class is one. That keeps this honest when a scene is
+# added or renamed — the same reason nothing else in this script hardcodes a
+# workspace either.
+project_scenes() {
+    local store="${QF_STORE:-${XDG_STATE_HOME:-$HOME/.local/state}/quantum-store}/hyprfocus.json"
+    [[ -s $store ]] || return 0
+    jq -r '.base.scenes // {} | to_entries[]
+      | select([.value.blocks // [] | .[].classes // [] | .[]] | any(startswith("Proj-")))
+      | .key' "$store" 2>/dev/null
+}
+
+current_workspace() {
+    local name
+    command -v hyprctl >/dev/null 2>&1 || {
+        printf '%s\n' "$DEFAULT_WORKSPACE"
+        return 0
+    }
+    name=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.name // empty')
+    case "$name" in
+    "" | special:*)
+        printf '%s\n' "$DEFAULT_WORKSPACE"
+        return 0
+        ;;
+    esac
+    local scene
+    while read -r scene; do
+        [[ $scene == "$name" ]] && {
+            printf '%s\n' "$name"
+            return 0
+        }
+    done < <(project_scenes)
+    printf '%s\n' "$DEFAULT_WORKSPACE"
+}
 CLASS_PREFIX=Proj-
 SELF=$(readlink -f "${BASH_SOURCE[0]}")
 NVIM_SOCK_DIR="${XDG_RUNTIME_DIR:-/tmp}/proj-nvim"
@@ -416,6 +462,45 @@ focused_class() {
     printf '%s\n' "$class"
 }
 
+# Show the declared group this window belongs to, and land focus on it.
+#
+# The one act docs/declared-groups.md rule 4 names. On a deck scene (which
+# the live `code` scene is) the thing may be parked, and a bare focus
+# dispatch at a parked window does nothing at all -- the engine has to scroll
+# its column to it and bring the whole thing home first. That decision is the
+# engine's: `hypr/scene/deck_provider.lua`'s `present` owns columns, scroll
+# indices and the hold workspace, and this helper owns none of them.
+#
+# Falls through to a plain focus when the window is not on a deck scene (an
+# ordinary tiled scene, or a compositor without this config), so the caller
+# never needs to know which it is.
+present_window() { # $1 = address
+    command -v hyprctl >/dev/null 2>&1 || return 1
+    local shown
+    shown=$(hyprctl eval "return tostring(require('hypr.scene.deck_provider').present('$1'))" 2>/dev/null) || shown=""
+    case "$shown" in
+    *true*) return 0 ;;
+    esac
+    focus_window "$1"
+}
+
+# Run one of this script's own private subcommands in a session of its own.
+#
+# `setsid` is what makes the job outlive its caller's window: the picker is a
+# kitty window that closes the instant `pick` returns, and the pty hangup
+# that comes with it kills any plain `&` job still running -- a four-window
+# template died after two windows that way. Where `setsid` is missing (a
+# cut-down PATH, as the shell tests build), a plain background job is still
+# better than nothing: it works for every caller that is not about to close.
+detach() { # $1... = subcommand and its arguments
+    if command -v setsid >/dev/null 2>&1; then
+        setsid "$SELF" "$@" </dev/null >/dev/null 2>&1 &
+    else
+        "$SELF" "$@" </dev/null >/dev/null 2>&1 &
+    fi
+    disown
+}
+
 # Focus one window, and make it stick. A focus dispatch can land after
 # whatever the caller does next re-steals it, so this re-asserts until the
 # window is actually the active one.
@@ -498,6 +583,25 @@ reassert_focus_after_picker_closes() { # $1 = picker's own address, $2 = target 
     done
 }
 
+# A picker ending WITHOUT a choice still has a focus problem: its own window
+# closes, and Hyprland leaves focus on nothing -- a desk deaf to every
+# contextual bind until something is clicked. `QF_PREV_FOCUS` is the window
+# the picker was opened from (`launch_inline` reads it before spawning), so
+# the restore is the same wait-then-assert the chosen path uses.
+#
+# The compositor spawns it, not this shell: a `setsid` child started here
+# never survives the picker's own window closing a breath later (verified
+# live -- it never reached its first line), while a process Hyprland execs
+# is parented to the compositor and outlives the window by construction.
+cancel_picker() {
+    local own_addr cmd
+    [[ -n ${QF_PREV_FOCUS-} ]] || exit 0
+    own_addr=$(own_window_address) || true
+    cmd=$(printf '%q _reassert-focus %q %q' "$SELF" "${own_addr-}" "$QF_PREV_FOCUS")
+    hypr_dispatch "hl.dsp.exec_cmd(\"$(lua_str "$cmd")\")" || true
+    exit 0
+}
+
 # The live address of a project's <role> window (or its template's first,
 # same default `open` uses), waiting a bounded beat for a spawn that is
 # still mapping — the exec dispatch returns long before the window does, so
@@ -543,6 +647,12 @@ window_command() { # $1 = role, $2 = class, $3 = path -> the command, or nothing
     fi
     if [[ $1 == yazi ]]; then
         printf 'yazi\n'
+    fi
+    # The zettelkasten TUI under evaluation (docs: the vault's own
+    # .proj.toml). Same rule as yazi -- the tool IS the tab, not a shell to
+    # launch it from -- so closing it ends the tab.
+    if [[ $1 == clin ]]; then
+        printf 'clin\n'
     fi
     return 0
 }
@@ -605,7 +715,7 @@ spawn_missing() { # $1 = class, $2 = path, $3 = workspace, $4 = role to land on 
     if [[ -n $land ]]; then
         local addr
         addr=$(live_windows "$class" | awk -F'\t' -v r="$land" '$1 == r { print $2; exit }')
-        [[ -n $addr ]] && focus_window "$addr"
+        [[ -n $addr ]] && present_window "$addr"
     fi
     return 0
 }
@@ -668,11 +778,20 @@ open() { # $1 = project name, $2 = window (role) to land on
     done
 
     if ((${#missing[@]})); then
-        # Backgrounded on purpose: a keybind must not block on the spawn and
-        # tag polls. The `[workspace ...]` exec prefix still brings the
-        # workspace forward; focus is `spawn_missing`'s last act, on the role
-        # that was asked for, once the template has finished arriving.
-        (spawn_missing "$class" "$path" "$workspace" "$window" "${missing[@]}" &)
+        # Detached, not merely backgrounded: a keybind must not block on the
+        # spawn and tag polls, AND the job must outlive whoever called it.
+        # The picker is a kitty window that closes the instant `pick`
+        # returns, and a plain `&` job is a child of that window's shell --
+        # the pty hangup killed the template mid-spawn, so a four-window
+        # project opened two windows and left the second one untagged
+        # (reproduced in tests/e2e/scenarios/98_project_picker_template.sh;
+        # it is the same rule `_reassert-focus` already follows). `setsid`
+        # gives it its own session before that signal can reach it.
+        #
+        # The `[workspace ...]` exec prefix still brings the workspace
+        # forward; presenting the project is `spawn_missing`'s last act, on
+        # the role that was asked for, once the template has arrived.
+        detach _spawn-missing "$class" "$path" "$workspace" "$window" "${missing[@]}"
         return 0
     fi
 
@@ -680,7 +799,7 @@ open() { # $1 = project name, $2 = window (role) to land on
     # "take me there", not "give me another window" — focus the requested
     # slot if it is already live.
     if [[ -n ${live[$window]-} ]]; then
-        focus_window "${live[$window]}"
+        present_window "${live[$window]}"
     fi
 }
 
@@ -811,7 +930,16 @@ launch_inline() { # $1 = subcommand, $2 = workspace, rest = its inline args
     # to $XDG_STATE_HOME/quantum-store), silently pointing every store read
     # inside the picker at a different tree. Hand the store this process
     # resolved down as an env prefix, which the rc cannot reach.
-    pick_cmd="QF_STORE=$(printf '%q' "$QF_ROOT") $(printf '%q %q --inline' "$SELF" "$sub")"
+    # The window focus stood on before the picker spawned. A picker that
+    # ends without a choice (an empty list, or Escape) closes its own window,
+    # and closing it leaves focus nowhere at all -- the desk goes deaf to the
+    # keyboard until something else is clicked. Handed down here, the picker
+    # gives focus back to where it came from on its way out.
+    local prev_focus=""
+    if command -v hyprctl >/dev/null 2>&1; then
+        prev_focus=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty')
+    fi
+    pick_cmd="QF_STORE=$(printf '%q' "$QF_ROOT") QF_PREV_FOCUS=$(printf '%q' "$prev_focus") $(printf '%q %q --inline' "$SELF" "$sub")"
     for arg in "$@"; do
         pick_cmd="$pick_cmd $(printf '%q' "$arg")"
     done
@@ -911,13 +1039,13 @@ scope_open() { # $1 = project name, $2 = scope name
 # and steals focus, since by the time it exists the focused window has
 # already changed.
 launch_inline_scope_picker() { # $1 = project name
-    launch_inline pick-scope "$DEFAULT_WORKSPACE" "$1"
+    launch_inline pick-scope "$(current_workspace)" "$1"
 }
 
 pick_scope() { # $1 = project name (resolved by the caller, before the picker spawned)
     local name=${1:?pick-scope: project name required} choice own_addr addr
-    choice=$(unopened_scope_names "$name" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name scope ") || exit 0
-    [[ -n $choice ]] || exit 0
+    choice=$(unopened_scope_names "$name" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name scope ") || cancel_picker
+    [[ -n $choice ]] || cancel_picker
     # Before `scope_open` moves focus off this window — see `own_window_address`.
     own_addr=$(own_window_address) || true
     scope_open "$name" "$choice"
@@ -925,8 +1053,7 @@ pick_scope() { # $1 = project name (resolved by the caller, before the picker sp
     # `current_role_address` waits a bounded beat for it.
     addr=$(current_role_address "$name" "$choice") || addr=""
     if [[ -n $addr ]]; then
-        setsid "$SELF" _reassert-focus "${own_addr-}" "$addr" </dev/null >/dev/null 2>&1 &
-        disown
+        detach _reassert-focus "${own_addr-}" "$addr"
     fi
 }
 
@@ -953,8 +1080,8 @@ pick_window() { # $1 = project name (resolved by the caller, before the picker s
     if ((${#windows[@]} == 0)); then
         windows=("${TEMPLATE_WINDOWS[@]}")
     fi
-    choice=$(printf '%s\n' "${windows[@]}" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name window ") || exit 0
-    [[ -n $choice ]] || exit 0
+    choice=$(printf '%s\n' "${windows[@]}" | fzf "${FZF_PICK_OPTS[@]}" --prompt="$name window ") || cancel_picker
+    [[ -n $choice ]] || cancel_picker
     # Before `open_one` moves focus off this window — see `own_window_address`.
     own_addr=$(own_window_address) || true
     open_one "$name" "$choice"
@@ -962,8 +1089,7 @@ pick_window() { # $1 = project name (resolved by the caller, before the picker s
     # mapping, and `current_role_address` waits a bounded beat for it.
     addr=$(current_role_address "$name" "$choice") || addr=""
     if [[ -n $own_addr && -n $addr ]]; then
-        setsid "$SELF" _reassert-focus "$own_addr" "$addr" </dev/null >/dev/null 2>&1 &
-        disown
+        detach _reassert-focus "$own_addr" "$addr"
     fi
 }
 
@@ -975,7 +1101,7 @@ cmd_pick_window() {
     local name workspace
     name=$(project_of_focused)
     workspace=$(store_field "$name" '.workspace')
-    launch_inline pick-window "${workspace:-$DEFAULT_WORKSPACE}" "$name"
+    launch_inline pick-window "${workspace:-$(current_workspace)}" "$name"
 }
 
 pick() { # $1 = window
@@ -984,15 +1110,15 @@ pick() { # $1 = window
         # This process IS the terminal (`launch_inline` spawned it):
         # fzf is its first screen, so nothing may delay reaching it.
         inline=1
-        choice=$(fzf_pick) || exit 0
+        choice=$(fzf_pick) || cancel_picker
     elif [[ -t 0 ]]; then
         choice=$(fzf_pick) || exit 0
     else
         # A Hyprland bind, no terminal in sight — hand off to one.
-        launch_inline pick "$DEFAULT_WORKSPACE" ${1:+"$1"}
+        launch_inline pick "$(current_workspace)" ${1:+"$1"}
         return
     fi
-    [[ -n $choice ]] || exit 0
+    [[ -n $choice ]] || cancel_picker
     # Read this window's own address before `open` moves focus off it, and
     # only now that fzf has returned — see `own_window_address`.
     ((inline)) && { own_addr=$(own_window_address) || true; }
@@ -1002,9 +1128,7 @@ pick() { # $1 = window
         # spawn is still mapping, and `current_role_address` waits for it.
         target=$(current_role_address "$choice" "${1-}") || target=""
         if [[ -n $target ]]; then
-            setsid "$SELF" _reassert-focus "${own_addr-}" "$target" \
-                </dev/null >/dev/null 2>&1 &
-            disown
+            detach _reassert-focus "${own_addr-}" "$target"
         fi
     fi
 }
@@ -1138,5 +1262,11 @@ pick-scope)
 # subcommand: it exists only so `setsid $SELF ...` has a fresh process to
 # start, detached from that session before it can be hung up.
 _reassert-focus) reassert_focus_after_picker_closes "${2-}" "${3-}" ;;
+# Private, and detached for the same reason: `open` starts this with
+# `setsid` so a template outlives the picker window that asked for it.
+_spawn-missing)
+    shift
+    spawn_missing "$@"
+    ;;
 *) die "unknown command: $1" ;;
 esac

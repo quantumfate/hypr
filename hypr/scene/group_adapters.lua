@@ -53,6 +53,22 @@ function M.record_join(group_key, address)
   list[#list + 1] = address
 end
 
+---Replace `group_key`'s recorded order with `addresses` — the physical
+---member order Hyprland now holds. The record is append-only per join, so a
+---group seeded before its members' tags landed kept the arrival order
+---forever while the join path re-inserted members at their adapter slots:
+---the groupbar and `mod+j/k` then disagreed. Mirroring the live group after
+---every seed/join keeps the record what it claims to be.
+---@param group_key string
+---@param addresses string[]
+function M.record_order(group_key, addresses)
+  local list = {}
+  for _, address in ipairs(addresses) do
+    list[#list + 1] = address
+  end
+  join_order[group_key] = list
+end
+
 ---Forget `address` leaving `group_key`'s group (eject or close).
 ---@param group_key string
 ---@param address string

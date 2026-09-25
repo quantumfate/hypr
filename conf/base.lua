@@ -113,6 +113,14 @@ return {
     -- here is a pattern: it matches any project window, and a single project is
     -- addressable on its own when a rule needs that.
     project = { cmd = ",proj.sh pick", class = "Proj-[A-Za-z0-9_-]+" },
+    -- The PROMPTS that wear a declared group's class prefix: the project and
+    -- log pickers, and the confirm dialog. They are named once, here, because
+    -- three different rules have to agree on exactly which classes are "a
+    -- prompt, not a member" -- they must take focus (a prompt you cannot type
+    -- into is useless), they must never be grouped, and they must never be
+    -- counted as a project or a log group. A class that drifts out of this
+    -- list breaks all three at once, silently.
+    declared_group_prompts = { "Proj-picker", "Proj-confirm", "Log-picker" },
     volume_control = { cmd = "kitty --class Kitty-Wiremix wiremix", class = "Kitty-Wiremix" },
     file_manager = { cmd = "kitty --class Kitty-Yazi yazi", class = "Kitty-Yazi" },
     password_manager = { cmd = "proton-pass", class = "Proton Pass" },

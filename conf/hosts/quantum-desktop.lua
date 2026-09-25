@@ -41,6 +41,15 @@ return {
       -- under the old "scrolling" builtin layout is dropped along with the
       -- switch, since "deck" reads no layout_opts of its own.
       { workspace = "1", default = true, default_name = "code", layout = "deck" },
+      -- Knowledge: the vault and the dotfiles mono-repo, same deck shape as
+      -- `code` -- a project column that flips between the two project groups,
+      -- a side terminal beside it. Primary, because it is work you look at,
+      -- not reference you glance at.
+      { workspace = "2", default_name = "knowledge", layout = "deck" },
+      -- Reference: the browser, moved off `code` so the main monitor is all
+      -- work and the second one carries what you read against it. Plain scene
+      -- layout -- one window, no strip.
+      { workspace = "7", default_name = "reference", monitor = "secondary" },
       -- Proton shared across gaming + work + study modes. The 50/50 split
       -- (mail left, pass companion right) is declared by the scene.
       { workspace = "3", default_name = "proton" },

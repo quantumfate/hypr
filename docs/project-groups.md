@@ -4,6 +4,12 @@
 meant to have. It supersedes the ad-hoc half of `bin/,proj.sh`'s current
 `pick`/`open` behaviour; everything in "What already exists" below stays.
 
+A project group is a **declared group** — the object
+[declared-groups.md](declared-groups.md) defines, and which a log group is too.
+Read that first: identity, whole-thing movement, the focus invariant and the
+open sequence are its rules, and this document is only the project front-end
+over them.
+
 A project group is one Hyprland group of kitty windows that a project
 declares: its directory, an ordered set of windows, and the command each one
 runs. Opening a project means instantiating that declaration. The desk already
@@ -44,6 +50,12 @@ path, windows[], workspace, scopes{} }`. `windows` is an ordered list of
 3. **No per-project binds.** `p n` / `p r` are hardcoded to the roles `nvim`
    and `run`. A project declaring `db` or `logs` has no key.
 4. **`mod+j/k` walks everything.** It should walk only the ad-hoc terminals.
+
+Two of the four are no longer open: the picker takes its own focus and gives
+it back when it ends with no choice (gap 2's focus half), and a project's
+windows now arrive as one declared thing rather than four
+([declared-groups.md](declared-groups.md)). What remains of gap 2 is the
+picker's geometry, not its behaviour.
 
 ## Design
 
@@ -138,9 +150,12 @@ unaffected.
 1. **Does `key` collide?** A project declaring `key = "p"` would shadow the
    picker. Proposal: reserved keys (`p`, `o`, `k`) are refused by `sync` with a
    warning, rather than silently dropped.
-2. **Group ordering.** The declaration is ordered; Hyprland group order is
-   arrival order. Spawning strictly in sequence (as `spawn_missing` already
-   does, one at a time) preserves it — worth an e2e assertion.
+2. ~~**Group ordering.**~~ Answered and wired: spawning in sequence is not
+   enough, because the `slot:` tags land after the windows map. The physical
+   group is sorted into the declaration's order by the project adapter and
+   the walk order is rewritten from the physical group
+   ([declared-groups.md](declared-groups.md) rule 5), asserted in
+   `tests/e2e/scenarios/95_project_group.sh`.
 3. **`create`.** Still nothing writes a `.proj.toml`. A `,proj.sh create`
    scaffolding one from a template would close the loop, but it is separable
    from everything above.

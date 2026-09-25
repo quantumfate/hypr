@@ -45,7 +45,9 @@ for _, w in ipairs(hl.get_windows() or {}) do
 end
 local w = hl.get_active_window()
 local dtiles = nav.deck_tile_order(scene, tiles, deck_order.get_all(scene.name))
-local index = nav.tile_index(dtiles, w.address)
+-- By the window, not the address: a deck tile names one address per thing,
+-- so a focused non-representative group member finds no tile by address.
+local index = nav.tile_index_for_window(dtiles, w)
 local tile = dtiles[index]
 local target = nav.window_neighbor(tile.plain, w.address, '$1')
 if not target and #tile.plain > 1 then
@@ -70,10 +72,7 @@ focus_in_group() {
 local group_adapters = require('hypr.scene.group_adapters')
 local grouping = require('hypr.scene.grouping')
 local w = hl.get_active_window()
-local raw = w.group.members
-raw = (raw and raw.title) and { raw } or (raw or {})
-local members = {}
-for _, m in ipairs(raw) do members[#members + 1] = { address = m.address, title = m.title } end
+local members = group_adapters.normalize_members(w.group)
 local order = group_adapters.for_class(w.class).order(members, { group_key = grouping.group_key(w) })
 local index
 for i, a in ipairs(order) do if a == w.address then index = i end end
@@ -202,3 +201,39 @@ wait_until 30 still_same_visible || e2e_fail "mod+j/k on a group moved the deck'
 OTHER_MEMBER=$(clients | jq -r --arg a "$ALPHA_ADDR" 'map(select(.class == "e2e-proj-alpha-a" or .class == "e2e-proj-alpha-b")) | map(select(.address != $a)) | .[0].address')
 [[ $(focused_address) == "$OTHER_MEMBER" ]] || e2e_fail "mod+j/k did not move focus to the other group member: expected $OTHER_MEMBER, got $(focused_address)"
 e2e_log "PASS: a group's members still navigate internally on the deck project column"
+
+# mod+h/l from a non-representative group member: `nav.decide` resolves the
+# tile by the window (its whole group), not by the focused address alone —
+# which used to answer "none" in both directions on every member but the one
+# the deck tile names, leaving the press dead until focus wandered back.
+decide_both() {
+    run_lua "
+local nav = require('hypr.lib.nav')
+local deck = require('hypr.scene.deck')
+local deck_order = require('hypr.scene.deck_order')
+local scene_spec = require('hypr.scene.spec')
+local scene_provider = require('hypr.scene.provider')
+local scene = scene_spec.load()['code-deck']
+local tiles = {}
+for _, w in ipairs(hl.get_windows() or {}) do
+  local tile = scene_provider.window_tile(w)
+  if deck.column_for(scene, tile) then tiles[#tiles + 1] = tile end
+end
+local w = hl.get_active_window()
+local dtiles = nav.deck_tile_order(scene, tiles, deck_order.get_all(scene.name))
+local monitors = hl.get_monitors() or {}
+local focused = w.monitor and w.monitor.name or (monitors[1] and monitors[1].name)
+local function decide(dir)
+  return nav.decide({ monitors = monitors, focused = focused, tiles = dtiles, active = w.address, window = w, dir = dir })
+end
+local left, right = decide('left'), decide('right')
+out({ left = left.address or left.kind, right = right.address or right.kind })
+"
+}
+
+BROWSER_ADDR=$(browser_client | jq -r '.address')
+[[ $(focused_address) == "$OTHER_MEMBER" ]] || e2e_fail "expected focus on alpha's other group member before deciding"
+DECIDED=$(decide_both)
+echo "$DECIDED" | jq -e --arg b "$BROWSER_ADDR" '(.left == $b) or (.right == $b)' >/dev/null ||
+    e2e_fail "mod+h/l from a non-representative group member did not decide onto the browser column: $DECIDED"
+e2e_log "PASS: mod+h/l decides from any group member, not only the one the deck tile names"

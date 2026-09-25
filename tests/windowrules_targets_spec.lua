@@ -58,3 +58,46 @@ t.describe("window rule workspace targets", function()
     end)
   end
 end)
+
+t.describe("declared-group prompts (the pickers and the confirm dialog)", function()
+  -- A prompt wears its group's class prefix, so every rule keyed on that
+  -- prefix catches it too. Live (2026-09-24) the project picker was swallowed
+  -- into a neighbouring project group and then EJECTED -- an
+  -- `HL.Group:remove`, the one call that re-assigns a window's space and
+  -- breaks the formation. The journal named the windows: `Proj-picker` and
+  -- `Proj-confirm` on the `code` scene. Barring the class stops the swallow,
+  -- so no eject is ever needed; this pins that every prompt class carries
+  -- both rules, since the behaviour itself does not reproduce in the harness
+  -- (the picker floats there and auto_group leaves it alone).
+  t.it("are barred from every group, and take their own focus", function()
+    local ok, err = load_config("quantum-desktop")
+    t.ok(ok, "config failed to load: " .. tostring(err))
+
+    for _, cls in ipairs(config.apps.declared_group_prompts) do
+      local barred, focused = false, false
+      for _, rule in ipairs(hl.window_rules) do
+        local match = rule.match or {}
+        if match.class == cls and rule.group == "barred" then
+          barred = true
+        end
+        if match.initial_class == cls and rule.no_initial_focus == false then
+          focused = true
+        end
+      end
+      t.ok(barred, cls .. " is not barred from grouping")
+      t.ok(focused, cls .. " does not take its own focus")
+    end
+  end)
+
+  t.it("names every prompt class a helper actually spawns", function()
+    -- The vocabulary lives in conf/base.lua and three rules agree on it. A
+    -- class that drifts out of the list breaks all of them silently.
+    local declared = {}
+    for _, cls in ipairs(require("conf.base").apps.declared_group_prompts) do
+      declared[cls] = true
+    end
+    for _, cls in ipairs({ "Proj-picker", "Proj-confirm", "Log-picker" }) do
+      t.ok(declared[cls], cls .. " is spawned by a helper but not declared a prompt")
+    end
+  end)
+end)

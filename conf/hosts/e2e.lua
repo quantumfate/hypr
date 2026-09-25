@@ -27,6 +27,9 @@ return {
       -- with the same `Proj-*` group block the real "code" scene declares,
       -- so 95_project_group.sh exercises the actual grouping engine a
       -- project relies on, not a stand-in class.
+      -- The `logs` scene's shape (docs/logs.md): a deck column of log
+      -- groups, exercised by tests/e2e/scenarios/99_log_group.sh.
+      { workspace = "9", default_name = "logs", layout = "deck" },
       { workspace = "5", default_name = "code" },
       -- LEO-349: the real "code" scene's shape, mirrored with e2e-safe
       -- classes — a deck project column (one block per project, per

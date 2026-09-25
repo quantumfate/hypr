@@ -152,6 +152,45 @@ end
 ---@param boxes Scene.Box[]
 ---@param gaps_in number
 ---Park a deck member and, when it held the keyboard, hand the keyboard
+-- Moves this provider decides inside `recalculate`, dispatched a tick later
+-- instead of from within the pass.
+--
+-- A window move re-enters the layout, and a re-entrant move lands in
+-- `Layout::CWindowTarget::assignToSpace` while the current assignment is
+-- still in flight -- which is an assert, a SIGSEGV, and the whole session
+-- gone. It reached the desk as "a project does not open as a group": the
+-- executor's group call recalculates the deck, the deck moved a window from
+-- inside that recalculate, and the compositor died mid-grouping (crash
+-- report: `CGroup::remove` -> `assignToSpace`). The decision still belongs
+-- to the pass; only the dispatch waits for it to end.
+local pending_moves = {}
+local flush_scheduled = false
+
+---Queue one move out of the layout pass. The last decision for an address
+---in one pass is the one that stands -- a window asked home and then parked
+---(or the reverse) within a single recalculate must not be dispatched twice.
+---@param address string
+---@param workspace string a `name:`/special workspace selector
+local function queue_move(address, workspace)
+  pending_moves[address] = workspace
+  if flush_scheduled then
+    return
+  end
+  flush_scheduled = true
+  require("hypr.lib.hypr").oneshot(1, function()
+    flush_scheduled = false
+    local moves = pending_moves
+    pending_moves = {}
+    for target_address, target_workspace in pairs(moves) do
+      hl.dispatch(hl.dsp.window.move({
+        window = "address:" .. target_address,
+        workspace = target_workspace,
+        follow = false,
+      }))
+    end
+  end)
+end
+
 ---back to the member the strip now shows. Parking the member that holds
 ---focus drags focus into the hold with it (the compositor keeps the focused
 ---window focused through the move); when that special is hidden a beat
@@ -168,11 +207,7 @@ local function park_member(address, workspace_of, shown_address)
     return
   end
   local active = hl.get_active_window()
-  hl.dispatch(hl.dsp.window.move({
-    window = "address:" .. address,
-    workspace = HOLD,
-    follow = false,
-  }))
+  queue_move(address, HOLD)
   if active and active.address == address and shown_address then
     require("hypr.lib.hypr").oneshot(1, function()
       hl.dispatch(hl.dsp.focus({ window = "address:" .. shown_address }))
@@ -332,7 +367,19 @@ function M.register(scenes)
       if not scene_name then
         return
       end
-      M.place(decks[scene_name], scene_name, ctx)
+      -- Same containment as the scene provider's: an error handed back to the
+      -- compositor in place of a placement drops that pass's windows out of
+      -- the tiling entirely.
+      local ok, err = pcall(M.place, decks[scene_name], scene_name, ctx)
+      if not ok then
+        require("hypr.lib.trace").emit({
+          stage = "arrange",
+          event = "layout_failed",
+          decision = "skip",
+          reason = ("deck layout raised: %s"):format(tostring(err)),
+          scene = scene_name,
+        })
+      end
     end,
   })
 end
@@ -403,19 +450,40 @@ function M.place(scene, scene_name, ctx)
         target:place({ x = box.x, y = box.y, w = box.w, h = box.h })
       else
         -- Not tiled here yet (freshly scrolled to, or freshly held
-        -- elsewhere): ask it home. The move triggers another
-        -- `recalculate`, which is the pass that actually places it — this
-        -- one only reports the need, same as `deck.lua`'s own contract.
-        hl.dispatch(hl.dsp.window.move({
-          window = "address:" .. box.address,
-          workspace = "name:" .. scene_name,
-          follow = false,
-        }))
+        -- elsewhere): ask it home, from outside this pass (`queue_move`).
+        -- The move triggers another `recalculate`, which is the pass that
+        -- actually places it — this one only reports the need, same as
+        -- `deck.lua`'s own contract.
+        queue_move(box.address, "name:" .. scene_name)
       end
     end
 
+    -- Which member each COLUMN is showing, so parking the window that holds
+    -- focus hands it to that column's own visible member. `boxes[1]` is the
+    -- first box of the first column, so a parked member of the second column
+    -- used to throw focus sideways into the first -- the neighbour-stray
+    -- this reads as on the desk, and a monitor hop when the columns span two
+    -- (`docs/declared-groups.md` rule 3).
+    local tile_by_address = {}
+    for _, tile in ipairs(tiles) do
+      if tile.address then
+        tile_by_address[tile.address] = tile
+      end
+    end
+    local shown_by_column = {}
+    local function column_order_of(address)
+      local tile = tile_by_address[address]
+      local column = tile and deck.column_for(scene, tile)
+      return column and column.order
+    end
+    for _, box in ipairs(boxes) do
+      local order_key = column_order_of(box.address)
+      if order_key and not shown_by_column[order_key] then
+        shown_by_column[order_key] = box.address
+      end
+    end
     for _, address in ipairs(hold) do
-      park_member(address, workspace_of, boxes[1] and boxes[1].address)
+      park_member(address, workspace_of, shown_by_column[column_order_of(address)])
     end
 
     hide_hold_if_shown()
@@ -425,6 +493,77 @@ function M.place(scene, scene_name, ctx)
     -- nowhere else -- no place, no dispatch, no recalculate.
     publish_docks(scene, scene_name, tiles, boxes, gaps_in, gaps_out)
   end
+end
+
+---Show the thing `address` belongs to, and put focus on `address`.
+---
+---The one act `docs/declared-groups.md` rule 4 names: a front-end that has
+---just opened (or been asked for) a declared group calls this and nothing
+---else. It scrolls that thing's column to it, brings the whole thing home
+---and focuses the window asked for -- once, deliberately, which is the only
+---focus move the contract allows. Everything else on the desk is left
+---alone: no other column is scrolled, no neighbour re-homed.
+---
+---Called over `hyprctl eval` by `bin/,proj.sh`, so a helper never has to
+---know what a column, a scroll index or a hold workspace is.
+---@param address string a window address, with or without the `address:` prefix
+---@return boolean whether a deck showed it
+function M.present(address)
+  address = address:gsub("^address:", "")
+  local w = hl.get_window("address:" .. address)
+  if not w then
+    return false
+  end
+  -- The scene by tag, not by workspace: the window may be parked on the hold
+  -- right now, and the hold owns no scene (same reason the grouping executor
+  -- reads the tag).
+  local scenes = spec_lib.load() or {}
+  local scene_name = w.workspace and w.workspace.name
+  if not (scene_name and scenes[scene_name]) then
+    scene_name = nil
+    for _, tag in ipairs(w.tags or {}) do
+      local named = tag:match("^scene:([^*]+)")
+      if named and scenes[named] then
+        scene_name = named
+        break
+      end
+    end
+  end
+  local scene = scene_name and scenes[scene_name]
+  if not (scene and deck.applies(scene)) then
+    return false
+  end
+
+  local tiles = member_tiles(scene)
+  local column = deck.column_for(scene, scene_provider.window_tile(w))
+  if not column then
+    return false
+  end
+  local order = order_and_scroll(deck_order.get_all(scene_name))
+  local stack = deck.stacks(scene, tiles, order)[column.order] or {}
+  local representatives = require("hypr.scene.layout").collapse_groups(stack, function(tile)
+    return deck.thing_key(scene, tile)
+  end)
+  local wanted = deck.thing_key(scene, scene_provider.window_tile(w))
+  local index
+  for i, rep in ipairs(representatives) do
+    if rep.address == address or (wanted and deck.thing_key(scene, rep) == wanted) then
+      index = i
+      break
+    end
+  end
+  if not index then
+    return false
+  end
+
+  deck_order.set_scroll(scene_name, column.order, index)
+  M.reconcile(scene_name)
+  -- After the bring-home moves, not with them: the move lands on its own
+  -- pass, and focusing before it has would focus a window still parked.
+  require("hypr.lib.hypr").oneshot(1, function()
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. address }))
+  end)
+  return true
 end
 
 ---Bring a deck scene's windows to where its scroll says they belong, from
@@ -468,7 +607,6 @@ function M.reconcile(scene_name)
   -- the moves below, because a window arriving does not change focus
   -- (`follow = false`) and so cannot answer this afterwards.
   local active = hl.get_active_window()
-  local focus_held = false
   local first_home
   for _, box in ipairs(boxes) do
     if workspace_of[box.address] ~= scene_name then
@@ -478,18 +616,23 @@ function M.reconcile(scene_name)
         workspace = "name:" .. scene_name,
         follow = false,
       }))
-    elseif active and active.address == box.address then
-      focus_held = true
     end
   end
-  -- Closing the focused window leaves focus on nothing, and the member the
-  -- deck brings home to replace it arrives unfocused -- `follow = false`, so
-  -- that the ordinary swap does not yank focus. The result was a visible
-  -- window the keyboard could not reach at all: not focusable, not closable.
-  -- So when the deck had to bring something home AND nothing it shows is
-  -- focused, focus what arrived. Guarded both ways, this never steals focus
-  -- during a normal scroll -- there the replaced member is still focused.
-  if first_home and not focus_held then
+  -- Closing the focused window leaves focus on NOTHING, and the member the
+  -- deck brings home to replace it arrives unfocused (`follow = false`, so
+  -- an ordinary swap does not yank focus). The result was a visible window
+  -- the keyboard could not reach at all: not focusable, not closable. So
+  -- when the deck brings something home and the keyboard has nowhere to be,
+  -- focus what arrived.
+  --
+  -- "Nowhere to be" means exactly that: no active window. It used to mean
+  -- "the active window is not one of the boxes I placed", which quietly
+  -- stole focus from anything the deck does not place -- a floating stray,
+  -- and the project picker is one. Opening the picker on a deck scene
+  -- therefore gave you a prompt you could not type into (live complaint,
+  -- 2026-09-24). A window that holds focus keeps it, placed or not
+  -- (`docs/declared-groups.md` rule 3).
+  if first_home and not (active and active.address) then
     require("hypr.lib.hypr").oneshot(1, function()
       hl.dispatch(hl.dsp.focus({ window = "address:" .. first_home }))
     end)

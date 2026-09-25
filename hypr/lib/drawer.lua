@@ -18,6 +18,9 @@ local M = {}
 -- silently), cleared the moment `window.open` shows it. No timer — the
 -- launch and the open event are the only two ends of this.
 local pending = {}
+-- Which pending launches were BACKGROUND ones (see `mark_pending`): those
+-- arrive silently and must not show their shelf or move focus.
+local silent_launch = {}
 
 ---@class Drawer
 ---@field id string drawer id; the special workspace is `shelf-<id>`
@@ -363,10 +366,19 @@ function M.show_decision(drawer, ctx)
 end
 
 ---Record that `drawer` was just launched: the next `window.open` whose class
----matches it must show the drawer (docs/shelves.md).
+---matches it is this launch's (docs/shelves.md).
+---
+---`silent` is a BACKGROUND bring-up — the desk starting a shelf app for you
+---on mode entry, which nobody asked to look at. Without it the arriving
+---window showed the shelf and focused its monitor, so entering `work` threw
+---Spotify on screen and the keyboard onto the secondary output (live,
+---2026-09-24). A key-press launch still shows what it opened, which is the
+---whole point of pressing the key.
 ---@param drawer Drawer
-function M.mark_pending(drawer)
+---@param silent boolean? true for a background bring-up
+function M.mark_pending(drawer, silent)
   pending[drawer.id] = drawer
+  silent_launch[drawer.id] = silent == true
 end
 
 ---The pending drawer `class` answers for, or nil. Pure over an explicit
@@ -507,7 +519,7 @@ function M.bring_up(drawers, desk)
         admitted = admitted or admitted_scenes[scene] == true
       end
       if admitted then
-        M.mark_pending(drawer)
+        M.mark_pending(drawer, true)
         hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. drawer.launch))
         emit_drawer_event(drawer, "launch", "background bring-up on mode entry")
       end
@@ -549,6 +561,13 @@ function M.rules(drawers)
       return
     end
     pending[drawer.id] = nil
+    local silent = silent_launch[drawer.id] == true
+    silent_launch[drawer.id] = nil
+    if silent then
+      -- Routed by the window rule and left exactly there: a background
+      -- bring-up is a dependency the desk started, not a window to look at.
+      return
+    end
     local d = M.show_decision(drawer, live_ctx())
     if d.monitor then
       hl.dispatch(hl.dsp.focus({ monitor = d.monitor }))

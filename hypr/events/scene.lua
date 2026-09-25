@@ -564,6 +564,149 @@ local function touches_hold(w)
   return false
 end
 
+---The workspace a window stands on right now, read live.
+---@param address string
+---@return string?
+local function space_of(address)
+  local live = hl.get_window("address:" .. address)
+  return live and live.workspace and live.workspace.name or nil
+end
+
+---Whether two windows are on the same workspace, and so can be grouped.
+---
+---`HL.Group:add`/`:remove` re-assign the window to a space, and doing that
+---across two spaces is what kills the session
+---(`Layout::CWindowTarget::assignToSpace`). The test is SAMENESS, not
+---"neither is parked": a deck parks a whole thing together on its hold, and
+---a project whose windows are all sitting there must still be able to form
+---its group -- `hypr/scene/grouping.lua` counts a hold-parked block-mate as
+---a peer for exactly that reason. Guarding on "parked" instead meant a
+---project that opened while the column was showing something else never
+---grouped at all, which is the desk symptom this pair of rules exists to
+---prevent (`docs/declared-groups.md` rule 2).
+---@param a string
+---@param b string
+---@return boolean
+local function same_space(a, b)
+  local at, bt = space_of(a), space_of(b)
+  return at ~= nil and at == bt
+end
+
+---Whether every member of `w`'s group stands on one workspace, so taking a
+---window out of it cannot re-assign across two spaces (see `same_space`).
+---@param w HL.Window
+---@return boolean
+local function whole_group_home(w)
+  local standing = w.workspace and w.workspace.name
+  if not standing then
+    return false
+  end
+  for _, m in ipairs(group_adapters.normalize_members(w.group)) do
+    if space_of(m.address) ~= standing then
+      return false
+    end
+  end
+  return true
+end
+
+---A live group's member addresses, in the physical order Hyprland holds
+---them (what the groupbar shows).
+---@param group HL.Group
+---@return string[]
+local function physical_order(group)
+  local addresses = {}
+  for _, m in ipairs(group_adapters.normalize_members(group)) do
+    addresses[#addresses + 1] = m.address
+  end
+  return addresses
+end
+
+-- True from the moment a reorder is scheduled until it has run, so the
+-- events its own moves raise cannot pile more of them up behind it.
+local reordering = false
+local reorder_group_now
+
+---Sort the group `address` stands in into its adapter's order, and record
+---that order for `mod+j/k` to walk.
+---
+---Placing each member at its slot as it joins is not enough: a project's
+---windows are grouped before their `slot:` tags land (kitty maps async, and
+---`,proj.sh` stamps the role afterwards), so the adapter had nothing to sort
+---by at seed time and the group kept arrival order forever. Re-deciding the
+---whole order whenever the group is touched -- or its members focused, which
+---is the event a late tag arrives behind -- is what makes the groupbar and
+---the walk order the same list.
+---
+---A member out of place is removed and re-added at its index: `HL.Group:add`
+---takes a 1-based insertion index, and remove/add is the only pair that
+---moves an existing member (spiked live in the nested instance; the
+---`move_window` dispatcher acts on focus, which this must not touch).
+---@param address string any member of the group
+---@param group_key string
+local function reorder_group(address, group_key)
+  if reordering then
+    return
+  end
+  -- Deferred for the same reason the eject above is: this moves members with
+  -- remove/add, and a remove inside the event pass crashes the compositor.
+  reordering = true
+  require("hypr.lib.hypr").oneshot(1, function()
+    reorder_group_now(address, group_key)
+    reordering = false
+  end)
+end
+
+---The reorder itself, running a tick later (see `reorder_group`).
+---@param address string
+---@param group_key string
+reorder_group_now = function(address, group_key)
+  local live = hl.get_window("address:" .. address)
+  if not (live and live.group) then
+    return
+  end
+  local members = group_adapters.normalize_members(live.group)
+  if #members < 2 then
+    return
+  end
+  -- A member standing on a hold workspace (the deck parks what its column
+  -- does not show) is never moved from here: `CGroup::remove` re-assigns the
+  -- window to a space, and doing that to a parked window crashes the
+  -- compositor the same way bringing one home mid-pass does. A parked group
+  -- keeps the order it has until its members are all home again.
+  for _, m in ipairs(members) do
+    local member = hl.get_window("address:" .. m.address)
+    local ws = member and member.workspace and member.workspace.name
+    if not ws or ws:match("^special:") then
+      return
+    end
+  end
+  local desired = group_adapters.for_class(live.class).order(members, { group_key = group_key })
+
+  local group = live.group
+  for i = 1, #desired do
+    local current = physical_order(group)
+    if current[i] ~= desired[i] then
+      local member = hl.get_window("address:" .. desired[i])
+      if member and same_space(address, desired[i]) then
+        pcall(function()
+          group:remove(member)
+        end)
+        local refreshed = hl.get_window("address:" .. address)
+        group = (refreshed and refreshed.group) or group
+        local moved = hl.get_window("address:" .. desired[i]) or member
+        pcall(function()
+          group:add(moved, i)
+        end)
+        refreshed = hl.get_window("address:" .. address)
+        group = (refreshed and refreshed.group) or group
+      end
+    end
+  end
+
+  local settled = hl.get_window("address:" .. address)
+  group_adapters.record_order(group_key, settled and settled.group and physical_order(settled.group) or desired)
+end
+
 ---Execute one `grouping.decide` decision (LEO-369): `hl.dispatch`/`HL.Group`
 ---calls the spike verified live, never a loop or timer. `seed` folds every
 ---currently ungrouped block peer in the same pass, since a peer that opened
@@ -651,12 +794,15 @@ local function apply_group_decision(w, deferred)
         if member then
           unhold(member, scene_name)
           member = hl.get_window("address:" .. ordered[i].address) or member
-          pcall(function()
-            seeded.group:add(member)
-          end)
-          group_adapters.record_join(group_key, ordered[i].address)
+          if same_space(anchor.address, ordered[i].address) then
+            pcall(function()
+              seeded.group:add(member)
+            end)
+            group_adapters.record_join(group_key, ordered[i].address)
+          end
         end
       end
+      reorder_group(seeded.address, group_key)
     end
     trace.emit(window_fields(w, scene_name, {
       stage = "arrange",
@@ -679,7 +825,9 @@ local function apply_group_decision(w, deferred)
       -- joiner is placed at its adapter-ordered slot among the group's
       -- current members instead of always landing at the end.
       local current = group_adapters.normalize_members(target.group)
-      current[#current + 1] = { address = joiner.address, title = joiner.title }
+      -- `tags` travels with the joiner: the project adapter orders by the
+      -- `slot:` role, and a tagless joiner sorts as a scope, at the end.
+      current[#current + 1] = { address = joiner.address, title = joiner.title, tags = joiner.tags }
       local group_key = grouping.group_key(target)
       local index
       for i, address in ipairs(group_adapters.for_class(w.class).order(current, { group_key = group_key })) do
@@ -688,10 +836,13 @@ local function apply_group_decision(w, deferred)
           break
         end
       end
-      pcall(function()
-        target.group:add(joiner, index)
-      end)
-      group_adapters.record_join(group_key, w.address)
+      if same_space(joiner.address, target.address) then
+        pcall(function()
+          target.group:add(joiner, index)
+        end)
+        group_adapters.record_join(group_key, w.address)
+      end
+      reorder_group(target.address, group_key)
     end
     trace.emit(window_fields(w, scene_name, {
       stage = "arrange",
@@ -704,10 +855,23 @@ local function apply_group_decision(w, deferred)
     local victim = hl.get_window("address:" .. w.address)
     if victim and victim.group then
       local group_key = grouping.group_key(victim)
-      pcall(function()
-        victim.group:remove(victim)
+      -- A tick later, never inside this pass: `CGroup::remove` re-assigns
+      -- the window to a space, and on a deck -- where the executor is
+      -- parking and unparking windows in the same breath -- doing that from
+      -- inside the event pass trips `assignToSpace`'s assert and takes the
+      -- whole session down (crash report: CLuaGroup -> CGroup::remove ->
+      -- Layout::CWindowTarget::assignToSpace). Same rule the hold move
+      -- already follows above.
+      local address = w.address
+      group_adapters.record_leave(group_key, address)
+      require("hypr.lib.hypr").oneshot(1, function()
+        local live = hl.get_window("address:" .. address)
+        if live and live.group and whole_group_home(live) then
+          pcall(function()
+            live.group:remove(live)
+          end)
+        end
       end)
-      group_adapters.record_leave(group_key, w.address)
     end
     trace.emit(window_fields(w, scene_name, {
       stage = "arrange",
@@ -1267,7 +1431,12 @@ end
 
 handlers.on("window.active", function(w)
   if w and w.group then
-    group_adapters.record_focus(grouping.group_key(w), w.address)
+    local group_key = grouping.group_key(w)
+    group_adapters.record_focus(group_key, w.address)
+    -- The event a late `slot:` tag arrives behind: a project group formed
+    -- before its roles were stamped sorts into template order here, once,
+    -- and is a no-op on every focus after that.
+    reorder_group(w.address, group_key)
   end
   -- The fullscreen reconciliation: a window that arrived maximized or
   -- fullscreen on a scene whose design does not allow it — zen re-requests

@@ -39,12 +39,19 @@ local M = {}
 ---
 ---The members are kept alongside: slotting counts one, placing covers all of
 ---them, since every window in a group occupies its tile.
+---`identity` names what a tile belongs to, when the live Hyprland group is
+---not the answer. A deck passes the DECLARED identity (the block a window's
+---tag names, `docs/declared-groups.md`): the compositor forms a group only
+---once every member is on one workspace, and a strip that parks what it does
+---not show parts a group out before it can form. Omitted, the live group is
+---the identity, which is what the scene layout wants.
 ---@param tiles Scene.Tile[]
----@return Scene.Tile[] representatives, table<string, Scene.Tile[]> members by group
-local function collapse_groups(tiles)
+---@param identity fun(tile: Scene.Tile): string?|nil
+---@return Scene.Tile[] representatives, table<string, Scene.Tile[]> members by identity
+local function collapse_groups(tiles, identity)
   local seen, out, members = {}, {}, {}
   for _, tile in ipairs(tiles) do
-    local key = tile.group
+    local key = identity and identity(tile) or tile.group
     if not key then
       out[#out + 1] = tile
     else

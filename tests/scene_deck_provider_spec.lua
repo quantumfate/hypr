@@ -246,6 +246,9 @@ t.describe("holding the non-visible members", function()
     provider.recalculate({ area = AREA, targets = { a, b } })
     t.ok(placed(a), "the first arrival is shown by default")
     t.eq(nil, placed(b))
+    -- The moves a pass decides are dispatched a tick later, never from
+    -- inside the layout callback (hypr/scene/deck_provider.lua's queue).
+    stub.drain()
     local held = false
     for _, action in ipairs(stub.dispatched) do
       if action.name == "dsp.window.move" and action.args[1].window == "address:0x2" then
@@ -303,6 +306,7 @@ t.describe("holding the non-visible members", function()
     -- recalculate would normally get nothing to iterate — a held member
     -- only re-enters via `hl.get_windows()`, gathered independent of targets.
     provider.recalculate({ area = AREA, targets = { target("0xdead", "Kitty-Main", "code") } })
+    stub.drain()
     local moved = false
     for _, action in ipairs(stub.dispatched) do
       if action.name == "dsp.window.move" and action.args[1].window == "address:0x1" then
@@ -363,6 +367,7 @@ t.describe("holding the non-visible members", function()
       targets = { target("0x1", "Kitty-Main", "code"), target("0x2", "Kitty-Main", "code") },
     })
 
+    stub.drain()
     local record = require("hypr.scene.deck_order").get_all("code")[1]
     t.eq(1, record.scroll, "the recorded scroll survives the round trip")
     local parked = {}

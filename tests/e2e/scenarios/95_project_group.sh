@@ -74,3 +74,56 @@ close_all_demo() {
 }
 wait_until 50 close_all_demo || e2e_fail "the project's windows outlived closing all of them: $(demo_clients)"
 e2e_log "PASS: closing the last window ends the project"
+
+# Template order, not arrival order: a project declared run-before-zsh still
+# sits zsh, run in the physical group (hypr/lib/project.lua's TEMPLATE_ROLES),
+# and the recorded order mod+j/k walks mirrors that group rather than the
+# order the kitty windows happened to map in.
+ORDER_DIR="$E2E_ROOT/order-repo"
+mkdir -p "$ORDER_DIR"
+cat >"$QF_STORE/projects.json" <<JSON
+{"projects":{"ordered":{"path":"$ORDER_DIR","windows":["run","zsh"],"workspace":"code","kind":"repo","study":false,"priority":0}}}
+JSON
+
+ordered_clients() { clients | jq -c '[.[] | select(.class == "Proj-ordered")]'; }
+ordered_count() { [ "$(ordered_clients | jq 'length')" = "$1" ]; }
+ordered_tags() { [ "$(ordered_clients | jq -r '[.[].tags[]? | select(startswith("slot:"))] | sort | join(",")')" = "$1" ]; }
+
+,proj.sh open ordered >/dev/null 2>&1
+wait_until 100 ordered_count 2 || e2e_fail "ordered did not spawn its template: $(ordered_clients)"
+wait_until 100 ordered_tags "slot:run,slot:zsh" || e2e_fail "ordered's windows never got their role tags: $(ordered_clients)"
+
+zsh_a=$(ordered_clients | jq -r '.[] | select(.tags[]? | startswith("slot:zsh")) | .address')
+run_a=$(ordered_clients | jq -r '.[] | select(.tags[]? | startswith("slot:run")) | .address')
+template_group_order() {
+    [ "$(ordered_clients | jq -r '.[0].grouped | join(",")')" = "$zsh_a,$run_a" ]
+}
+wait_until 50 template_group_order ||
+    e2e_fail "the group's physical order is not the template order (expected $zsh_a,$run_a): $(ordered_clients)"
+e2e_log "PASS: a project group sits in template order, not arrival order"
+
+# The walk order mod+j/k uses (hypr/binds.lua's focus_in_group) reads the
+# adapter over the live group: it must agree with the groupbar above.
+ADAPTER_FILE="$E2E_ROOT/ordered-adapter.txt"
+command rm -f -- "$ADAPTER_FILE"
+hc eval "
+package.path = package.path .. \";$E2E_REPO/?.lua\"
+local group_adapters = require('hypr.scene.group_adapters')
+local grouping = require('hypr.scene.grouping')
+local w = hl.get_window('address:$zsh_a')
+local order = group_adapters.for_class(w.class).order(group_adapters.normalize_members(w.group), { group_key = grouping.group_key(w) })
+local f = assert(io.open(\"$ADAPTER_FILE\", 'w'))
+f:write(table.concat(order, ','))
+f:close()
+" >/dev/null
+wait_until 30 test -f "$ADAPTER_FILE" || e2e_fail "the adapter-order snippet never ran"
+assert_eq "$(cat "$ADAPTER_FILE")" "$zsh_a,$run_a" "mod+j/k walks the same order the groupbar shows"
+
+close_all_ordered() {
+    local a
+    for a in $(ordered_clients | jq -r '.[].address'); do
+        hc dispatch "hl.dsp.window.close({ window = \"address:$a\" })" >/dev/null
+    done
+    ordered_count 0
+}
+wait_until 50 close_all_ordered || e2e_fail "the ordered project's windows outlived closing them: $(ordered_clients)"

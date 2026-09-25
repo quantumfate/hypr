@@ -21,6 +21,11 @@ return {
       -- Deck (docs/deck.md): the project column flips through open project
       -- groups, the browser column sits beside it (hyprfocus scene "code").
       { workspace = "1", default = true, default_name = "code", layout = "deck" },
+      -- Knowledge and reference, same roles as the desktop: the vault deck on
+      -- the main panel, the browser on the secondary (which on a laptop
+      -- resolves back to the built-in panel unless one is plugged in).
+      { workspace = "2", default_name = "knowledge", layout = "deck" },
+      { workspace = "7", default_name = "reference", monitor = "secondary" },
       { workspace = "3", default_name = "proton" },
       -- Dofus: the tile geometry is a fixed capture region, so this scene's
       -- declaration must opt out of solo framing itself (`solo_frame =

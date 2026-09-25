@@ -94,8 +94,15 @@ hl.config({
   -- indicator that says which of them you are looking at.
   group = {
     auto_group = true,
+    -- Off: Hyprland reserves the strip's height inside the group's own box,
+    -- so a tile gained and lost 22px as windows grouped and ungrouped and
+    -- the bar's isles -- which follow the published tile geometry -- jumped
+    -- with it. What the strip was for (which project is open, which tab is
+    -- current) is a quickshell isle instead: a top-right isle listing the
+    -- open projects, and a chip for the current workspace's tabs. Every knob
+    -- below is kept so re-enabling it is one word, not a redesign.
     groupbar = {
-      enabled = true,
+      enabled = false,
       -- Slim: a strip that names the active member, not a tab bar.
       -- Hyprland reserves exactly `height` inside the group's own box (see
       -- hypr/scene/layout.lua), so a group's box stays identical to an

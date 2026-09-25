@@ -43,12 +43,48 @@ integrate with the shared state / UI:
   to survive the rc. Because the
   `code` scene declares one group block per project, `Proj-picker` matches
   none of them, so the engine's stray-float floats the picker instead of
-  folding it into a project's group. `,proj.sh pick-window` opens exactly
+  folding it into a project's group. A picker takes the keyboard when it
+  opens (the `Proj-` no-initial-focus rule that keeps a spawning template
+  from dragging focus around matches `Proj-picker` too, so window rules give
+  the prompt its focus back), and hands focus onward on its way out: to the
+  window it chose, or -- when it ends with no choice, its list empty or
+  escaped -- back to the window it was opened from. Either restore is a
+  detached `_reassert-focus` that waits for the picker's own window to be
+  gone first, because closing it moves focus on its own; the cancel one is
+  exec'd by the compositor rather than forked here, since a child of the
+  picker does not outlive the picker's window. `mod+return` opens the SCENE's terminal, not one global class:
+  `hypr/lib/scene_terminal.lua` resolves `Kitty-<scene>` where the focused
+  scene declares that class, and the plain `Kitty-Main` everywhere else. A
+  mode admits a class exactly once, so per-scene terminals are what let two
+  scenes each keep a terminal column of their own. Anything a picker starts and then outlives -- the template spawn, the focus
+  re-assert -- goes through `detach`, which gives it its own session: the
+  picker's kitty window closes as soon as `pick` returns, and a plain `&` job
+  dies with it. Opening a project ends with one act, not a focus dance:
+  `present_window` asks `hypr/scene/deck_provider.lua`'s `present` over
+  `hyprctl eval` to scroll the project's column to that thing, bring the
+  whole group home and focus the requested role
+  ([docs/declared-groups.md](../docs/declared-groups.md) rule 4). Columns,
+  scroll indices and the hold workspace stay the engine's business; the
+  helper names a window and nothing else, and falls back to a plain focus
+  off a deck scene. `,proj.sh pick-window` opens exactly
   one template window of the focused project (the same one-tab-at-a-time
   gesture as `open-one`); `pick-scope` and `scope` do the same for a
   project's declared scopes. Full reference, including how an nvim window
   is asked to quit rather than force-closed, in the script's own header
   comment.
+
+- `bin/,logs.sh` — log groups, the declared-group engine's second front-end
+  (`docs/declared-groups.md`; `docs/logs.md` is the design). A group's sources
+  come from a repo's own `logs.toml` (`[sources]`, name to command), folded
+  into the catalogue (`$QF_STORE/logs.json`) by `add` — nothing scans, a group
+  exists because someone named it one. `open` spawns one kitty per source,
+  classed `Log-<name>` so the `logs` scene folds them into one group, tagged
+  `slot:<source>` so the tab order is the declared one; it ends with the same
+  present-this-thing act `,proj.sh` uses, and the spawn is detached so a
+  group outlives the picker that asked for it. A group ends with its last
+  window. Log groups and projects are independent: a `Log-hypr` and a
+  `Proj-hypr` share a suffix because the subject matches, never because one
+  reads the other.
 
 - `bin/,job.sh` — starts a long-running job (dev server, build, watcher) as a
   transient `systemd --user` service instead of a plain background process, so

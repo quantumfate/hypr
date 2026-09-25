@@ -159,6 +159,11 @@ e2e_boot() {
     # case a future Hyprland build honors it, but E2E_BIG_MONITOR above
     # (hypr/monitors.lua, applied at config load) is what actually works.
     hc keyword monitor "WAYLAND-1,1280x360@60,0x0,1" >/dev/null || true
+    # The sandbox contract in one assertion: every store write from here on
+    # must land under the mktemp root. A scenario that lost these exports
+    # would otherwise write to the live desk's store, which has happened.
+    [[ $QF_STORE == "$E2E_ROOT/"* ]] ||
+        e2e_fail "QF_STORE is not inside the sandbox root ($QF_STORE); refusing to touch the live store"
     e2e_log "nested instance $E2E_SIG up (pid $E2E_PID, $E2E_WAYLAND, root $E2E_ROOT)"
 }
 
