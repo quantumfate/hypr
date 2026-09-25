@@ -1,8 +1,7 @@
 # session/ — Hyprland session glue
 
 Files absorbed out of chezmoi that belong to the Hyprland _session_ (not the
-compositor config proper). Deployed identically by both delivery paths
-(`flake.nix` nix modules, `ansible/roles/hypr`).
+compositor config proper). Deployed by `ansible/roles/hypr`.
 
 | File                          | Deployed to                                  | Notes                                                                                                  |
 | ----------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |

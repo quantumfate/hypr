@@ -265,7 +265,7 @@ Before marking work complete:
 New to the repo, read in this order — each layer points at the next:
 
 1. [README.md](README.md) — what this is, how to install it.
-2. [ARCHITECTURE.md](ARCHITECTURE.md) — the packaging model: dual delivery (Nix + Ansible), repo scope, ecosystem coupling, release channels.
+2. [ARCHITECTURE.md](ARCHITECTURE.md) — the packaging model: ansible delivery, repo scope, ecosystem coupling, release channels.
 3. [docs/declared-groups.md](docs/declared-groups.md) — what a project group and a log group both are: declared identity, whole-thing movement, the focus invariant.
 4. [docs/scenes.md](docs/scenes.md) — the scene contract (below is the enforcement; this is the reasoning). [docs/shelves.md](docs/shelves.md) — the shelf submap for apps that never tile.
 5. [docs/lifecycle.md](docs/lifecycle.md) — the window lifecycle: current behaviour per stage and the draft contract.
@@ -280,16 +280,16 @@ New to the repo, read in this order — each layer points at the next:
 
 ## Repo map
 
-| Path                     | Owns                                                                 |
-| ------------------------ | -------------------------------------------------------------------- |
-| `hypr/`                  | the running compositor logic (Lua); scene engine under `hypr/scene/` |
-| `*.conf`                 | hypr\* daemon configs (hypridle, hyprlock, hyprsunset, …)            |
-| `bin/`                   | the `,name.sh` helpers binds and quickshell spawn                    |
-| `conf/`                  | host-specific data (`workspace_specs`, temporary `scenes` fork)      |
-| `etc/`                   | generated/contract data (`scene-managed.json`, systemd targets)      |
-| `session/`               | uwsm env, systemd user units, greeter fragment                       |
-| `flake.nix` / `ansible/` | the two delivery paths (kept in sync, both first-class)              |
-| `tests/`                 | Lua specs (`tests/run.lua` + `hl_stub.lua`) and shell-helper tests   |
+| Path       | Owns                                                                 |
+| ---------- | -------------------------------------------------------------------- |
+| `hypr/`    | the running compositor logic (Lua); scene engine under `hypr/scene/` |
+| `*.conf`   | hypr\* daemon configs (hypridle, hyprlock, hyprsunset, …)            |
+| `bin/`     | the `,name.sh` helpers binds and quickshell spawn                    |
+| `conf/`    | host-specific data (`workspace_specs`, temporary `scenes` fork)      |
+| `etc/`     | generated/contract data (`scene-managed.json`, systemd targets)      |
+| `session/` | uwsm env, systemd user units, greeter fragment                       |
+| `ansible/` | the delivery path (packages + file deploy)                           |
+| `tests/`   | Lua specs (`tests/run.lua` + `hl_stub.lua`) and shell-helper tests   |
 
 ## Contract
 

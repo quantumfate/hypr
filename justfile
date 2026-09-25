@@ -23,7 +23,6 @@ fmt:
 	shfmt -w -i 4 {{ shell_files }}
 	ruff format {{ python_files }}
 	prettier --write '**/*.md'
-	nixpkgs-fmt .
 
 # Verify formatting without writing
 fmt-check:
@@ -31,7 +30,6 @@ fmt-check:
 	shfmt -d -i 4 {{ shell_files }}
 	ruff format --check {{ python_files }}
 	prettier --check '**/*.md'
-	nixpkgs-fmt --check .
 
 # Static analysis
 lint:
@@ -86,10 +84,6 @@ ansible-syntax:
 check-ansible: ansible-syntax
 	ansible-lint ansible/
 
-# Validate the nix delivery path (evaluates modules + devShell)
-check-nix:
-	nix flake check
-
 # CI gate: formatting + ansible syntax (lint stays advisory, per `lint` above)
 check-all: check ansible-syntax
 
@@ -100,10 +94,6 @@ setup:
 # Install the system toolchain via ansible (needs sudo)
 provision:
 	ansible-playbook scripts/provision.yml --ask-become-pass
-
-# Enter the reproducible nix dev shell
-dev:
-	nix develop
 
 # Swap the hypr* ecosystem to the rolling git channel (interactive: confirm the
 # stable→git replacements + review PKGBUILDs as the compositor rebuilds).

@@ -25,5 +25,4 @@ fi
 
 log_ok "Setup complete."
 log_info "System toolchain:     just provision"
-log_info "Reproducible shell:   nix develop"
 log_info "Run checks:           just check"

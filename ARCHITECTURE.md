@@ -2,18 +2,19 @@
 
 This repo is the **single source of truth** for a self-contained Hyprland
 _environment_: the compositor config plus the surrounding `hypr*` ecosystem
-session glue, delivered reproducibly to two classes of machine.
+session glue, delivered reproducibly by **Ansible**.
 
-## Delivery model — dual, full, equal
+## Delivery model — one path
 
-| Path        | Target machines                            | Installs + deploys via                            |
-| ----------- | ------------------------------------------ | ------------------------------------------------- |
-| **Nix**     | NixOS / nix-managed hosts                  | `flake.nix` → NixOS + home-manager modules        |
-| **Ansible** | everything else (Arch/CachyOS, other unix) | `ansible/roles/hypr` → pacman + AUR + file deploy |
+| Path        | Target machines             | Installs + deploys via                            |
+| ----------- | --------------------------- | ------------------------------------------------- |
+| **Ansible** | Arch/CachyOS and other unix | `ansible/roles/hypr` → pacman + AUR + file deploy |
 
-Both paths are first-class and kept in sync: same package set, same deployed
-files, same end state. Nix is for nix machines; Ansible is for non-nix ones.
-The Lua config, assets, and `.conf` files are shared verbatim by both.
+There was a second, nix flake path (NixOS + home-manager modules, a pinned
+devShell, `nix flake check` in the gate). It is gone: it was carried as a
+first-class path that nothing here actually ran on, so it drifted from the
+ansible role it was supposed to mirror and cost a second place to update on
+every dependency change. Ansible is the delivery path.
 
 ## Scope — the Hyprland ecosystem
 
@@ -40,10 +41,9 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 - `assets/`, `icons/`, `wallpapers/` — generated + static assets.
 - `session/` — session glue absorbed from chezmoi (uwsm env, systemd user
   units, greeter fragment). Deployed identically by both paths.
-- `flake.nix` — nix delivery (devShell + NixOS/home-manager modules).
 - `ansible/` — ansible delivery (role `hypr`, playbook, galaxy meta).
-- `.github/` — CI: validate-only (flake check, ansible-lint, stylua,
-  shellcheck). Publishing (Galaxy / cachix) deferred until stable.
+- `.github/` — CI: validate-only (ansible-lint, stylua, shellcheck).
+  Publishing (Galaxy) deferred until stable.
 
 ## Dependency completeness (verified)
 
@@ -69,12 +69,12 @@ against it. Consequence: the ecosystem moves as **one atomic unit** — you
 cannot run a git compositor against stable daemons. Only `hyprpolkitagent`
 (Qt-only) is decoupled.
 
-Two channels, selected per delivery path:
+Two channels:
 
-| Channel  | Ansible                                                        | Nix                          |
-| -------- | -------------------------------------------------------------- | ---------------------------- |
-| `stable` | official-repo packages (`hypr_core_packages`)                  | nixpkgs packages             |
-| `git`    | AUR `-git` group in one paru transaction (`hypr_git_packages`) | the Hyprland + daemon flakes |
+| Channel  | Packages                                                       |
+| -------- | -------------------------------------------------------------- |
+| `stable` | official-repo packages (`hypr_core_packages`)                  |
+| `git`    | AUR `-git` group in one paru transaction (`hypr_git_packages`) |
 
 **How compatibility is enforced:**
 
@@ -86,13 +86,6 @@ Two channels, selected per delivery path:
   `-git` (they link the libs but aren't pulled by the compositor). Update the
   whole group together: `paru -Sua` (devel upgrade). Never `-Syu` a stable lib
   under a git compositor.
-- **Nix** — each daemon flake's shared-lib inputs `follow` the Hyprland flake's
-  (`hypridle.inputs.hyprutils.follows = "hyprland/hyprutils"`, …), so the entire
-  set resolves to **one** hyprutils/hyprlang/hyprgraphics/aquamarine → one
-  soname → compatible by construction. `flake.lock` pins the commit set
-  (reproducible rolling); `nix flake update` bumps them atomically. The
-  `hyprGit` overlay swaps the coupled packages for the flake builds when
-  `programs.hyprEnvironment.channel = "git"`.
 
 Note: on CachyOS the official repos are already very fresh (often ahead of the
 AUR `.SRCINFO` snapshots), so `git` mainly buys _unreleased_ commits (e.g. the

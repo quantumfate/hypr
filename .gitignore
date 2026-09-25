@@ -13,10 +13,6 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Nix
-result
-result-*
-
 # Ansible
 .ansible
 

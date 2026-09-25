@@ -89,7 +89,7 @@ hypr_aur_packages:
   - catppuccin-sddm-theme-latte     # login theme (light)
 
 # Deploy the uwsm env, hypr* systemd user units, and greeter fragment, then
-# enable the units. Mirrors the nix home-module.
+# enable the units.
 hypr_deploy_session: true
 
 # GPU profile: "nvidia" keeps the NVIDIA env block in uwsm/env-hyprland; any

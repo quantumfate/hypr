@@ -12,17 +12,4 @@ Window placement is a scene document executed by engines — [docs/scenes.md](do
 
 ## Install
 
-### Ansible
-
-See [Ansible](./ansible/)
-
-### Nix (NixOS / nix-managed hosts)
-
-Import `nixosModules.hypr` (system) and `homeManagerModules.hypr`
-(home-manager) from this flake, then:
-
-```nix
-programs.hyprEnvironment.enable = true;
-programs.hyprEnvironment.channel = "git";   # optional: rolling flake set (default "stable")
-programs.hyprEnvironment.gpu = "nvidia";    # home module: keep the NVIDIA env block
-```
+See [Ansible](./ansible/) — the one delivery path.
