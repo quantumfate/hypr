@@ -81,7 +81,7 @@ setup() {
     mkdir -p "$FAKEBIN"
     for tool in fd jq awk sed grep cut sort tr head mktemp stat date cksum paste wc \
         mkdir cat mv rm touch readlink basename dirname tty pgrep pkill id env bash sh \
-        printf true false python3 sleep seq xargs; do
+        printf true false python3 sleep seq xargs setsid; do
         real=$(command -v "$tool" 2>/dev/null) || continue
         ln -sf "$real" "$FAKEBIN/$tool"
     done
@@ -293,7 +293,19 @@ teardown() {
     pkill -f "$ROOT" 2>/dev/null || true
     export PATH="$OLD_PATH"
     unset FZF_PICK_CHOICE NVIM_FAKE_UNSAVED
-    rm -rf "$ROOT"
+    # SIGTERM is a request, and a listener mid-write answers it a moment
+    # later — `rm -rf` walking the tree in that moment fails with "Directory
+    # not empty" and takes the whole gate red for nothing. Wait for the
+    # processes to actually be gone, then remove.
+    local waited=0
+    while pgrep -f "$ROOT" >/dev/null 2>&1 && [ "$waited" -lt 20 ]; do
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    rm -rf "$ROOT" 2>/dev/null || {
+        sleep 0.2
+        rm -rf "$ROOT"
+    }
 }
 
 clients_json() { cat "$HYPR_CLIENTS"; }
