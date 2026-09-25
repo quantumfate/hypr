@@ -196,6 +196,41 @@ local function normalize_docks(name, raw)
   return out
 end
 
+---A dock naming a block or column the scene does not declare can never
+---resolve: the publisher keys its targets by the order a block actually
+---carries, so `block:1` against blocks numbered 0 and 2 simply finds nothing
+---and the isle rests forever, looking exactly like docking being switched
+---off. `dofus` shipped that way -- its game block was `order = 0` while its
+---workspaces isle and its roster both asked for `block:1`, so neither ever
+---docked (live, 2026-09-25). The grammar check upstream cannot catch it:
+---`block:1` is perfectly well-formed, it just names nothing here.
+---@param name string
+---@param spec Scene.Spec
+local function report_unanchorable_docks(name, spec)
+  local declared = {}
+  for _, block in ipairs(spec.blocks or {}) do
+    declared["block:" .. tostring(block.order)] = true
+  end
+  for _, column in ipairs(spec.columns or {}) do
+    declared["column:" .. tostring(column.order)] = true
+  end
+  local function check(isle, entry)
+    if type(entry) ~= "table" then
+      return
+    end
+    local of = entry.of
+    if type(of) == "string" and of:match("^[bc]%a*:%d+$") and not declared[of] then
+      report_dock_dropped(name, isle, "names " .. of .. ", which this scene does not declare")
+    end
+    if entry.fallback then
+      check(isle, entry.fallback)
+    end
+  end
+  for isle, entry in pairs(spec.docks or {}) do
+    check(isle, entry)
+  end
+end
+
 local function normalize(name, raw)
   local blocks = {}
   for i, block in ipairs(raw.blocks or {}) do
@@ -218,7 +253,7 @@ local function normalize(name, raw)
   table.sort(blocks, function(a, b)
     return a.order < b.order
   end)
-  return {
+  local spec = {
     name = name,
     blocks = blocks,
     barred = raw.barred or {},
@@ -239,6 +274,8 @@ local function normalize(name, raw)
     gaps_out = raw.gaps_out,
     docks = normalize_docks(name, raw.docks),
   }
+  report_unanchorable_docks(name, spec)
+  return spec
 end
 
 ---@type table<string, Scene.Spec>?
