@@ -61,7 +61,7 @@ return {
         default_name = "reference",
         monitor = "secondary",
         gaps_in = 24,
-        gaps_out = { top = 28, right = 32, bottom = 32, left = 32 },
+        gaps_out = { top = 28, right = 32, bottom = 19, left = 32 },
       },
       -- Proton shared across gaming + work + study modes. The 50/50 split
       -- (mail left, pass companion right) is declared by the scene.
@@ -90,7 +90,7 @@ return {
         default_name = "media",
         monitor = "secondary",
         gaps_in = 24,
-        gaps_out = { top = 28, right = 32, bottom = 32, left = 32 },
+        gaps_out = { top = 28, right = 32, bottom = 19, left = 32 },
       },
       -- Logs: tmux log workspace, secondary.
       { workspace = "12", default_name = "logs", monitor = "secondary" },

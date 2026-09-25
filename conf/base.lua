@@ -45,26 +45,30 @@ local default_gaps = { gaps_in = 24, gaps_out = { top = 12, right = 56, bottom =
 ---same way it excludes the desktop's case panel) -- see the module comment
 ---above for why top stays small rather than doubling the bar's own
 ---reservation.
+---The BOTTOM gap is deliberately the thinnest side on every profile: 40%
+---off what the other sides carry. Nothing docks there -- the bar and its
+---isles live in the top gutter, and the sides carry the ultrawide's framing
+---— so the space was only ever margin, and the scenes wanted it.
 ---@type table<string, { gaps_by_monitor?: table<string, table<string, any>> }>
 local geometry_profiles = {
   [require("hypr.lib.profile").DESK_DUAL] = {
     gaps_by_monitor = {
-      primary = { gaps_in = 20, gaps_out = { top = 12, right = 30, bottom = 15, left = 30 } },
+      primary = { gaps_in = 20, gaps_out = { top = 12, right = 30, bottom = 9, left = 30 } },
       -- The secondary's isles dock to its screen frame (logs, media,
       -- steam-games all declare `of = "screen"`), and a screen-frame isle
       -- lives IN the top gutter: 12 was thinner than the isle itself, so the
       -- clamp sat it flush against the screen edge. 56 gives the gutter room
       -- for the isle plus its own clearance, in rhythm with the 64 sides.
-      secondary = { gaps_in = 48, gaps_out = { top = 56, right = 64, bottom = 64, left = 64 } },
+      secondary = { gaps_in = 48, gaps_out = { top = 56, right = 64, bottom = 38, left = 64 } },
     },
   },
   [require("hypr.lib.profile").LAPTOP_SOLO] = {
     gaps_by_monitor = {
-      primary = { gaps_in = 40, gaps_out = { top = 12, right = 48, bottom = 48, left = 48 } },
+      primary = { gaps_in = 40, gaps_out = { top = 12, right = 48, bottom = 29, left = 48 } },
       -- The laptop's secondary (external monitor, HDMI-A-1) never carries a
       -- bar (Bar.qml's excludedScreens), so nothing reserves height there --
       -- top can match the other three sides.
-      secondary = { gaps_in = 40, gaps_out = { top = 48, right = 48, bottom = 48, left = 48 } },
+      secondary = { gaps_in = 40, gaps_out = { top = 48, right = 48, bottom = 29, left = 48 } },
     },
   },
 }

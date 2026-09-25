@@ -42,8 +42,10 @@ Packages are inferred from the ecosystem's own dependencies, not hand-listed.
 - `session/` — session glue absorbed from chezmoi (uwsm env, systemd user
   units, greeter fragment). Deployed identically by both paths.
 - `ansible/` — ansible delivery (role `hypr`, playbook, galaxy meta).
-- `.github/` — CI: validate-only (ansible-lint, stylua, shellcheck).
-  Publishing (Galaxy) deferred until stable.
+- CI: none in this repo. The workflow was removed in August 2026 and this
+  line described one that had not existed since; `just check` is the gate,
+  run locally and by the pre-commit hook. The sibling `quickshell` and
+  `system-config` repos do run theirs on GitHub.
 
 ## Dependency completeness (verified)
 
