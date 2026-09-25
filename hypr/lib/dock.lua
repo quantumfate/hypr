@@ -20,7 +20,7 @@ local M = {}
 
 ---@class Dock.Spec
 ---@field at string one of the nine-grid anchors below
----@field of string "screen" | "block:<order>" | "slot:<slot>" | "class:<class>"
+---@field of string "screen" | "block:<order>" | "column:<order>" | "slot:<slot>" | "class:<class>"
 ---@field orientation ("horizontal"|"vertical")? overrides the edge default
 ---@field fallback (Dock.Spec|false)? a dock spec of the same shape, chainable
 
@@ -57,7 +57,14 @@ M.ANCHOR_WORDS = {
   ["right-bottom"] = { "bottom", "right", "h" },
 }
 
----Whether `of` is one of the four grammars a dock target may name.
+---Whether `of` is one of the grammars a dock target may name.
+---
+---`column:<order>` is the deck's (`hypr/scene/dock_publish.lua` publishes
+---it): a column is a PLACE that exists in every pass, while a block names a
+---box only while its window is the one the strip shows. Leaving it out of
+---this list -- after teaching the publisher to emit it -- silently dropped
+---every dock on both deck scenes at parse time, so those screens published
+---an empty map and no isle docked at all (live, 2026-09-24).
 ---@param of unknown
 ---@return boolean
 function M.valid_of(of)
@@ -66,6 +73,7 @@ function M.valid_of(of)
   end
   return of == "screen"
     or of:match("^block:%d+$") ~= nil
+    or of:match("^column:%d+$") ~= nil
     or of:match("^slot:.+$") ~= nil
     or of:match("^class:.+$") ~= nil
 end
@@ -273,14 +281,20 @@ end
 ---through its own declaration, so two isles on one workspace cannot end up in
 ---different failure modes (one hugging a window gutter, one squeezed into the
 ---screen gap).
+---`first_only` stops the walk at the level it was handed: the resolve pass
+---claims every isle's FIRST choice before any isle walks a fallback, so a
+---neighbour's fallback can never take the region an isle's live target
+---asked for (the ids are sorted, and `bar.center`'s screen fallback was
+---taking `bar.workspaces`' seat purely because `c` sorts before `w`).
 ---@param entry Dock.Spec|false|nil
 ---@param ctx table
 ---@param claimed table<string, boolean>
 ---@param stepped_down boolean
+---@param first_only boolean? resolve this level only; do not step down
 ---@return Dock.Published?
-local function resolve_chain(entry, ctx, claimed, stepped_down)
+local function resolve_chain(entry, ctx, claimed, stepped_down, first_only)
   if not M.valid_entry(entry) then
-    if type(entry) == "table" and entry.fallback ~= nil then
+    if not first_only and type(entry) == "table" and entry.fallback ~= nil then
       return resolve_chain(entry.fallback, ctx, claimed, true)
     end
     return nil
@@ -291,7 +305,7 @@ local function resolve_chain(entry, ctx, claimed, stepped_down)
   ---entry resolved to is already claimed. All three collapse the same way:
   ---down the declared fallback chain, or to rest.
   local function step_down()
-    if entry.fallback ~= nil then
+    if not first_only and entry.fallback ~= nil then
       return resolve_chain(entry.fallback, ctx, claimed, true)
     end
     return nil
@@ -408,13 +422,31 @@ function M.resolve(docks, ctx)
   end
   table.sort(ids)
 
+  -- Two passes, first choices first. Within a pass the sorted id breaks a
+  -- tie, as before; ACROSS the passes an isle whose declared target is live
+  -- outranks a neighbour that has already lost its own and is looking for
+  -- somewhere to land. One pass could not say that: the first id to ask for a
+  -- region took it, fallback or not, and the isle that actually had a window
+  -- there was sent to rest.
+  local pending = {}
   for _, id in ipairs(ids) do
     local spec = docks[id]
     if spec == false then
       out[id] = { state = "hidden" }
     else
-      out[id] = resolve_chain(spec, ctx, claimed, false) or { state = "resting" }
+      local placed = resolve_chain(spec, ctx, claimed, false, true)
+      if placed then
+        out[id] = placed
+      else
+        pending[#pending + 1] = id
+      end
     end
+  end
+
+  for _, id in ipairs(pending) do
+    local spec = docks[id]
+    local fallback = type(spec) == "table" and spec.fallback or nil
+    out[id] = (fallback ~= nil and resolve_chain(fallback, ctx, claimed, true) or nil) or { state = "resting" }
   end
   return out
 end

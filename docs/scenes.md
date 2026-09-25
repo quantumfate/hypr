@@ -237,7 +237,10 @@ Grouping is decided **once**, by the scene. Do not also write a `group` key in `
 
 ### Group adapters
 
-Which member `mod+j/k` steps to next/prev inside a group is a separate decision from membership: `hypr/scene/group_adapters.lua` is a registry keyed by class, each entry a pure `order(members, ctx) -> addresses`. Dofus orders by the team roster (`hypr/services/dofus/common.lua`'s `team()`); the default adapter orders by a stable join list the executor (`hypr/events/scene.lua`) updates on `seed`/`join`/`eject`/`window.close`, falling back to `group.members` order for a group nothing has recorded yet. `hypr/binds.lua`'s `focus_in_group` reads the adapter for the focused window's class, wraps at either end, and focuses by address — see [desktop-model.md](desktop-model.md#quickshell) for the bind-level contract and `tests/group_adapters_spec.lua` for the adapter specs.
+The declaration a group instantiates, and the rules its windows travel by, are
+[declared-groups.md](declared-groups.md); this section is the ordering half.
+
+Which member `mod+j/k` steps to next/prev inside a group is a separate decision from membership: `hypr/scene/group_adapters.lua` is a registry keyed by class, each entry a pure `order(members, ctx) -> addresses`. Dofus orders by the team roster (`hypr/services/dofus/common.lua`'s `team()`); the default adapter orders by a stable join list the executor (`hypr/events/scene.lua`) updates on `seed`/`join`/`eject`/`window.close`, falling back to `group.members` order for a group nothing has recorded yet. A project's class (`Proj-<name>`) takes a template adapter instead: its members sit in the declared tab order (nvim, yazi, zsh, run), with an on-demand scope after them. The physical group is sorted into the adapter's order and the record is rewritten from it -- on every seed, join, and focus of a member -- so the groupbar and the walk order are one list. Sorting once at seed time is not enough: a project is grouped before its `slot:` tags land (kitty maps async, `,proj.sh` stamps the role after), so the order is re-decided when a member is focused, which is the event a late tag arrives behind. A member out of place is removed and re-added at its index (`HL.Group:add`'s 1-based insertion index); the `move_window` dispatcher is not usable for this -- it acts on focus. `hypr/binds.lua`'s `focus_in_group` reads the adapter for the focused window's class, wraps at either end, and focuses by address — see [desktop-model.md](desktop-model.md#quickshell) for the bind-level contract and `tests/group_adapters_spec.lua` for the adapter specs.
 
 ## Guard
 
@@ -357,6 +360,45 @@ docks = {
 }
 ```
 
+A block's `order` is part of its **identity**, not just its sort key: the
+compile emits it into the tag every window of that block wears
+(`block:<scene>/<order>`), and the dock publisher keys its targets by it. Two
+consequences. A dock must name the order the block actually carries —
+`dofus`'s game block is `order = 0`, so its isles anchor to `block:0`; naming
+`block:1` resolves to nothing and the isle rests forever, looking exactly like
+docking switched off (live, 2026-09-25; `hypr/scene/spec.lua` now traces
+`admit.dock_dropped` for a dock naming an order the scene does not declare).
+And renumbering a block under a running desk **orphans its live windows**:
+they keep the tag naming the old order, stop matching any declared block, and
+the stray policy moves them onto whatever scene is focused — a Dofus client
+walked onto the code scene that way. Renumber only across a reload, or don't.
+
+- `of` — what the isle anchors to: `screen`, `block:<order>`,
+  `column:<order>` (a deck's column), `slot:<slot>` or `class:<class>`. On a
+  **deck**, anchor to the **column**: the strip shows one thing at a time, so
+  `block:<order>` names a box only while that block's window is the visible
+  one, and an isle anchored to a block docks only when that thing happens to
+  be on screen. A target this grammar does not know is dropped at parse time
+  with an `admit.dock_dropped` trace — the scene keeps its other docks, and a
+  scene whose every dock was dropped publishes nothing at all, which looks
+  exactly like docking being switched off.
+- `fallback` — a dock spec of the same shape, tried when the one above it
+  resolves to nothing. It is for an isle with a SECOND real target, not a
+  blanket screen escape: giving every isle `{ of = "screen" }` put two isles
+  on one screen anchor the moment their blocks went away, and since one spot
+  takes one isle, the loser rested while its neighbour stood in the gap — two
+  isles on one workspace in two different failure modes, and both of them
+  moving on every window event (live, 2026-09-24: "when isles have nothing to
+  anchor they run around like headless chickens"). A scene with no live
+  windows rests its whole bar on purpose: resting is the bar's own row, the
+  one place that does not move. Every isle's FIRST choice is claimed before
+  any isle walks a fallback, so a fallback can never take the region an isle
+  with a live window asked for.
+- **Opt-in**: an isle appears on a scene's screen only where that scene names
+  it. The three isles every bar carries (`bar.workspaces`, `bar.center`,
+  `bar.clock`) rest where they always did when a scene says nothing; every
+  other isle — the project strip, the Dofus roster — is absent unless
+  declared. `false` withholds one explicitly.
 - `at` — the nine-grid: `top-left` `top-center` `top-right` `middle-left`
   `center` `middle-right` `bottom-left` `bottom-center` `bottom-right`, plus
   the four side-leading corners `left-top` `left-bottom` `right-top`
@@ -404,8 +446,11 @@ ladder produced. A scene with no live windows therefore rests every
 block-anchored isle; an isle declared directly against `of = "screen"` is not
 a fallback and still docks — it asked for the screen frame on purpose. The
 shipped scenes declare no screen fallbacks: isles dock to the block they name,
-or rest. Two isles claiming one region resolve by isle id: the first keeps it,
-the second walks its own ladder. So a second window opening beside the first
+or rest. Two isles claiming one region resolve in two passes: every isle's
+first choice claims before any isle walks a fallback (an isle whose declared
+window is live outranks a neighbour that has already lost its own), and within
+a pass the sorted isle id breaks the tie — the first keeps it, the second
+walks its own ladder. So a second window opening beside the first
 never inherits the first's dock, and the association stays legible.
 
 `hypr/lib/dock.lua` decides all of this as arithmetic over the boxes the

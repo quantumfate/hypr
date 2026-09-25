@@ -239,6 +239,21 @@ t.describe("dock.resolve: two isles, one gutter", function()
     t.eq(SOLO.x, out["bar.center"].anchor.x)
     t.eq(SOLO.x + SOLO.w, out["bar.clock"].anchor.x, "aligned to the window's right edge")
   end)
+
+  t.it("a live first choice outranks a neighbour's fallback, whatever the ids sort to", function()
+    -- `bar.center` sorts before `bar.workspaces`, and its fallback used to
+    -- claim the screen's top-left before the isle whose declared block was
+    -- actually live got to ask — so the isle with a window sat resting while
+    -- the one without it took the gutter. First choices claim first, across
+    -- every isle, and only then does anyone walk a fallback.
+    local docks = {
+      ["bar.center"] = { at = "top-left", of = "block:9", fallback = { at = "top-left", of = "screen" } },
+      ["bar.workspaces"] = { at = "top-left", of = "screen" },
+    }
+    local out = dock.resolve(docks, ctx({ ["block:1"] = SOLO }, { SOLO }))
+    t.eq("docked", out["bar.workspaces"].state, "its own target was live and free")
+    t.eq("resting", out["bar.center"].state, "the spot its fallback wanted was taken")
+  end)
 end)
 
 t.describe("dock.resolve: bounds", function()
@@ -272,5 +287,29 @@ t.describe("dock.resolve: bounds", function()
     t.eq("right", out["bar.a"].grow, "grows away from the content area into the right gap")
     t.eq(MONITOR.w - GAPS.right, out["bar.a"].region.x, "the band starts at the inner edge of the right gap")
     t.eq(GAPS.right, out["bar.a"].region.w)
+  end)
+end)
+
+t.describe("dock.valid_of (the target grammars a scene may name)", function()
+  t.it("accepts a deck column, which a deck publishes every pass", function()
+    -- The publisher emitted `column:<order>` while this list still refused
+    -- it, so every dock on both deck scenes was dropped at parse time and
+    -- those screens published an empty map (live, 2026-09-24).
+    t.eq(true, dock.valid_of("column:1"))
+    t.eq(true, dock.valid_entry({ at = "top-right", of = "column:2" }))
+  end)
+
+  t.it("still accepts the grammars it always did", function()
+    t.eq(true, dock.valid_of("screen"))
+    t.eq(true, dock.valid_of("block:6"))
+    t.eq(true, dock.valid_of("slot:nvim"))
+    t.eq(true, dock.valid_of("class:Kitty-code"))
+  end)
+
+  t.it("refuses a malformed target rather than guessing at it", function()
+    t.eq(false, dock.valid_of("column:"))
+    t.eq(false, dock.valid_of("column:left"))
+    t.eq(false, dock.valid_of("columns:1"))
+    t.eq(false, dock.valid_of(nil))
   end)
 end)
