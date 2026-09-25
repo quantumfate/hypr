@@ -33,13 +33,50 @@ function M.on_submap_change(cb)
   submap_subs[#submap_subs + 1] = cb
 end
 
+-- Every armed one-shot, held until it fires.
+--
+-- `hl.timer` hands back a handle and keeps no strong reference of its own, so
+-- a caller that discards it -- `oneshot(25, step)`, the shape of every phase
+-- chain and queued move in this repo -- leaves the timer reachable only from
+-- a local that is already dead. Lua then collects it whenever it feels like
+-- it and the callback simply never runs: no error, no trace, the chain just
+-- stops. That is the intermittent half-applied mode swap (live, 2026-09-24):
+-- the apply's phase chain stalled between two phases, `transition.finish`
+-- was never reached, the bracket force-settled 8s later on its failsafe, and
+-- with the settle callback went the landing on the mode's main scene and the
+-- companion reconvergence -- which is why a withdrawn scene kept its browser
+-- and the desk stayed on whatever workspace it was on.
+--
+-- Keyed by the handle, cleared when it fires. A cancelled timer
+-- (`:set_enabled(false)`) keeps its entry until the process ends; that is a
+-- handful of dead table keys per session against a class of silent stalls.
+---@type table<any, true>
+local armed = {}
+
 ---A one-shot timer that runs `cb` after `ms` milliseconds. Returns the handle
 ---so callers can cancel (`:set_enabled(false)`) or re-arm (`:set_timeout(ms)`).
+---The handle is retained here as well, so DISCARDING it is safe.
 ---@param ms integer
 ---@param cb fun()
 ---@return HL.Timer
 function M.oneshot(ms, cb)
-  return hl.timer(cb, { timeout = ms, type = "oneshot" })
+  local handle
+  handle = hl.timer(function()
+    armed[handle] = nil
+    cb()
+  end, { timeout = ms, type = "oneshot" })
+  armed[handle] = true
+  return handle
+end
+
+---How many one-shots are armed right now. For specs and `,hyprfocus log`.
+---@return integer
+function M.armed_count()
+  local n = 0
+  for _ in pairs(armed) do
+    n = n + 1
+  end
+  return n
 end
 
 return M

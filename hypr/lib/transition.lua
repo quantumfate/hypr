@@ -184,10 +184,19 @@ local function disarm_failsafe()
   end
 end
 
----Force-settle a bracket whose `finish` never came. No settle callback: the
----desk may be half-placed, and landing on main then would be a guess. The
----settings, the guard and the published state all return to rest, so the user
----gets a working desk back and the next mode change is not refused.
+---Force-settle a bracket whose `finish` never came.
+---
+---The settle callback STILL RUNS. It used to be dropped here on the grounds
+---that a half-placed desk is no place to land — but the landing is a
+---workspace focus on the mode's own declared main scene, which is a fact
+---about the mode, not about how far the placing got. Dropping it meant the
+---one case where the desk is least predictable was also the one case where
+---focus was left wherever it happened to be, and "where am I after a mode
+---swap" stopped having an answer. Deterministic beats tidy: a transition
+---always ends on main (the user's own standing requirement, 2026-09-25).
+---
+---The settings, the guard and the published state all return to rest, so the
+---user gets a working desk back and the next mode change is not refused.
 ---@param gen integer the generation this failsafe was armed under
 local function force_settle(gen)
   failsafe = nil
@@ -200,7 +209,14 @@ local function force_settle(gen)
     end)
     timer = nil
   end
+  -- Land first, while the open-focus guard is still raised and activation
+  -- focus is still off -- the same order the legitimate settle uses, so a
+  -- window mapping in this instant cannot steal the landing.
+  local cb = settled_cb
   settled_cb = nil
+  if cb then
+    pcall(cb)
+  end
   bracketed = false
   pcall(function()
     hl.window_rule({ name = GUARD_RULE, enabled = false })
@@ -319,6 +335,36 @@ function M.begin(mode, veil, on_settled, duration_ms)
   return generation
 end
 
+---Report that the apply behind this bracket is still advancing, which pushes
+---the failsafe back by its full span.
+---
+---The failsafe measures the bracket against a fixed 8s, and an apply's own
+---work is not fixed: restoring ten held windows across two deck scenes takes
+---as long as it takes. A heavy swap therefore tripped the wedge-guard while
+---it was still working normally -- and force-settling drops the settle
+---callback, so the landing on the mode's main scene and the companion
+---reconvergence were silently skipped on exactly the swaps that moved the
+---most (live, 2026-09-24). Pet it from each phase and the guard measures what
+---it is actually there for: not "is this taking long" but "has this stopped".
+function M.progress()
+  if not bracketed or not failsafe then
+    return
+  end
+  local gen = generation
+  pcall(function()
+    failsafe:set_timeout(FAILSAFE_MS)
+  end)
+  -- A handle that cannot be re-armed is replaced outright, so the guard is
+  -- never simply lost.
+  if not failsafe then
+    pcall(function()
+      failsafe = hypr.oneshot(FAILSAFE_MS, function()
+        force_settle(gen)
+      end)
+    end)
+  end
+end
+
 ---Restore animations once the queued moves have settled. A transition that
 ---began meanwhile owns its own settle; this timer bows out at the generation
 ---guard and never re-enables underneath it.
@@ -395,9 +441,13 @@ function M.active()
   return bracketed
 end
 
----Drop the settle callback without running it. Used when an apply phase
----failed: the bracket still needs to finish so settings restore, but landing
----on the mode's main scene would focus a desk that was never fully placed.
+---Drop the settle callback without running it.
+---
+---Nothing in the apply path calls this any more: a failed phase used to, and
+---the result was a mode swap that left focus wherever it was, which is the
+---non-determinism the desk is not allowed to have. Kept for a caller that
+---genuinely must not land (none today), so the capability is explicit rather
+---than re-invented.
 function M.clear_settled()
   settled_cb = nil
 end

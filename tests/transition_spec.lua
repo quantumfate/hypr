@@ -214,7 +214,36 @@ t.describe("transition", function()
     t.eq(false, failsafe.enabled, "a bracket that settled legitimately never needs its failsafe")
   end)
 
-  t.it("force-settles a bracket whose finish never came, without running the settle callback", function()
+  t.it("progress pushes the failsafe back, so a long apply is not a wedged one", function()
+    -- The guard is there for a bracket that STOPPED, not for one that is
+    -- taking its time: restoring ten held windows across two deck scenes
+    -- outran the fixed 8s, and force-settling drops the settle callback --
+    -- the landing on main and the companion reconvergence with it.
+    local stub, transition = fresh()
+    stub.config_values["animations.enabled"] = true
+
+    transition.begin("work", true)
+    local failsafe = failsafe_timer(stub)
+    local armed_at = failsafe.fire_at
+
+    stub.clock = stub.clock + 7000
+    transition.progress()
+
+    t.eq(true, failsafe.fire_at > armed_at, "the guard is re-armed from now, not from the begin")
+    t.eq(true, transition.active(), "and the bracket is still standing")
+  end)
+
+  t.it("progress on a settled bracket is a no-op", function()
+    local stub, transition = fresh()
+    stub.config_values["animations.enabled"] = true
+    transition.begin("work", true)
+    transition.finish("work")
+    settle_timer(stub, 4200).cb()
+    transition.progress()
+    t.eq(false, transition.active())
+  end)
+
+  t.it("force-settles a bracket whose finish never came, and still lands on main", function()
     local stub, transition, stores = fresh()
     stub.config_values["animations.enabled"] = true
     stub.config_values["misc.focus_on_activate"] = true
@@ -234,7 +263,7 @@ t.describe("transition", function()
     t.eq(true, stub.last_config.animations.enabled, "settings are restored")
     t.eq(true, stub.last_config.misc.focus_on_activate)
     t.eq(false, stores["hyprfocus.transition"].active, "the shell is told the bracket is over")
-    t.eq(0, ran, "the settle callback never runs: the desk may be half-placed")
+    t.eq(1, ran, "the landing still happens: where you are after a swap is never left to chance")
     t.eq(1, hooked, "the apply guard is released, so the next mode change is not refused")
     -- The open-focus guard is withdrawn too.
     local dropped = stub.window_rules[#stub.window_rules]

@@ -36,7 +36,26 @@ watcher's pointer diff all converge through the same path. Converge is what
 focuses main, and it does so **when the transition settles**, not up front: a
 later queued move or activation would otherwise pull the user back off it. A
 config reload does not move focus at all: it goes through `apply` directly,
-which stays focus-neutral. (Making `main` mandatory in the resolver is a
+which stays focus-neutral.
+
+**Every** settle lands, including the two that used to bail: a bracket
+force-settled by its failsafe, and an apply whose phase raised. Both once
+dropped the settle callback on the grounds that a half-placed desk is no place
+to land — which made the least predictable case the one case with no answer to
+"where am I now". The landing is a focus on the mode's own declared main
+scene, a fact about the mode rather than about how far the placing got, so it
+happens either way: a transition always ends on main.
+
+The failsafe behind that guards against a bracket that STOPPED, not one that
+is taking its time — each apply phase pets it (`transition.progress`), so a
+heavy swap (ten held windows coming back across two deck scenes) is not cut
+off mid-flight. It was: the bracket force-settled at a flat 8s, the landing
+and the companion reconvergence went with it, and the swap silently did half
+its work. The underlying stall was cheaper than it looked — `oneshot`'s timer
+handle was discarded by every phase chain in the repo and the compositor kept
+no reference, so Lua was free to collect an armed timer and the chain simply
+stopped with no error and no trace (`hypr/lib/hypr.lua` now holds every armed
+one-shot until it fires). (Making `main` mandatory in the resolver is a
 follow-up: it must land in the Python CLI and the shared conformance fixtures
 together.)
 

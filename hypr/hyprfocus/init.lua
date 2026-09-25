@@ -775,8 +775,44 @@ end
 ---The apply's phases in order. Order matters, and it is the order that keeps
 ---windows reachable: binds, restore, hold, withdraw, place, finalize.
 ---@return fun(ctx: table)[]
+---The phases, each under its own name so the trace says which one the apply
+---reached. A phase that never returns (or a gap timer that dies under it)
+---used to leave nothing behind at all: the bracket simply force-settled 8s
+---later with `finish never ran`, the settle callback dropped, and with it the
+---landing on the mode's main scene and the CLI half — a mode swap that
+---silently did half its work (live, 2026-09-24). Naming the phase in the log
+---turns that into one line saying where it stopped.
+local PHASES = {
+  { name = "binds", run = phase_binds },
+  { name = "holds", run = phase_holds },
+  { name = "admit_place", run = phase_admit_place },
+  { name = "finalize", run = phase_finalize },
+}
+
 local function apply_phases()
-  return { phase_binds, phase_holds, phase_admit_place, phase_finalize }
+  local out = {}
+  for _, phase in ipairs(PHASES) do
+    out[#out + 1] = function(ctx)
+      trace.emit({
+        stage = "admit",
+        event = "apply_phase",
+        decision = "enter",
+        reason = phase.name,
+      })
+      -- The bracket's wedge-guard measures silence, not duration: a phase
+      -- that is still arriving is not a wedged transition.
+      pcall(transition.progress)
+      phase.run(ctx)
+      pcall(transition.progress)
+      trace.emit({
+        stage = "admit",
+        event = "apply_phase",
+        decision = "done",
+        reason = phase.name,
+      })
+    end
+  end
+  return out
 end
 
 ---Companions reconverge once the apply's phases are done (see
@@ -837,9 +873,11 @@ function M.apply(mode, present, on_settled)
       if not ok then
         trace.end_batch()
         applying = false
-        -- The settle callback must not run: focus would land on a desk the
-        -- phases did not finish arranging.
-        transition.clear_settled()
+        -- The settle callback still runs: a failed phase leaves the desk
+        -- half-arranged, and the one thing that should NOT also be left
+        -- half-done is the answer to "where am I". The landing is a focus on
+        -- the mode's own main scene, which a phase failure does not make
+        -- wrong.
         transition.finish(mode)
         trace.emit({
           stage = "admit",
