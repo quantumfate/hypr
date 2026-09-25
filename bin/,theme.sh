@@ -686,7 +686,20 @@ apply_wlogout() {
 
     # Prefer the Catppuccin icon set if it is provisioned, otherwise fall back
     # to the system wlogout icons so the menu is never blank.
+    #
+    # The set is keyed <flavour>/<role>/<name>.svg — there are no icons at the
+    # flavour root. Pointing the resting state at the root wrote paths that do
+    # not exist, so every button was blank until the pointer hit it and the
+    # hover rule (which does name a role) took over. `text` is the resting
+    # role: the neutral foreground, the accent kept for hover.
     icon_dir="$CONFIG/wlogout/catppuccin/icons/wlogout/$theme"
+    if [ -d "$icon_dir/text" ]; then
+        icon_dir="$icon_dir/text"
+    elif [ -d "$icon_dir" ]; then
+        # A set laid out some other way: take the flavour root only if it
+        # actually holds icons, rather than writing paths nothing answers.
+        [ -f "$icon_dir/lock.svg" ] || icon_dir=""
+    fi
     if [ ! -d "$icon_dir" ]; then
         for d in /usr/share/wlogout/icons /usr/local/share/wlogout/icons; do
             if [ -f "$d/lock.png" ]; then
@@ -727,9 +740,13 @@ apply_wlogout() {
 
     mkdir -p "$(dirname "$css")"
     cat >"$css" <<EOF
-# ~/.config/wlogout/style.css — rendered by roles/theming and recoloured by
-# \`,theme.sh apply_wlogout'. Do not edit by hand; the next palette change
-# overwrites this file.
+/* ~/.config/wlogout/style.css — rendered by roles/theming and recoloured by
+   \`,theme.sh apply_wlogout'. Do not edit by hand; the next palette change
+   overwrites this file.
+
+   GTK CSS comments are C-style. A '#' header here is not a comment, it is a
+   malformed selector: GTK reported "style.css:1:3 Expected a valid selector"
+   and dropped what followed, which is why the menu came up with no icons. */
 
 * {
   font-family: "JetBrainsMono Nerd Font", "JetBrainsMono Nerd Font Mono";

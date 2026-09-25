@@ -199,12 +199,6 @@ end
 -- Each returns a SubmapEntry (see hypr/lib/submap.lua) for use in submap.tree,
 -- so submaps have a single, declarative construction path.
 
----Launch an app via uwsm. Closes the submap on use (which-key style).
----@param key string
----@param app AppScope entry from config.apps
----@param description string
----@param mods string[]?
----@return SubmapEntry
 ---Focus the app's live window, or launch it when there is none.
 ---
 ---An app bind is "take me to this app", not "run this command again". Firing
@@ -220,6 +214,7 @@ end
 ---stands in, and the engine's own adopt/spawn logic (`hypr/scene/companion.lua`)
 ---decides what that means for a parked instance.
 ---@param app { cmd: string, class: string? }
+---@return nil
 local function focus_or_launch(app)
   if app.class then
     for _, w in ipairs(hl.get_windows() or {}) do
@@ -237,6 +232,12 @@ M.focus_or_launch = focus_or_launch
 ---An app key: focus the app if it is up, launch it if it is not. Every app
 ---bind in the tree behaves the same way for the same reason (above); an app
 ---declared without a `class` has nothing to look for and just launches.
+---Closes the submap on use (which-key style).
+---@param key string
+---@param app AppScope entry from config.apps
+---@param description string
+---@param mods string[]?
+---@return SubmapEntry
 function M.app_entry(key, app, description, mods)
   return {
     key = key,

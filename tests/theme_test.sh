@@ -215,6 +215,21 @@ contains "wlogout icon path follows the palette" "icons/wlogout/latte/" "$wls"
 contains "wlogout background becomes transparent" "background-color: transparent;" "$wls"
 contains "wlogout text colour follows the palette" "color: #cad3f5;" "$wls"
 contains "wlogout button uses an alpha surface" "rgba(" "$wls"
+# GTK CSS comments are C-style. A '#' header is a malformed selector, and GTK
+# dropped what followed it -- the menu came up with no icons at all
+# ("style.css:1:3 Expected a valid selector", live 2026-09-25).
+contains "the stylesheet opens with a GTK comment, not a '#' header" "/*" "$wls"
+if printf '%s' "$wls" | head -1 | grep -q '^#'; then
+    printf '  FAIL stylesheet starts with a # line, which GTK reads as a selector\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   stylesheet starts with something GTK can parse\n'
+    pass=$((pass + 1))
+fi
+# The icon set is <flavour>/<role>/<name>.svg and has nothing at the flavour
+# root: a resting path without a role names a file that does not exist, which
+# is a blank button until the pointer lands on it.
+contains "resting icons come from the neutral role" "latte/text/lock.svg" "$wls"
 # The old dark scrim must be gone.
 if printf '%s' "$wls" | grep -q 'rgba(24, 25, 38, 0.55)'; then
     printf '  FAIL legacy dark scrim survived the apply\n'
