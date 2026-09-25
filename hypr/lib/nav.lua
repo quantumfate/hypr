@@ -184,6 +184,38 @@ function M.tile_index_for_window(tiles, w)
   return nil
 end
 
+---Which entry of a strip a window stands in: the entry naming the same THING
+---as the focused window.
+---
+---A `flip` column's strip lists one representative per thing, so stepping it
+---by the focused address alone matched nothing whenever focus sat on any
+---other member (every tab but one). The caller then read "no neighbour" as
+---"wrap to the first", and the press travelled to the index instead of
+---scrolling one step (live complaint, 2026-09-24).
+---
+---`entries` carries the key with the address because deciding what a window
+---belongs to needs the compositor, and this module never touches it.
+---@param entries { address: string, key: string? }[] the strip, in order
+---@param address string the focused window's address
+---@param key string? the thing the focused window belongs to
+---@return string? the representative of that thing, or nil
+function M.thing_address(entries, address, key)
+  for _, entry in ipairs(entries or {}) do
+    if entry.address == address then
+      return entry.address
+    end
+  end
+  if not key then
+    return nil
+  end
+  for _, entry in ipairs(entries or {}) do
+    if entry.key and entry.key == key then
+      return entry.address
+    end
+  end
+  return nil
+end
+
 ---The neighbouring tile in `dir` ("left"|"right"), or nil at the edge — the
 ---caller's cue to continue onto the adjacent monitor.
 ---@param tiles Nav.Tile[]
@@ -267,8 +299,17 @@ end
 ---walked in the recorded order so navigation follows the arrangement the
 ---user built it into, and the recorded scroll is the entered column's
 ---already-shown member
+---@param enter fun(members: Scene.Tile[]): string?  which member of a
+---collapsed THING the strip should stand on. A deck column's entry is one
+---thing (`deck.thing_key`), and a project is a whole group of terminals
+---collapsed into one -- so the address that names it was simply the group's
+---FIRST member, and crossing into the column from outside yanked that one
+---forward instead of the terminal you were last in (live, 2026-09-25). The
+---caller resolves it through the group's own adapter, which already records
+---the last-focused member; a thing with nothing recorded (or a lone window)
+---keeps the representative.
 ---@return (Nav.Tile|{ plain: string[], column: integer })[]
-function M.deck_tile_order(spec, tiles, records)
+function M.deck_tile_order(spec, tiles, records, enter)
   local deck = require("hypr.scene.deck")
   local columns = {}
   for _, c in ipairs(spec.columns or {}) do
@@ -284,10 +325,17 @@ function M.deck_tile_order(spec, tiles, records)
   local stacks = deck.stacks(spec, tiles, order)
   local out = {}
   for _, column in ipairs(columns) do
-    local representatives = layout.collapse_groups(stacks[column.order] or {})
+    -- Declared identity, the same one the deck lays out by
+    -- (`docs/declared-groups.md`): navigation must walk the same strip the
+    -- eye sees, and a project mid-spawn is one thing on it, not four.
+    local representatives, members = layout.collapse_groups(stacks[column.order] or {}, function(tile)
+      return deck.thing_key(spec, tile)
+    end)
     local plain = {}
     for _, rep in ipairs(representatives) do
-      plain[#plain + 1] = rep.address
+      local key = deck.thing_key(spec, rep)
+      local chosen = enter and key and enter(members[key] or { rep }) or nil
+      plain[#plain + 1] = chosen or rep.address
     end
     if #plain > 0 then
       local record = records[column.order]
@@ -326,11 +374,18 @@ end
 ---focused: string?,
 ---tiles: Nav.Tile[],
 ---active: string?,
+---window: HL.Window?,
 ---dir: "left"|"right",
 ---target: { tiles: Nav.Tile[] }?}
 ---@return Nav.Action
 function M.decide(ctx)
-  local index = ctx.active and M.tile_index(ctx.tiles, ctx.active) or nil
+  -- By the window when the caller has one: a deck tile names one address per
+  -- thing, so resolving by address alone found no tile whenever focus sat on
+  -- any group member but the representative, and `mod+h/l` died in both
+  -- directions until focus happened to land on the shown member.
+  local index = ctx.window and M.tile_index_for_window(ctx.tiles, ctx.window)
+    or (ctx.active and M.tile_index(ctx.tiles, ctx.active))
+    or nil
   if index then
     local neighbor = M.neighbor_tile(ctx.tiles, index, ctx.dir)
     if neighbor then

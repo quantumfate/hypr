@@ -147,6 +147,28 @@ t.describe("nav.tile_order picks a group's entry member via opts.enter", functio
   end)
 end)
 
+t.describe("nav.thing_address (stepping a strip from the thing you are in)", function()
+  local STRIP = {
+    { address = "0x1", key = "block:code/1" },
+    { address = "0x9", key = "block:code/2" },
+  }
+
+  t.it("returns the entry itself when the focused window represents it", function()
+    t.eq("0x9", nav.thing_address(STRIP, "0x9", "block:code/2"))
+  end)
+
+  t.it("resolves a non-representative member to its own thing's entry", function()
+    -- Focus on tab 3 of the first project: the strip lists only 0x1 for it,
+    -- and stepping used to match nothing and wrap to the index instead.
+    t.eq("0x1", nav.thing_address(STRIP, "0x77", "block:code/1"))
+  end)
+
+  t.it("is nil for a window belonging to no thing on this strip", function()
+    t.eq(nil, nav.thing_address(STRIP, "0x77", "block:other/1"))
+    t.eq(nil, nav.thing_address(STRIP, "0x77", nil))
+  end)
+end)
+
 t.describe("nav.decide (LEO-380: mod+h/l as one pure decision)", function()
   local MONITORS = { { name = "DP-1", x = 0 }, { name = "DP-2", x = 1920 } }
 
@@ -173,6 +195,24 @@ t.describe("nav.decide (LEO-380: mod+h/l as one pure decision)", function()
     })
     local action = nav.decide({ monitors = MONITORS, focused = "DP-1", tiles = tiles, active = "0x3", dir = "left" })
     t.eq({ kind = "window", address = "0x2" }, action)
+  end)
+
+  t.it("resolves a group member by its window, not only by its own address", function()
+    -- A deck tile names one address per thing, so focus on any member but
+    -- the representative used to decide `none` in both directions.
+    local spec = scene({ TERMINALS, BROWSER })
+    local tiles = nav.tile_order(spec, { tile("0x1", "Kitty-Main", "g1"), tile("0x3", "zen-twilight") })
+    tiles[1].addresses = { "0x1" }
+    local w = { address = "0x2", group = { members = { { address = "0x1" }, { address = "0x2" } } } }
+    local action = nav.decide({
+      monitors = MONITORS,
+      focused = "DP-1",
+      tiles = tiles,
+      active = "0x2",
+      window = w,
+      dir = "right",
+    })
+    t.eq({ kind = "window", address = "0x3" }, action)
   end)
 
   t.it("an empty workspace (no active window) crosses to the adjacent monitor", function()
@@ -431,6 +471,38 @@ t.describe("nav.deck_tile_order", function()
     t.eq({ "a", "b" }, tiles[1].plain)
     t.eq(1, tiles[1].column)
     t.eq({ "c" }, tiles[2].addresses)
+  end)
+
+  t.it("a collapsed group stands on the member the caller names, not its first", function()
+    -- A project is several terminals in one group, collapsed to one thing on
+    -- the strip. The address that names it used to be the group's FIRST
+    -- member, so crossing into the column yanked that window forward instead
+    -- of the one you were last typing in. The caller resolves the entry
+    -- through the group's own adapter; nav only asks.
+    local GROUPED = { columns = { { order = 1, classes = { "Proj-hypr" } } } }
+    local asked
+    local tiles = nav.deck_tile_order(GROUPED, {
+      tile("0x1", "Proj-hypr", "g1"),
+      tile("0x2", "Proj-hypr", "g1"),
+      tile("0x3", "Proj-hypr", "g1"),
+    }, {}, function(members)
+      asked = #members
+      return "0x3"
+    end)
+    t.eq(3, asked, "every member of the thing is offered, not just the representative")
+    t.eq({ "0x3" }, tiles[1].plain)
+    t.eq({ "0x3" }, tiles[1].addresses)
+  end)
+
+  t.it("keeps the representative when the caller names nothing", function()
+    local GROUPED = { columns = { { order = 1, classes = { "Proj-hypr" } } } }
+    local tiles = nav.deck_tile_order(GROUPED, {
+      tile("0x1", "Proj-hypr", "g1"),
+      tile("0x2", "Proj-hypr", "g1"),
+    }, {}, function()
+      return nil
+    end)
+    t.eq({ "0x1" }, tiles[1].plain, "nothing recorded yet: the strip stands where it did")
   end)
 
   t.it("drops an empty column entirely", function()

@@ -205,8 +205,47 @@ end
 ---@param description string
 ---@param mods string[]?
 ---@return SubmapEntry
+---Focus the app's live window, or launch it when there is none.
+---
+---An app bind is "take me to this app", not "run this command again". Firing
+---the command blind put the user nowhere: an app that is already running and
+---claimed by a scene simply raised its window on the workspace that owns it,
+---on whatever monitor that is, while the keyboard stayed where it was -- the
+---browser "opening silently somewhere else" (live, 2026-09-25). And for a
+---browser profile that opens a second window per launch, it also multiplied
+---the windows a scene is declared to hold exactly one of.
+---
+---A window the MODE parked (`special:hyprfocus-held`) is not a candidate:
+---focusing it would slide the holding place over the desk. The launch then
+---stands in, and the engine's own adopt/spawn logic (`hypr/scene/companion.lua`)
+---decides what that means for a parked instance.
+---@param app { cmd: string, class: string? }
+local function focus_or_launch(app)
+  if app.class then
+    for _, w in ipairs(hl.get_windows() or {}) do
+      local at = w.workspace and w.workspace.name
+      if w.class == app.class and w.address and at ~= "special:hyprfocus-held" then
+        hl.dispatch(hl.dsp.focus({ window = "address:" .. w.address }))
+        return
+      end
+    end
+  end
+  hl.dispatch(hl.dsp.exec_cmd("uwsm app -- " .. app.cmd))
+end
+M.focus_or_launch = focus_or_launch
+
+---An app key: focus the app if it is up, launch it if it is not. Every app
+---bind in the tree behaves the same way for the same reason (above); an app
+---declared without a `class` has nothing to look for and just launches.
 function M.app_entry(key, app, description, mods)
-  return { key = key, mods = mods, desc = description, action = hl.dsp.exec_cmd("uwsm app -- " .. app.cmd) }
+  return {
+    key = key,
+    mods = mods,
+    desc = description,
+    action = function()
+      focus_or_launch(app)
+    end,
+  }
 end
 
 ---Take a screenshot via hyprshot.

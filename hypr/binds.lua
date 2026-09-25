@@ -156,14 +156,31 @@ bind.exec("t", ",proj.sh pick", {
   submap_universal = true,
 })
 
-bind.exec("b", "uwsm app -- " .. config.apps.main_browser.cmd, {
+-- Focus the browser if it is up, launch it if it is not (`bind.focus_or_launch`
+-- names why). A blind launch left the window opening on whatever workspace its
+-- scene claims while the keyboard stayed put, and opened a second one on a
+-- profile that opens a window per launch.
+bind.exec("b", function()
+  bind.focus_or_launch(config.apps.main_browser)
+end, {
   description = "Open the Browser",
   submap_universal = true,
 })
 
 -- SUPER+RETURN is a terminal, not a menu about terminals. The float and
 -- project-shell variants keep the tree, one SHIFT away.
-bind.exec("return", "uwsm app -- " .. config.apps.terminal.cmd, {
+--
+-- The class is the SCENE's, not one global `Kitty-Main`: a scene declares
+-- which classes it admits, and a mode admits a class exactly once, so two
+-- scenes cannot both claim the same terminal class (the resolver refuses the
+-- mode outright -- that is how this was found). `Kitty-<scene>` gives each
+-- scene its own ad-hoc terminals, which is what lets a scene put them in a
+-- column of their own; off a scene that declares none, the plain class
+-- stands, exactly as before.
+bind.exec("return", function()
+  local class = require("hypr.lib.scene_terminal").class_for_focused()
+  hl.dispatch(hl.dsp.exec_cmd(("uwsm app -- kitty --class %s"):format(class)))
+end, {
   description = "Open the Terminal",
 })
 
@@ -420,7 +437,23 @@ do
   ---@param scene Scene.Spec
   ---@return (Nav.Tile|{ plain: string[], column: integer })[]
   local function deck_tiles(scene)
-    return nav.deck_tile_order(scene, deck_member_tiles(scene), deck_order.get_all(scene.name))
+    -- Which member of a collapsed thing the column stands on: the group's own
+    -- adapter answers (its recorded last-focused member), so crossing into a
+    -- project column lands on the terminal you were last in rather than the
+    -- group's first window.
+    local function thing_entry(members)
+      if #members < 2 then
+        return members[1] and members[1].address
+      end
+      local key
+      for _, tile in ipairs(members) do
+        if tile.address and (not key or tile.address < key) then
+          key = tile.address
+        end
+      end
+      return group_adapters.for_class(members[1].class).enter(members, { group_key = key })
+    end
+    return nav.deck_tile_order(scene, deck_member_tiles(scene), deck_order.get_all(scene.name), thing_entry)
   end
 
   ---`nav.tile_order`'s `opts.enter`: the group's adapter picks the entry
@@ -489,15 +522,66 @@ do
   ---(`hl.get_active_monitor()`'s object never populates its active workspace —
   ---unlike an entry from `hl.get_monitors()` — so that field is not a route
   ---to it either).
+  -- The monitor `mod+h/l` last crossed ONTO when it had nothing to focus
+  -- there. See `focused_seat` for why this is remembered rather than asked.
+  local crossed_to = nil
+
+  ---Where the keyboard is, for the purpose of these two keys: the monitor and
+  ---the workspace a move steps out of.
+  ---
+  ---NOT `hl.get_active_monitor()` / `hl.get_active_workspace()`. Measured on
+  ---this desk: with the keyboard in a window on DP-2, both still answered
+  ---DP-1 and DP-1's workspace -- the compositor's focused-monitor mark does
+  ---not follow a focus that crossed outputs. `h`/`l` therefore stepped
+  ---through the OTHER monitor's tile list, and at that monitor's outer edge
+  ---found no adjacent monitor and did nothing at all: "mod+l cannot leave the
+  ---left monitor" (live, 2026-09-25).
+  ---
+  ---The active WINDOW carries its own monitor and workspace, and that is the
+  ---truth whenever something holds the keyboard. When nothing does -- the
+  ---seat just crossed onto an empty monitor, and `no_focus_fallback` means
+  ---the keyboard stays nowhere -- there is nothing in the compositor left to
+  ---ask: the focused-monitor mark did not move, and neither
+  ---`focus({monitor})` nor a workspace focus warps the cursor here. So the
+  ---cross remembers where it went, which is what makes the opposite key come
+  ---back instead of stranding focus on an empty screen forever.
+  ---@param monitors table[] from `hl.get_monitors()`
+  ---@return table? monitor, string? workspace_name, HL.Window? active
+  local function focused_seat(monitors)
+    local function by_name(name)
+      for _, m in ipairs(monitors) do
+        if m.name == name then
+          return m
+        end
+      end
+      return nil
+    end
+
+    local w = hl.get_active_window()
+    if w and w.monitor and w.monitor.name then
+      crossed_to = nil
+      local monitor = by_name(w.monitor.name) or hl.get_active_monitor()
+      return monitor, (w.workspace and w.workspace.name) or nav.monitor_workspace(monitor), w
+    end
+
+    local remembered = crossed_to and by_name(crossed_to)
+    if remembered then
+      return remembered, nav.monitor_workspace(remembered), nil
+    end
+
+    local ok, at_cursor = pcall(hl.get_monitor_at_cursor)
+    local monitor = (ok and at_cursor and by_name(at_cursor.name)) or hl.get_active_monitor()
+    return monitor, monitor and nav.monitor_workspace(monitor), nil
+  end
+
   ---@param dir "left"|"right"
   local function focus_tile(dir)
-    local monitor = hl.get_active_monitor()
+    local monitors = hl.get_monitors() or {}
+    local monitor, ws_name, w = focused_seat(monitors)
     if not monitor then
       return
     end
-    local ws_name = (hl.get_active_workspace() or {}).name
     local scene = ws_name and scene_spec.load()[ws_name]
-    local w = hl.get_active_window()
 
     if not scene then
       if not w then
@@ -514,6 +598,10 @@ do
       if nav.focus_unchanged(before and before.address, after and after.address) then
         local adjacent = adjacent_monitor(monitor, dir)
         if adjacent then
+          -- Same crossing memory as the scene branch: the compositor's
+          -- focused-monitor mark does not follow onto a monitor with nothing
+          -- to focus, so the way back is remembered here.
+          crossed_to = adjacent.name
           hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
         end
       end
@@ -522,7 +610,6 @@ do
 
     local tiles = deck.applies(scene) and deck_tiles(scene)
       or nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
-    local monitors = hl.get_monitors() or {}
     local ordered = nav.monitor_order(nav.usable_monitors(monitors, config.host.ignored_monitors))
     local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
     -- What the adjacent monitor already shows, so `decide` can pick its edge
@@ -530,8 +617,10 @@ do
     -- adjacent monitor at all, an empty `target` when it has no scene tiles
     -- (decide's cue to focus the monitor itself, per the decision comment).
     local target
+    local target_ws
     if adjacent then
       local active_name = nav.monitor_workspace(adjacent)
+      target_ws = active_name
       local other_scene = active_name and scene_spec.load()[active_name]
       local other_tiles = other_scene
         and (
@@ -547,39 +636,61 @@ do
       focused = monitor.name,
       tiles = tiles,
       active = w and w.address,
+      window = w,
       dir = dir,
       target = target,
     })
     if action.kind == "window" then
-      focus_member(action.address, ws_name)
+      crossed_to = nil
+      -- A deck member the strip is hiding is parked on the deck hold and has
+      -- to be brought home first -- to ITS OWN scene. Passing this monitor's
+      -- workspace name would have moved the neighbour's window onto the
+      -- workspace we are standing on, which is the opposite of crossing to
+      -- it. `decide` only returns an address off `target` when the move
+      -- crosses, so the target's workspace is the right home in that case
+      -- and this one's is right otherwise.
+      local crossing = adjacent and nav.tile_index(tiles, action.address) == nil
+      focus_member(action.address, (crossing and target_ws) or ws_name)
     elseif action.kind == "monitor" then
+      -- Nothing to focus over there, so the compositor has nowhere to put the
+      -- keyboard and its own focused-monitor mark will not move. Remember the
+      -- crossing ourselves; the opposite key reads it back.
+      crossed_to = action.name
       hl.dispatch(hl.dsp.focus({ monitor = action.name }))
     end
   end
 
-  ---A group's live members as `{ address, title }`, normalized the way
-  ---every other group reader here does (`hl.get_window().group.members` is a
-  ---bare window, not a one-element array, when the group holds exactly one).
-  ---@param group HL.Group
-  ---@return { address: string, title: string? }[]
-  local function group_members(group)
-    local raw = group.members
-    raw = (raw and raw.title) and { raw } or (raw or {})
-    local members = {}
-    for _, m in ipairs(raw) do
-      members[#members + 1] = { address = m.address, title = m.title }
+  ---The member of `address`'s group the user last had focused, or nil when it
+  ---stands alone or nothing was recorded. `hypr/scene/group_adapters.lua`
+  ---records the focus; this only asks the adapter to apply its entry policy.
+  ---@param address string a group member's address
+  ---@return string?
+  local function remembered_member(address)
+    local live = hl.get_window("address:" .. address)
+    if not (live and live.group) then
+      return nil
     end
-    return members
+    local members = group_adapters.normalize_members(live.group)
+    local adapter = group_adapters.for_class(live.class)
+    return adapter.enter and adapter.enter(members, { group_key = grouping.group_key(live) }) or nil
   end
 
-  ---`mod+j`/`mod+k` on a grouped tile: next/prev in the group's adapter
+  ---`mod+j`/`mod+k` on a grouped tile: a step through the group's adapter
   ---order (LEO-380), wrapping, focusing by address — not the native
   ---`hl.dsp.group.next/prev` tab step, which follows Hyprland's own order
   ---instead of the adapter's (the Dofus roster, or default join order).
+  ---
+  ---`j` walks UP the declared order (toward `nvim`, the first tab) and `k`
+  ---walks down it — the opposite of the tile-stepping `j`/`k` outside a
+  ---group, and deliberately so: the declaration reads top-down as a list,
+  ---and stepping "down" the keyboard toward its head is how it is read back
+  ---(user decision, 2026-09-24).
   ---@param w HL.Window
   ---@param dir "next"|"prev"
   local function focus_in_group(w, dir)
-    local order = group_adapters.for_class(w.class).order(group_members(w.group), { group_key = grouping.group_key(w) })
+    local order = group_adapters
+      .for_class(w.class)
+      .order(group_adapters.normalize_members(w.group), { group_key = grouping.group_key(w) })
     local index
     for i, address in ipairs(order) do
       if address == w.address then
@@ -589,7 +700,7 @@ do
     if not index or #order < 2 then
       return
     end
-    local step = dir == "next" and 1 or -1
+    local step = dir == "next" and -1 or 1
     local target = order[((index - 1 + step) % #order) + 1]
     hl.dispatch(hl.dsp.focus({ window = "address:" .. target }))
   end
@@ -650,12 +761,28 @@ do
     if not tile then
       return
     end
+    -- Step from the THING the keyboard is in, not from its address: `plain`
+    -- names one representative per thing, so a focused window that is not
+    -- the representative (any tab but one) matched nothing, and the wrap
+    -- below then read as "jump to the first thing". The press was spent
+    -- travelling to the index instead of scrolling, and only the second one
+    -- moved the strip.
+    local entries = {}
+    for _, address in ipairs(tile.plain) do
+      local candidate = hl.get_window("address:" .. address)
+      entries[#entries + 1] = {
+        address = address,
+        key = candidate and deck.thing_key(scene, scene_provider.window_tile(candidate)) or nil,
+      }
+    end
+    local from = nav.thing_address(entries, w.address, deck.thing_key(scene, scene_provider.window_tile(w)))
+      or w.address
     -- Wrap at the ends: a deck column is a loop, not a list with edges, so
     -- `next` past the last member lands on the first and `prev` before the
     -- first lands on the last. `nav.window_neighbor` stops at the ends on
     -- purpose -- `mod+j/k` walking a group must not cycle -- so the wrap
     -- belongs here rather than in it.
-    local target = nav.window_neighbor(tile.plain, w.address, dir)
+    local target = nav.window_neighbor(tile.plain, from, dir)
     if not target and #tile.plain > 1 then
       target = dir == "next" and tile.plain[1] or tile.plain[#tile.plain]
     end
@@ -669,6 +796,11 @@ do
       end
     end
     deck_order.set_scroll(scene.name, tile.column, new_index)
+    -- Land on the member this thing was last left on, not on whichever one
+    -- represents it in the strip: scrolling back to a project should return
+    -- you to the tab you were reading, the same "enter lands on current"
+    -- rule crossing INTO a group already follows (LEO-380).
+    target = remembered_member(target) or target
     -- Scrolling keeps the keyboard in the column it was in: focus the
     -- strip's newly shown member (docs/deck.md "Navigation" — the wired
     -- bind "moves the target home, and focus it"). Without this, the pass

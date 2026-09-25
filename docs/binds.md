@@ -14,6 +14,25 @@ source hopes it does. Regenerate after any bind change:
 just binds-doc
 ```
 
+### Where `mod+h`/`mod+l` think you are
+
+The seat these two keys step out of is read off the **active window** — its
+own monitor and workspace — never `hl.get_active_monitor()` /
+`hl.get_active_workspace()`. Measured on this desk: with the keyboard in a
+window on DP-2, both of those still answered DP-1 and DP-1's workspace, so the
+keys walked the other monitor's tile list and, at that monitor's outer edge,
+found no adjacent monitor and did nothing — "mod+l cannot leave the left
+monitor" (2026-09-25).
+
+When nothing holds the keyboard at all — the seat just crossed onto a monitor
+whose workspace is empty, and `misc.no_focus_fallback` leaves the keyboard
+nowhere — there is nothing left to ask: the compositor's focused-monitor mark
+does not move onto an empty output, and neither `focus({monitor})` nor a
+workspace focus warps the cursor. So the crossing remembers where it went
+(`crossed_to` in `hypr/binds.lua`), and the opposite key reads it back. That
+memory is dropped the moment any window holds focus again — a live window is
+always the truth.
+
 ## Root — always live
 
 83 binds.
