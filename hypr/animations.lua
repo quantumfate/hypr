@@ -31,6 +31,12 @@ hl.animation({ leaf = "windowsOut", enabled = true, speed = 3, bezier = "default
 hl.animation({ leaf = "fadeIn", enabled = true, speed = 1.73, bezier = "almostLinear" })
 hl.animation({ leaf = "fadeOut", enabled = true, speed = 1.46, bezier = "almostLinear" })
 hl.animation({ leaf = "fade", enabled = true, speed = 3, bezier = "default" })
+-- Stepping through a group's tabs (`mod+j/k`) is not two windows appearing
+-- and disappearing, it is one tile showing a different member -- and the
+-- cross-fade for it reads as a flicker, because the outgoing member fades out
+-- over the incoming one in the same box (live complaint, 2026-09-25). The
+-- swap is a cut: the tab you asked for is simply the one that is there.
+hl.animation({ leaf = "fadeSwitch", enabled = false })
 hl.animation({ leaf = "layers", enabled = true, speed = 3.81, bezier = "easeOutQuint" })
 hl.animation({ leaf = "layersIn", enabled = true, speed = 4, bezier = "easeOutQuint", style = "fade" })
 hl.animation({ leaf = "layersOut", enabled = true, speed = 1.5, bezier = "linear", style = "fade" })
