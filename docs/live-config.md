@@ -158,12 +158,28 @@ rotation. Traced from `bin/,theme.sh` rather than inferred:
   `hyprctl dispatch 'hl.dsp.submap("reset")'` + `hyprctl reload` when the
   resolved palette matches the stamp. `apply_transparency` still runs
   unconditionally afterward (its own stamp governs its own reload), and
-  `apply_wallpaper` is untouched — a wallpaper still repaints on every apply,
-  including across a real palette switch, which still reloads (Hyprland's
-  colours only come from re-running its Lua config, per `apply_hyprland`'s
-  own comment). `hyprctl` itself is now injectable (`THEME_HYPRCTL`, same
-  shape as `THEME_AWWW`) so `tests/theme_test.sh` can assert the suppression
-  without a live compositor.
+  `apply_wallpaper` is untouched — a wallpaper still repaints on every apply.
+  `hyprctl` itself is now injectable (`THEME_HYPRCTL`, same shape as
+  `THEME_AWWW`) so `tests/theme_test.sh` can assert the suppression without a
+  live compositor.
+- **And then the palette switch itself stopped reloading** (2026-09-25). The
+  stamp above left two reloads a day — sunrise and sunset — and a reload is
+  never quiet: it re-runs every Lua module, drops the registered layout
+  providers and the scene engine's in-memory state, and on screen it reads as
+  a glitch, which is what a video or a game at sunset was getting. The reason
+  given for it (Hyprland's colours only come from re-running its Lua config)
+  was true of `hyprctl keyword`, not of the config API: everything the
+  palette feeds is the border/groupbar block, and `hypr/themes/colors.lua`'s
+  `apply_colors` writes exactly that through `hl.config` — which is why the
+  mode-change path (`HYPRFOCUS_NO_RELOAD`) has never needed a reload for the
+  same job. `apply_hyprland` now pushes it live with
+  `hyprctl eval 'require("hypr.themes.colors").apply_colors()'`, in the
+  compositor's own Lua state. The submap still leaves first: that was
+  mandatory while a reload could wipe the submap stack under a live keyboard,
+  and it is now simply kept behaviour. **No path in this repo reloads for a
+  colour any more**; `apply_transparency` keeps its own reload, because a
+  window-opacity RULE's value genuinely cannot be changed after the config
+  built it, and that dial only moves when the user moves it.
 - **Deliberately not touched**: the deck-relayout-picks-the-wrong-member
   symptom itself is a `hypr/scene/*` concern (§2's forced `recalculate()`
   landing without knowing the scrolled-to member) — out of scope here, and

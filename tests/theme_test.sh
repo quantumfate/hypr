@@ -1227,7 +1227,12 @@ contains "wallpaper still re-applies on the unchanged apply" "wallpaper: mocha.p
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_HYPRCTL HYPRCTL_LOG
 teardown
 
-echo "reload suppression: an actual palette switch still reloads"
+echo "a palette switch pushes the colours live and never reloads"
+# A reload re-runs every Lua module, drops the registered layout providers and
+# the scene engine's state, and glitches whatever is on screen -- a video or a
+# game at sunset was the complaint. Everything Hyprland derives from the
+# palette is the border/groupbar block, and `apply_colors` writes exactly that
+# through `hl.config`, so the flip needs no reload at all.
 setup
 mkdir -p "$XDG_CONFIG_HOME/hypr/wallpapers"
 printf 'source' >"$XDG_CONFIG_HOME/hypr/wallpapers/mocha.png"
@@ -1238,7 +1243,8 @@ hyprctl_stub
 "$THEME" set mocha >/dev/null
 : >"$HYPRCTL_LOG"
 "$THEME" set latte >/dev/null
-check "switching palette still reloads" "1" "$(grep -c '^reload$' "$HYPRCTL_LOG")"
+check "switching palette issues no reload" "0" "$(grep -c '^reload$' "$HYPRCTL_LOG")"
+contains "it pushes the palette live instead" "apply_colors" "$(cat "$HYPRCTL_LOG")"
 unset THEME_MAGICK THEME_AWWW THEME_AWWW_DAEMON AWWW_LOG THEME_HYPRCTL HYPRCTL_LOG
 teardown
 

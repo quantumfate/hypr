@@ -1106,15 +1106,13 @@ apply_hyprland() {
     # Hyprland's colours come from its own config (hypr/themes/colors.lua reads
     # this same store), because `hyprctl keyword general:col.*` answers "unknown
     # request" on a Lua-configured Hyprland — and exits 0, so a script cannot
-    # even tell it failed. Reloading re-runs that file against the new palette.
+    # even tell it failed. `apply_colors` pushes that same block through
+    # `hl.config` instead, live, which is the lever this uses below.
     #
-    # Same bluntness apply_transparency already guards against: theme-auto.timer
-    # calls `apply` hourly, and cmd_apply/set/toggle/auto route through here
-    # even when the resolved palette hasn't moved (most sun-check ticks land in
-    # the same day/night half). An unconditional reload re-runs every Lua
-    # module and wipes registered layout providers with nothing to redraw the
-    # scene afterward (docs/live-config.md §1-2) — a real, visible disturbance
-    # for zero colour change. Skip it when the palette is the one already live.
+    # The palette is still compared against the last applied one: theme-auto
+    # .timer calls `apply` hourly and most sun-check ticks land in the same
+    # day/night half, so pushing colours that have not moved is work for
+    # nothing. Skip it when the palette is the one already live.
     stamp="${XDG_CACHE_HOME:-$HOME/.cache}/quantumfate/hyprland.applied"
     previous=$([ -f "$stamp" ] && cat "$stamp" || echo "")
 
@@ -1138,15 +1136,35 @@ apply_hyprland() {
     else
         mkdir -p "$(dirname "$stamp")"
         printf '%s' "$palette" >"$stamp"
-        # Leave any submap FIRST. A reload re-executes the Lua config, which
-        # resets the submap stack in hypr/lib/submap.lua while Hyprland is
-        # still runtime-in a submap — so escape pops an empty stack and the
-        # keyboard is stuck in a menu with no way out. Cycling the theme from
-        # the shell submap did exactly that. hyprctl's dispatch argument is
-        # evaluated as Lua on this config.
+        # A palette flip pushes the colours LIVE; it does not reload.
+        #
+        # Everything Hyprland's own config derives from the palette is the
+        # border and groupbar block, and `hypr/themes/colors.lua`'s
+        # `apply_colors` writes exactly that block through `hl.config` — which
+        # is why the mode-change path (HYPRFOCUS_NO_RELOAD) has never needed a
+        # reload for the same job. Reloading for it was the blunt instrument:
+        # it re-runs every Lua module, drops the registered layout providers
+        # and the scene engine's in-memory state, and on the desk it reads as
+        # a visible glitch — the sun timer flipping the palette under a video
+        # or a game was the complaint (2026-09-25). Two sun flips a day were
+        # two reloads a day for a colour change that needed none.
+        #
+        # `eval` runs in the compositor's live Lua state (same state the
+        # scene engine holds; `bin/,proj.sh` and `bin/,logs.sh` read it the
+        # same way), so this reaches the modules already loaded rather than a
+        # fresh copy.
+        #
+        # The submap still leaves first. It was the reload that MADE this
+        # mandatory -- re-running the config reset `hypr/lib/submap.lua`'s
+        # stack under a keyboard still runtime-in a submap, so escape popped
+        # an empty stack and the menu had no way out -- and without a reload
+        # it is no longer a safety measure. It stays because cycling the theme
+        # from the shell submap has always closed that menu, and a colour
+        # change is a finished action: keeping it is today's behaviour, kept
+        # on purpose rather than dropped as a side effect of this change.
         "$HYPRCTL" dispatch 'hl.dsp.submap("reset")' >/dev/null 2>&1 || true
-        "$HYPRCTL" reload >/dev/null 2>&1 || true
-        echo "hyprland: reloaded for $palette"
+        "$HYPRCTL" eval 'require("hypr.themes.colors").apply_colors(); return "ok"' >/dev/null 2>&1 || true
+        echo "hyprland: $palette pushed live (no reload)"
         record_applied hyprland immediate
     fi
 
