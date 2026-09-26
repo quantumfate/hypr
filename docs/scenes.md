@@ -495,14 +495,16 @@ Published to the `geometry` store, monitor-local, as `areas.<monitor>`:
   (`hypr/scene/layout.lua`'s `M.inner_area`). Because both subtractions
   happen before `work` is measured, a surface placed inside it can never
   overlap a bar or sit outside the scene's own frame.
-- **`columns`** is each placed column's box, keyed by its declared `order`
-  (a JSON object, so the key is a string). A scene declares no column
-  concept of its own, so it is keyed by **block** order instead — the same
-  boxes a dock resolves `block:<order>` against. A deck scene keys by its
-  **deck column** order, and publishes every column's box whether or not it
-  currently shows a member (a column is a place, docs/deck.md), computed
-  straight from the declaration and the area (`hypr/scene/deck.lua`'s
-  `M.column_boxes`) — no live tile needed.
+- **`columns`** is the rect of the **window** standing in each column, keyed
+  by its declared `order` (a JSON object, so the key is a string) — the space
+  a surface may span. Not the layout's placed box: that is a request the
+  compositor shrinks by its inner gap and border, and a surface lined up with
+  it sat off the window's edge by tens of pixels. A scene declares no column
+  concept of its own, so it is keyed by **block** order instead. A deck scene
+  keys by its **deck column** order and publishes every column whether or not
+  it currently shows a member (a column is a place, docs/deck.md): the shown
+  window's rect where there is one, the column's layout box
+  (`hypr/scene/deck.lua`'s `M.column_boxes`) where it is empty.
 
 Published from the same read-only tail of the layout pass that publishes
 docks (`hypr/scene/provider.lua`, `hypr/scene/deck_provider.lua`), cached per

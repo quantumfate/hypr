@@ -260,11 +260,13 @@ local function publish_areas(scene, tiles, boxes, area)
   local work = { x = work_abs.x - origin_x, y = work_abs.y - origin_y, w = work_abs.w, h = work_abs.h }
 
   -- Columns for a plain scene are its blocks (docs/scenes.md "Areas": "a
-  -- scene with no column concept is keyed by block order"), read off the
-  -- boxes this pass actually placed — the same targets a dock resolves
-  -- against, filtered to `block:<order>`.
+  -- scene with no column concept is keyed by block order), measured off the
+  -- WINDOW standing in each: a placed box is a request the compositor then
+  -- shrinks by its inner gap and border, and a surface lined up with the box
+  -- sat off the window's edge by tens of pixels (`dock_publish.settled`).
   local columns_by_order = {}
-  for key, box in pairs(dock_publish.targets(scene, tiles, boxes, spec_lib)) do
+  local settled = dock_publish.settled(boxes, live_rects())
+  for key, box in pairs(dock_publish.targets(scene, tiles, settled, spec_lib)) do
     local block = key:match("^block:(%d+)$")
     if block then
       columns_by_order[tonumber(block)] = { x = box.x - origin_x, y = box.y - origin_y, w = box.w, h = box.h }

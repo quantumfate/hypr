@@ -247,7 +247,9 @@ end
 ---@param area Scene.Area the area the compositor offered this pass
 ---@param gaps_in number?
 ---@param gaps_out (number|Scene.CssGap)?
-local function publish_areas(scene, scene_name, area, gaps_in, gaps_out)
+---@param tiles Scene.Tile[]? this pass's tiles, to measure the shown windows
+---@param boxes Scene.Box[]? this pass's placed boxes
+local function publish_areas(scene, scene_name, area, gaps_in, gaps_out, tiles, boxes)
   local monitor = monitor_of(scene_name)
   if not monitor then
     return
@@ -257,9 +259,22 @@ local function publish_areas(scene, scene_name, area, gaps_in, gaps_out)
   local origin_x, origin_y = monitor.x or 0, monitor.y or 0
   local work = { x = work_abs.x - origin_x, y = work_abs.y - origin_y, w = work_abs.w, h = work_abs.h }
 
+  -- A column's WINDOW where it shows one (the rect the compositor actually
+  -- gave it, `dock_publish.settled`), its layout box where it is empty: a
+  -- surface lined up with the box sat off the window's edge by the inner gap
+  -- and border.
+  local shown = {}
+  local settled = dock_publish.settled(boxes, require("hypr.scene.provider").live_rects())
+  for key, box in pairs(dock_publish.targets(scene, tiles, settled, spec_lib)) do
+    local order = key:match("^column:(%d+)$")
+    if order then
+      shown[tonumber(order)] = box
+    end
+  end
   local columns_by_order = {}
   for order, box in pairs(deck.column_boxes(scene, area, { gaps_in = gaps_in, gaps_out = gaps_out })) do
-    columns_by_order[order] = { x = box.x - origin_x, y = box.y - origin_y, w = box.w, h = box.h }
+    local rect = shown[order] or box
+    columns_by_order[order] = { x = rect.x - origin_x, y = rect.y - origin_y, w = rect.w, h = rect.h }
   end
 
   area_publish.publish({
@@ -526,7 +541,7 @@ function M.place(scene, scene_name, ctx)
     -- hang off the boxes just placed. It writes to the `geometry` store and
     -- nowhere else -- no place, no dispatch, no recalculate.
     publish_docks(scene, scene_name, tiles, boxes, gaps_in, gaps_out)
-    publish_areas(scene, scene_name, ctx.area, gaps_in, gaps_out)
+    publish_areas(scene, scene_name, ctx.area, gaps_in, gaps_out, tiles, boxes)
   end
 end
 
