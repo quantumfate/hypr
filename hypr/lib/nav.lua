@@ -592,6 +592,25 @@ function M.seat_of(monitors, seat_name, active)
   return monitor, M.monitor_workspace(monitor), nil
 end
 
+---The monitor after `current` in `ordered`, wrapping; the first one when
+---`current` is not among them (the seat on an ignored or unknown monitor).
+---Nil when there is nowhere else to go.
+---@param ordered { name: string }[] usable monitors, left to right
+---@param current string?
+---@return string?
+function M.next_monitor(ordered, current)
+  if #ordered == 0 then
+    return nil
+  end
+  for i, m in ipairs(ordered) do
+    if m.name == current then
+      local nxt = ordered[i % #ordered + 1].name
+      return nxt ~= current and nxt or nil
+    end
+  end
+  return ordered[1].name
+end
+
 ---The name of the monitor showing workspace `name`, or nil.
 ---@param monitors table[]?
 ---@param name string?

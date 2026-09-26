@@ -871,6 +871,19 @@ do
   bind.exec("l", function()
     focus_tile("right")
   end, { description = "Focus the tile to the right", submap_universal = true })
+  -- `mod+$`: the keyboard to the next monitor, wrapping -- the direct way
+  -- between screens when there is no tile path to walk. Same crossing as
+  -- `mod+h/l` (`cross_to`: the seat moves, the pointer follows, focus lands on
+  -- that workspace's last window) over the same usable monitors, so an
+  -- ignored one (`config.host.ignored_monitors`, HDMI-A-1 on the desk) is
+  -- never a stop.
+  bind.exec("dollar", function()
+    local ordered = nav.monitor_order(nav.usable_monitors(hl.get_monitors() or {}, config.host.ignored_monitors))
+    local target = nav.next_monitor(ordered, seat.monitor())
+    if target then
+      cross_to(target)
+    end
+  end, { description = "Focus the next monitor", submap_universal = true })
   bind.exec("j", function()
     focus_window_in_tile("next")
   end, { description = "Focus the next window in this tile", submap_universal = true })

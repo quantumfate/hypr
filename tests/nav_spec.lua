@@ -406,6 +406,15 @@ t.describe("ignored monitors", function()
     t.eq("0x9", w.address)
   end)
 
+  t.it("step to the next usable monitor, wrapping", function()
+    local ordered = { { name = "DP-2" }, { name = "DP-1" } }
+    t.eq("DP-1", nav.next_monitor(ordered, "DP-2"))
+    t.eq("DP-2", nav.next_monitor(ordered, "DP-1"), "wraps")
+    t.eq("DP-2", nav.next_monitor(ordered, "HDMI-A-1"), "off an ignored monitor: the first usable one")
+    t.eq(nil, nav.next_monitor({ { name = "eDP-1" } }, "eDP-1"), "one monitor: nowhere to go")
+    t.eq(nil, nav.next_monitor({}, "DP-1"))
+  end)
+
   t.it("answer nothing without a seat, never a guess", function()
     local monitors = { { name = "DP-1", focused = true, active_workspace = { name = "code" } } }
     t.eq(nil, nav.seat_of(monitors, nil, nil))

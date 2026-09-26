@@ -83,6 +83,25 @@ local function publish(name)
   end)
 end
 
+---Publish which workspace each monitor shows (`geometry.shown`,
+---`{ <monitor>: <workspace> }`), for the bar's workspace row. Quickshell cannot
+---answer this itself on this build -- a workspace's `monitor` comes back
+---unresolved there -- and every workspace switch passes through here anyway,
+---with the workspace's own monitor. Written only when the map changed.
+---@param monitor string
+---@param workspace string
+local function publish_shown(monitor, workspace)
+  pcall(function()
+    local shown = geometry_store:get("shown")
+    shown = type(shown) == "table" and shown or {}
+    if shown[monitor] == workspace then
+      return
+    end
+    shown[monitor] = workspace
+    geometry_store:set({ shown = shown })
+  end)
+end
+
 ---Move the seat. A change of monitor publishes, and brings the pointer along
 ---a tick later -- after the focus dispatch that usually follows a claim, so
 ---the compositor's own focus lands before the pointer moves.
@@ -113,6 +132,7 @@ hl.on("workspace.active", function(workspace)
   local monitor = workspace and workspace.monitor
   local name = type(monitor) == "string" and monitor or (monitor and monitor.name)
   if name then
+    publish_shown(name, workspace.name)
     move_to(name)
   end
 end)
@@ -155,6 +175,13 @@ do
   monitor_name = from_window or (mok and marked and marked.name) or nil
   if monitor_name then
     publish(monitor_name)
+  end
+  local mons_ok, monitors = pcall(hl.get_monitors)
+  for _, m in ipairs(mons_ok and monitors or {}) do
+    local ws = nav.monitor_workspace(m)
+    if m.name and ws then
+      publish_shown(m.name, ws)
+    end
   end
 end
 
