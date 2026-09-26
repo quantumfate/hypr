@@ -39,55 +39,34 @@ scene the active mode places on THAT output, so the same key means different
 scenes on different screens, and a monitor with fewer scenes than a key's
 position makes that key a no-op rather than borrowing another screen's.
 
-### Where `mod+h`/`mod+l` think you are
+### The seat: where every key thinks you are
 
-Three sources answer "which monitor is the keyboard on", and none is right on
-its own, so `hypr/lib/nav.lua`'s `seat_of` reads them against each other:
+There is one answer to "which monitor is the user on": the **keyboard's**,
+owned by [`hypr/events/seat.lua`](../hypr/events/seat.lua) and published to the
+`geometry` store as `seat.monitor` for quickshell. Workspace keys, `mod+Tab`,
+`mod+h`/`mod+l` and every widget read it. Nothing reads the compositor's
+focused-monitor mark (`hl.get_active_monitor()`, `monitors[].focused`,
+`monitor.focused`) or the pointer to decide where the user is.
 
-| Source                                                   | Lies when                                                                                                                         |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| the active **window**'s own monitor                      | after a cross onto a monitor with no windows — the window left behind keeps reading as active, or focus is on nothing at all      |
-| the compositor's focused **mark** (`monitors[].focused`) | it does not follow a focus that crossed outputs, and a focus dispatch onto an EMPTY monitor does not move it at all (spiked live) |
-| the **seat** (`hypr/events/seat.lua`)                    | nothing has fired since some earlier dispatch — measured live: `seat=DP-2` while the user was typing in a DP-1 window             |
+Why: on this desk the mark follows the **pointer**. `misc.mouse_move_focuses_monitor`
+moves it whenever the pointer enters another output while `input.follow_mouse = 0`
+leaves the keyboard where it was. Spiked nested (2026-09-26): cross the keyboard
+onto an empty monitor, move the pointer on the one it left, and the mark and
+`monitor.focused` go back with the pointer while no window event fires. Every
+earlier "stale mark"/"stale seat" was this.
 
-The rule: when the window and the mark **agree**, that is the seat, and the
-window carries the workspace and the tile to step from — a stale seat gets no
-vote. When they **disagree** (or there is no window at all, which is what an
-empty monitor leaves), the event-tracked seat is the tiebreaker, and a seat
-naming a monitor with nothing focused on it means there is no tile to step
-from, only a monitor to step out of.
+The seat moves on a window taking focus, on a workspace switch, and on
+`seat.claim(monitor)` — which every hypr action that moves the keyboard calls
+first, because a cross onto an empty monitor emits nothing. When the seat
+changes monitor the pointer is warped to that monitor's centre, so the two part
+only when the mouse is moved by hand, and even then the seat stays until a
+click or a key lands somewhere.
 
-The seat is tracked from `monitor.focused`, `workspace.active` **and**
-`window.active`, plus `seat.claim` for a cross that lands where the
-compositor emits nothing.
-
-Standing on a non-scene workspace with nothing focused, `h`/`l` cross to the
-adjacent monitor rather than returning: that state IS the empty monitor, there
-is no tile to step between, and returning there is what made the cross
-one-way (live, 2026-09-25).
-
-The seat these two keys step out of is read off the **active window** — its
-own monitor and workspace — never `hl.get_active_monitor()` /
-`hl.get_active_workspace()`. Measured on this desk: with the keyboard in a
-window on DP-2, both of those still answered DP-1 and DP-1's workspace, so the
-keys walked the other monitor's tile list and, at that monitor's outer edge,
-found no adjacent monitor and did nothing — "mod+l cannot leave the left
-monitor" (2026-09-25).
-
-When nothing holds the keyboard at all — an empty workspace, where
-`misc.no_focus_fallback` leaves the keyboard on nothing — the answer comes
-from [`hypr/events/seat.lua`](../hypr/events/seat.lua), which records the
-monitor from the compositor's own `monitor.focused` and `workspace.active`
-events. Those fire correctly in exactly the cases the getters do not (spiked
-live: focusing another monitor's workspace emitted `monitor.focused(DP-2)`
-while `get_active_monitor()` kept answering DP-1), and
-`hypr/events/layout_opts.lua` names the same trap from its own side.
-
-A cross onto a monitor with nothing to focus claims the seat up front
-(`seat.claim`), because the compositor may emit nothing at all when it has
-nowhere to put the keyboard — without that, the opposite key would navigate
-the monitor being left and find no way back. The next real focus event
-overwrites the claim, and a live window always outranks both.
+Only `mod+h`/`mod+l` cross monitors. A workspace switch is monitor-scoped
+([`hypr/lib/desk.lua`](../hypr/lib/desk.lua)): it names the monitor it is for,
+shows only a scene the mode places there, and moves that workspace home first
+if it stands elsewhere — focusing a named workspace outright follows it to
+whichever monitor holds it.
 
 ## Root — always live
 

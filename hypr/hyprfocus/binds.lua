@@ -42,6 +42,10 @@ local ROOT = "root"
 -- the only way back out of a mode would be the key that mode just removed.
 local MODES = "modes"
 
+-- Described binds' closures, by description (`M.action`).
+---@type table<string, function>
+local actions = {}
+
 ---Record a keybind under the tree currently being defined, and return the
 ---handle to the caller untouched.
 ---
@@ -73,6 +77,9 @@ end
 
 function M.bind(pattern, action, opts)
   local handle = hl.bind(pattern, action, opts)
+  if type(action) == "function" and opts and opts.description then
+    actions[opts.description] = action
+  end
   -- Described binds participate in the which-key document: root binds under
   -- the registry's own root node, submap binds under their entries (recorded
   -- by submap.lua already). Undescribed binds stay private — the cheatsheet's
@@ -96,6 +103,15 @@ function M.bind(pattern, action, opts)
   trees[name] = trees[name] or {}
   table.insert(trees[name], handle)
   return handle
+end
+
+---The closure a described bind runs, by its description -- so the nested
+---end-to-end tests (tests/e2e) run exactly what the key runs, since
+---`send_shortcut` does not re-enter Lua binds there.
+---@param description string
+---@return function?
+function M.action(description)
+  return actions[description]
 end
 
 ---Define a submap, tracking the nesting so binds inside it are attributed to

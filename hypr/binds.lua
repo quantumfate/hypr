@@ -514,44 +514,40 @@ do
     hl.dispatch(hl.dsp.focus({ window = "address:" .. address }))
   end
 
-  -- Where the keyboard is, tracked from the compositor's own focus events
-  -- (see `focused_seat`).
+  -- The seat: the one answer to "which monitor is the user on"
+  -- (`hypr/events/seat.lua`).
   local seat = require("hypr.events.seat")
 
-  ---Where the keyboard is, for the purpose of these two keys: the monitor and
-  ---the workspace a move steps out of.
-  ---
-  ---NOT `hl.get_active_monitor()` / `hl.get_active_workspace()`. Measured on
-  ---this desk: with the keyboard in a window on DP-2, both still answered
-  ---DP-1 and DP-1's workspace -- the compositor's focused-monitor mark does
-  ---not follow a focus that crossed outputs. `h`/`l` therefore stepped
-  ---through the OTHER monitor's tile list, and at that monitor's outer edge
-  ---found no adjacent monitor and did nothing at all: "mod+l cannot leave the
-  ---left monitor" (live, 2026-09-25).
-  ---
-  ---The active WINDOW carries its own monitor and workspace, and that is the
-  ---truth whenever something holds the keyboard. When nothing does -- an
-  ---empty workspace, where `no_focus_fallback` leaves the keyboard on nothing
-  ---at all -- `hypr/events/seat.lua` answers instead: it records the monitor
-  ---from the compositor's own `monitor.focused`/`workspace.active` events,
-  ---which fire correctly in exactly the cases the getters do not.
+  ---Where the keyboard is: the seat's monitor, its workspace, and the active
+  ---window only while it stands there (`nav.seat_of`).
   ---@param monitors table[] from `hl.get_monitors()`
   ---@return table? monitor, string? workspace_name, HL.Window? active
   local function focused_seat(monitors)
-    -- The seat decides the monitor; the active window only supplies the
-    -- workspace and the tile to step from, and only while it is on that
-    -- monitor. `nav.seat_of` holds the whole rule (and its tests) -- see its
-    -- header for why the window cannot be trusted to name the monitor after
-    -- a cross onto an empty one.
-    local ok, at_cursor = pcall(hl.get_monitor_at_cursor)
-    local cursor_name = ok and at_cursor and at_cursor.name or nil
-    local monitor, ws_name, w = nav.seat_of(monitors, seat.monitor(), hl.get_active_window(), cursor_name)
-    if monitor then
-      return monitor, ws_name, w
+    return nav.seat_of(monitors, seat.monitor(), hl.get_active_window())
+  end
+
+  ---Cross the keyboard onto monitor `name`: claim the seat (the pointer
+  ---follows), focus the monitor, and land on the window its shown workspace
+  ---last had focused -- `focus({ monitor })` alone restores that only when
+  ---the compositor's mark actually changes, and the mark follows the pointer.
+  ---@param name string
+  local function cross_to(name)
+    seat.claim(name)
+    hl.dispatch(hl.dsp.focus({ monitor = name }))
+    local ws = nav.workspace_on(hl.get_monitors() or {}, name)
+    local last
+    for _, w in ipairs(hl.get_windows() or {}) do
+      local on = w.workspace and w.workspace.name
+      local mon = w.monitor and w.monitor.name
+      if ws and on == ws and mon == name and w.mapped ~= false and not w.hidden then
+        if not last or (w.focus_history_id or math.huge) < (last.focus_history_id or math.huge) then
+          last = w
+        end
+      end
     end
-    -- Nothing anywhere: the compositor's own mark is the last resort.
-    local marked = hl.get_active_monitor()
-    return marked, marked and nav.monitor_workspace(marked), nil
+    if last then
+      hl.dispatch(hl.dsp.focus({ window = "address:" .. last.address }))
+    end
   end
 
   ---@param dir "left"|"right"
@@ -563,20 +559,11 @@ do
     end
     local scene = ws_name and scene_spec.load()[ws_name]
 
-    if not scene then
-      if not w then
-        -- Standing on a non-scene workspace with nothing focused -- the state
-        -- a cross onto an empty monitor lands in. There is no tile to step
-        -- between, so the only meaningful move is the next monitor over;
-        -- returning here is what made that cross one-way ("no coming back
-        -- with mod+l", live 2026-09-25).
-        local adjacent = adjacent_monitor(monitor, dir)
-        if adjacent then
-          seat.claim(adjacent.name)
-          hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
-        end
-        return
-      end
+    -- A non-scene workspace with a window steps through the layout's own
+    -- directional focus below; with none (a cross onto an empty monitor lands
+    -- here) there is no tile to step between, so it crosses exactly like a
+    -- scene edge does -- onto the neighbour's edge tile, or its monitor.
+    if not scene and w then
       -- Off a scene workspace (scrolling): try the layout's own directional
       -- focus first. If it left the active window unchanged — there was
       -- nothing that way on this monitor — cross to the adjacent monitor
@@ -588,17 +575,14 @@ do
       if nav.focus_unchanged(before and before.address, after and after.address) then
         local adjacent = adjacent_monitor(monitor, dir)
         if adjacent then
-          -- Same crossing memory as the scene branch: the compositor's
-          -- focused-monitor mark does not follow onto a monitor with nothing
-          -- to focus, so the way back is remembered here.
-          seat.claim(adjacent.name)
-          hl.dispatch(hl.dsp.focus({ monitor = adjacent.name }))
+          cross_to(adjacent.name)
         end
       end
       return
     end
 
-    local tiles = deck.applies(scene) and deck_tiles(scene)
+    local tiles = not scene and {}
+      or deck.applies(scene) and deck_tiles(scene)
       or nav.tile_order(scene, scene_provider.workspace_tiles(scene.name), tile_opts)
     local ordered = nav.monitor_order(nav.usable_monitors(monitors, config.host.ignored_monitors))
     local adjacent = nav.adjacent_monitor(ordered, monitor.name, dir)
@@ -641,11 +625,9 @@ do
       local crossing = adjacent and nav.tile_index(tiles, action.address) == nil
       focus_member(action.address, (crossing and target_ws) or ws_name)
     elseif action.kind == "monitor" then
-      -- Nothing to focus over there, so the compositor has nowhere to put the
-      -- keyboard and its own focused-monitor mark will not move. Remember the
-      -- crossing ourselves; the opposite key reads it back.
-      seat.claim(action.name)
-      hl.dispatch(hl.dsp.focus({ monitor = action.name }))
+      -- No tile to land on over there: land on whatever its workspace last
+      -- had focused, or on the monitor itself.
+      cross_to(action.name)
     end
   end
 

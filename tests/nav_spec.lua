@@ -376,69 +376,56 @@ t.describe("ignored monitors", function()
     t.eq("DP-2", nav.adjacent_monitor(ordered, "DP-1", "left").name)
   end)
 
-  t.it("read the seat off the tracked monitor, not off a window left behind", function()
-    -- The regression this pins: crossing `mod+l` onto a monitor with no
-    -- windows leaves the previous monitor's window still reading as active
-    -- (`no_focus_fallback` puts the keyboard on nothing), so preferring the
-    -- window sent the opposite key back into the monitor just left -- "no
-    -- coming back with mod+l". The compositor's mark HAS followed the cross
-    -- here, so window and mark disagree and the seat breaks the tie.
-    local monitors = {
-      { name = "DP-2", focused = true, active_workspace = { name = "logs" } },
-      { name = "DP-1", active_workspace = { name = "code" } },
-    }
-    local left_behind = { address = "0x1", monitor = { name = "DP-1" }, workspace = { name = "code" } }
-
-    local monitor, ws, w = nav.seat_of(monitors, "DP-2", left_behind, nil)
-    t.eq("DP-2", monitor.name, "the seat names the monitor")
-    t.eq("logs", ws, "and the workspace is the one that monitor shows")
-    t.eq(nil, w, "there is no window to step from on an empty monitor")
-  end)
-
-  t.it("ignore a stale seat while the window and the compositor agree", function()
-    -- The other direction, and the reason the seat is not simply trusted:
-    -- nothing has fired since an earlier dispatch left the seat on DP-2,
-    -- while the keyboard is demonstrably in a window on DP-1 (measured live:
-    -- seat=DP-2 with DP-1 focused and typing).
+  t.it("name the seat's monitor, with no window to step from after a cross onto an empty one", function()
+    -- Spiked nested (2026-09-26): a cross onto an empty monitor leaves the
+    -- keyboard on nothing; whatever window still reads as active stands on
+    -- the monitor just left and must not be stepped from.
     local monitors = {
       { name = "DP-2", active_workspace = { name = "logs" } },
       { name = "DP-1", focused = true, active_workspace = { name = "code" } },
     }
+    local left_behind = { address = "0x1", monitor = { name = "DP-1" }, workspace = { name = "code" } }
+
+    local monitor, ws, w = nav.seat_of(monitors, "DP-2", left_behind)
+    t.eq("DP-2", monitor.name, "the seat names the monitor, whatever the mark says")
+    t.eq("logs", ws, "and the workspace is the one that monitor shows")
+    t.eq(nil, w, "there is no window to step from on an empty monitor")
+  end)
+
+  t.it("step from the active window while it stands on the seat's monitor", function()
+    local monitors = {
+      { name = "DP-2", focused = true, active_workspace = { name = "reference" } },
+      { name = "DP-1", active_workspace = { name = "code" } },
+    }
     local here = { address = "0x9", monitor = { name = "DP-1" }, workspace = { name = "code" } }
 
-    local monitor, ws, w = nav.seat_of(monitors, "DP-2", here, nil)
-    t.eq("DP-1", monitor.name, "a stale seat does not get a vote when the two fresh sources agree")
+    -- The mark follows the pointer (on DP-2 here); the seat does not.
+    local monitor, ws, w = nav.seat_of(monitors, "DP-1", here)
+    t.eq("DP-1", monitor.name)
     t.eq("code", ws)
     t.eq("0x9", w.address)
   end)
 
-  t.it("prefer the window's own monitor when the compositor's mark is stale", function()
-    -- LEO-372's half: the mark does not follow a focus that crossed outputs,
-    -- so it still says DP-1 while the keyboard is in a DP-2 window. The seat
-    -- (event-tracked) has seen the crossing and agrees with the window.
-    local monitors = {
-      { name = "DP-2", active_workspace = { name = "reference" } },
-      { name = "DP-1", focused = true, active_workspace = { name = "code" } },
-    }
-    local w = { address = "0x7", monitor = { name = "DP-2" }, workspace = { name = "reference" } }
-
-    local monitor, ws, window = nav.seat_of(monitors, "DP-2", w, nil)
-    t.eq("DP-2", monitor.name)
-    t.eq("reference", ws)
-    t.eq("0x7", window.address, "the window is still the tile to step from")
+  t.it("answer nothing without a seat, never a guess", function()
+    local monitors = { { name = "DP-1", focused = true, active_workspace = { name = "code" } } }
+    t.eq(nil, nav.seat_of(monitors, nil, nil))
+    t.eq(nil, nav.seat_of(monitors, "HDMI-A-9", nil), "a seat naming a gone monitor is no seat")
   end)
 
-  t.it("fall back to the window, then the pointer, when no seat was recorded", function()
+  t.it("find the monitor showing a workspace, and a monitor's centre in layout coordinates", function()
     local monitors = {
-      { name = "DP-2", active_workspace = { name = "reference" } },
-      { name = "DP-1", active_workspace = { name = "code" } },
+      { name = "DP-2", x = 0, y = 0, width = 2560, height = 1440, active_workspace = { name = "logs" } },
+      { name = "HDMI-A-1", x = 7680, y = 0, width = 1280, height = 1600, scale = 2 },
     }
-    local w = { address = "0x3", monitor = { name = "DP-1" }, workspace = { name = "code" } }
-    -- A fresh config load: no focus event has been seen yet, and the
-    -- compositor marks nothing in this fixture.
-    t.eq("DP-1", (nav.seat_of(monitors, nil, w, "DP-2")).name, "the window answers before the pointer")
-    t.eq("DP-2", (nav.seat_of(monitors, nil, nil, "DP-2")).name, "and the pointer answers when nothing is focused")
-    t.eq(nil, nav.seat_of(monitors, nil, nil, nil), "nothing at all is nil, never a guess")
+    t.eq("DP-2", nav.workspace_monitor(monitors, "logs"))
+    t.eq(nil, nav.workspace_monitor(monitors, "code"))
+    t.eq({ x = 1280, y = 720 }, nav.monitor_centre(monitors, "DP-2"))
+    t.eq(
+      { x = 7680 + 320, y = 400 },
+      nav.monitor_centre(monitors, "HDMI-A-1"),
+      "a scaled output's centre is in layout units"
+    )
+    t.eq(nil, nav.monitor_centre(monitors, "DP-9"))
   end)
 
   t.it("resolve the monitor a point sits on, in LAYOUT coordinates", function()

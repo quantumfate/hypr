@@ -382,3 +382,17 @@ this pauses the deciding, not the desk — windows stay put, modes still apply.
 
 The pause carries a deadline and expires by itself: a desk that has quietly
 stopped converging is worse than one that reopens a window.
+
+### `,desk.sh`
+
+The monitor-scoped workspace switch for callers outside the compositor — the
+bar's workspace dots and the workspace switcher. The decision lives in
+[`hypr/lib/desk.lua`](../hypr/lib/desk.lua): a switch names the monitor it is
+for, only shows a scene the active mode places on that monitor, moves that
+workspace home first if it stands elsewhere, and claims the seat there
+(`hypr/events/seat.lua`).
+
+```
+,desk.sh switch <monitor> <scene>
+,desk.sh send <monitor> <scene>     # the focused window, following it
+```

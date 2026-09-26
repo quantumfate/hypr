@@ -45,8 +45,7 @@ end
 ---@return string
 function M.class_for_focused()
   local fallback = (rawget(_G, "config") or {}).apps and config.apps.terminal.class or "Kitty-Main"
-  local ws = hl.get_active_workspace()
-  local name = ws and ws.name
+  local name = require("hypr.events.seat").workspace()
   if not name then
     return fallback
   end

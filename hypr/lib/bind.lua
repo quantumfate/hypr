@@ -1,6 +1,7 @@
 local hyprfocus_binds = require("hypr.hyprfocus.binds")
 local nav = require("hypr.lib.nav")
-local hyprfocus = require("hypr.hyprfocus")
+local desk = require("hypr.lib.desk")
+local seat = require("hypr.events.seat")
 local M = {}
 
 ---@param mods string[]?
@@ -8,58 +9,12 @@ function M.parse_mods(mods)
   return mods and "+" .. table.concat(mods, "+") .. "+" or "+"
 end
 
----The active mode's scene names placed on one monitor output, in desk order
----(`hypr/hyprfocus/init.lua` `applied_desk`/`output_for`; see docs/scenes.md
----"Scene sets: mode → scene → monitor"). Resolved at press time, not at
----config load, since it depends on the mode and which monitor is focused —
----both of which change without a reload.
----@param monitor_output string
----@return string[]
-local function scenes_on_monitor(monitor_output)
-  local desk = hyprfocus.applied_desk()
-  if not desk then
-    return {}
-  end
-  local placements = {}
-  for _, placement in ipairs(desk.scenes or {}) do
-    placements[#placements + 1] = { name = placement.name, output = hyprfocus.output_for(placement.monitor) }
-  end
-  return nav.workspaces_on_monitor(placements, monitor_output)
-end
-
----The output workspace keys act on: the monitor the POINTER is over, then the
----monitor holding keyboard focus, then the primary when either is ignored
----(`config.host.ignored_monitors`).
----
----The pointer comes first because a workspace key must never move you to
----another screen. Keyboard focus and the pointer drift apart routinely -- an
----app activating itself, a dispatch that focused a window elsewhere -- and
----keying off focus meant pressing a workspace key while looking at the left
----monitor took the desk to whatever the OTHER monitor had in that position
----(live complaint, 2026-09-25). Where you are pointing is where you are;
----crossing monitors is `mod+j`/`mod+k`'s job and nothing else's.
+---The output workspace keys act on: the seat's monitor (`hypr/events/seat.lua`),
+---or the primary when the seat is on an ignored monitor.
 ---@return string?
 function M.focused_output()
   local host = config.host
-  local monitors = hl.get_monitors() or {}
-  local ok, cursor = pcall(hl.get_cursor_pos)
-  local under_cursor = ok and cursor and nav.monitor_at(monitors, cursor.x, cursor.y) or nil
-  if under_cursor and not nav.is_ignored(host.ignored_monitors, under_cursor) then
-    return under_cursor
-  end
-  local monitor = hl.get_active_monitor()
-  return nav.target_monitor(host.ignored_monitors, monitor and monitor.name, host.primary_monitor)
-end
-
----Focus a named workspace, closing a special shown over the current one
----first. Both are real dispatches, not values returned from a callback.
----@param name string
-function M.focus_named(name)
-  local active = hl.get_active_workspace()
-  if active and active.special then
-    hl.dispatch(hl.dsp.workspace.toggle_special())
-  end
-  hl.dispatch(hl.dsp.focus({ workspace = "name:" .. name }))
+  return nav.target_monitor(host.ignored_monitors, seat.monitor(), host.primary_monitor)
 end
 
 ---`mod+TAB` / `mod+shift+TAB`: cycle the active mode's admitted, non-special
@@ -76,9 +31,9 @@ function M.bind_workspace_cycle()
         return
       end
       local active = nav.workspace_on(hl.get_monitors() or {}, output)
-      local name = nav.cycle_workspace(scenes_on_monitor(output), active, spec.dir)
+      local name = nav.cycle_workspace(desk.scenes_on(output), active, spec.dir)
       if name then
-        M.focus_named(name)
+        desk.switch(output, name)
       end
     end, { description = spec.desc })
   end
@@ -102,19 +57,18 @@ function M.bind_workspace_row()
     local symbol = nav.symbol_for(key)
     hyprfocus_binds.bind(config.main_mod .. M.parse_mods() .. key, function()
       local output = M.focused_output()
-      local name = output and nav.nth_workspace(scenes_on_monitor(output), i)
+      local name = output and nav.nth_workspace(desk.scenes_on(output), i)
       if name then
-        M.focus_named(name)
+        desk.switch(output, name)
       end
     end, { description = ("Workspace %s on this monitor"):format(symbol) })
 
     hyprfocus_binds.bind(config.main_mod .. M.parse_mods({ "SHIFT" }) .. key, function()
       local output = M.focused_output()
-      local name = output and nav.nth_workspace(scenes_on_monitor(output), i)
-      if not name then
-        return
+      local name = output and nav.nth_workspace(desk.scenes_on(output), i)
+      if name then
+        desk.send(output, name)
       end
-      hl.dispatch(hl.dsp.window.move({ workspace = "name:" .. name, follow = true }))
     end, { description = ("Move focused window to workspace %s on this monitor"):format(symbol) })
   end
 end

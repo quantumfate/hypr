@@ -38,35 +38,14 @@ $1"
     [[ -f $result ]] && cat "$result" || echo '{}'
 }
 
-# The exact body of `hypr/binds.lua`'s `focus_tile(dir)`: gather both
-# monitors' state, hand it to `nav.decide` (LEO-380), dispatch the action.
+# `mod+h`/`mod+l`: the real closure the key runs (`hypr.hyprfocus.binds`
+# .action), not a copy of it -- a copy here went stale and tested a handler
+# the desk no longer ran.
 cross() {
-    run_lua "
-local nav = require('hypr.lib.nav')
-local scene_spec = require('hypr.scene.spec')
-local scene_provider = require('hypr.scene.provider')
-local monitor = hl.get_active_monitor()
-local ws_name = (hl.get_active_workspace() or {}).name
-local scene = ws_name and scene_spec.load()[ws_name]
-local w = hl.get_active_window()
-local tiles = scene and nav.tile_order(scene, scene_provider.workspace_tiles(scene.name)) or {}
-local monitors = hl.get_monitors() or {}
-local ordered = nav.monitor_order(nav.usable_monitors(monitors, nil))
-local adjacent = nav.adjacent_monitor(ordered, monitor.name, '$1')
-local target
-if adjacent then
-  local active = adjacent.activeWorkspace
-  local other_scene = active and active.name and scene_spec.load()[active.name]
-  target = { tiles = other_scene and nav.tile_order(other_scene, scene_provider.workspace_tiles(other_scene.name)) or {} }
-end
-local action = nav.decide({ monitors = monitors, ignored = nil, focused = monitor.name, tiles = tiles, active = w and w.address, dir = '$1', target = target })
-if action.kind == 'window' then
-  hl.dispatch(hl.dsp.focus({ window = 'address:' .. action.address }))
-elseif action.kind == 'monitor' then
-  hl.dispatch(hl.dsp.focus({ monitor = action.name }))
-end
-out(action)
-"
+    local desc
+    [[ $1 == right ]] && desc="Focus the tile to the right" || desc="Focus the tile to the left"
+    run_lua "require('hypr.hyprfocus.binds').action('$desc')() out({})"
+    sleep 0.6
 }
 
 # The exact body of `hypr/binds.lua`'s `focus_in_group(w, dir)`.
@@ -91,7 +70,9 @@ out({ address = target })
 
 focused_address() { hc -j clients | jq -r 'map(select(.focusHistoryID == 0)) | first.address // empty'; }
 focused_class() { hc -j clients | jq -r 'map(select(.focusHistoryID == 0)) | first.class // empty'; }
-active_monitor() { hc -j monitors | jq -r 'map(select(.focused == true)) | first.name // empty'; }
+# The seat (hypr/events/seat.lua), not the compositor's mark: the mark follows
+# the pointer.
+active_monitor() { run_lua "out({ m = require('hypr.events.seat').monitor() })" | jq -r '.m // empty'; }
 active_workspace_on() { hc -j monitors | jq -r --arg m "$1" 'map(select(.name == $m)) | first.activeWorkspace.name // empty'; }
 group_addresses() { hc -j clients | jq -c '[.[] | select(.class == "e2e-grp-a" or .class == "e2e-grp-b") | .address] | sort'; }
 two_grp_a() { hc -j clients | jq -e '[.[] | select(.class == "e2e-grp-a")] | length >= 2' >/dev/null; }

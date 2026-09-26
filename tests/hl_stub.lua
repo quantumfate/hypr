@@ -11,12 +11,27 @@ local M = {}
 --- namespace of dispatcher constructors in the real API. A recursive proxy
 --- means the stub never needs updating when the config calls a new one.
 ---@param path string dotted path so far, for the recorded dispatcher's `name`
+---
+--- Except the namespaces the real API exposes as plain tables: calling one
+--- raises there ("attempt to call a table value"), and a stub that accepted it
+--- let the bar's `hl.dsp.workspace("name:x")` pass every spec while it failed
+--- on every click (measured live, 2026-09-26).
+local NAMESPACES = {
+  ["dsp.workspace"] = true,
+  ["dsp.window"] = true,
+  ["dsp.group"] = true,
+  ["dsp.cursor"] = true,
+}
+
 local function dispatcher_proxy(path)
   return setmetatable({}, {
     __index = function(_, key)
       return dispatcher_proxy(path .. "." .. key)
     end,
     __call = function(_, ...)
+      if NAMESPACES[path] then
+        error("attempt to call a table value (field '" .. path:match("[^.]+$") .. "')", 2)
+      end
       return { __dispatcher = true, name = path, args = { ... } }
     end,
   })

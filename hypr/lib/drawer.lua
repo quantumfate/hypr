@@ -405,7 +405,7 @@ local function live_ctx()
     desk = hyprfocus.applied_desk(),
     output_for = hyprfocus.output_for,
     monitors = hl.get_monitors() or {},
-    focused = (hl.get_active_monitor() or {}).name,
+    focused = require("hypr.events.seat").monitor(),
     primary = ((rawget(_G, "config") or {}).host or {}).primary_monitor,
     ignored = ((rawget(_G, "config") or {}).host or {}).ignored_monitors,
   }
