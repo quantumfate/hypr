@@ -330,20 +330,9 @@ Workspaces are managed in the background; Quickshell presents them.
   core, not a choice of workspace layouts (columns.md). This is the base gap
   only: solo framing is retired (columns.md §5) — a lone column simply fills
   its resolved width — so there is no transient per-workspace widen left for
-  the bar to avoid following. A scene may opt into following its workspace's
-  own tiling gap instead (quickshell `bar_follows_scene_gaps`). The layout's
-  own gap is only one term: the compositor strips the workspace rule's
-  `gaps_out` out of the work area before the layout runs, then adds the rule's
-  `gaps_in` and the window border to every side the layout did not leave flush
-  (`CWindowTarget::updatePos`). `hypr/lib/geometry.lua`'s `resolved_gaps`
-  walks the engine's regular ladder for the layout term (scene `gaps_out` →
-  host workspace-spec keyed by `default_name` → live global) and folds the
-  other three on top, publishing the FINAL left/right pair — the distance from
-  the monitor edge to the scene's outermost visible window — to `geometry`'s
-  `workspaces` key, at `build()` and again from `hypr/scene/spec.lua` whenever
-  a scene edit is first re-read. The bar subscribes to that published value
-  and never re-derives it, so the inset and the visible window cannot disagree
-  (docs/scenes.md).
+  the bar to avoid following. A resting bar depends on this and nothing else
+  — never on the scene standing there; where surfaces may open over a scene is
+  the layout pass's `areas` publish (docs/scenes.md "Areas").
 - The same `build()` also publishes the monitor role map (LEO-368):
   `geometry`'s `roles` key, `{ primary: "<output>", secondary: "<output>" }`,
   built from the host's `primary_monitor`/`secondary_monitor` and which

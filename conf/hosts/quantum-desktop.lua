@@ -52,8 +52,7 @@ return {
       --
       -- Half the secondary profile's gaps, declared HERE and not only on the
       -- scene: the workspace rule's `gaps_out` is subtracted from the work
-      -- area before the layout runs (hypr/lib/geometry.lua's `resolved_gaps`
-      -- walks all four rungs), so a scene-only change cannot shrink the
+      -- area before the layout runs, so a scene-only change cannot shrink the
       -- outer margin past what the rule already took. The scene declares the
       -- same halved numbers for its own rung.
       {

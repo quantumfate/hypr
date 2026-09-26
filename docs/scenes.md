@@ -472,10 +472,10 @@ Nothing is ever drawn off screen.
 
 Where a _surface_ — a popup, a panel, anything quickshell opens over a scene
 rather than docking to its frame — is allowed to sit, so it can never overlap
-a bar. Replaces the old per-workspace resolved-gap publish
-(`geometry.workspaces`, `hypr/lib/geometry.lua`'s `resolved_gaps`), which
-existed only to feed `bar_follows_scene_gaps`; a surface now asks for real
-coordinates instead of a gap number.
+a bar. It replaced the per-workspace resolved-gap publish
+(`geometry.workspaces`) that fed quickshell's retired `bar_follows_scene_gaps`:
+a surface asks for real coordinates instead of a gap number, and a resting bar
+depends only on its monitor.
 
 Published to the `geometry` store, monitor-local, as `areas.<monitor>`:
 
@@ -562,32 +562,26 @@ the contract below is the schema it edits against.
 
 ### Scene fields
 
-| Field                    | Type                  | Meaning                                                                                             |
-| ------------------------ | --------------------- | --------------------------------------------------------------------------------------------------- |
-| `name`                   | string                | workspace `default_name` (`code`, `dofus`). This is the key; ids are host data.                     |
-| `blocks`                 | Block[]               | the ordered tiles of the scene                                                                      |
-| `barred`                 | string[]              | classes that may land here but must never join a group                                              |
-| `strays`                 | `"slot"` \| `"float"` | how unmatched tiled windows are treated                                                             |
-| `solo_frame`             | boolean?              | opt-out of centring a lone tile at its paired width (LEO-421; default on)                           |
-| `bindings`               | string[]?             | binding trees this scene admits while active                                                        |
-| `moods`                  | string[]?             | mood tags that select this scene when the mode does not                                             |
-| `machines`               | table?                | machine-specific geometry overrides                                                                 |
-| `gaps_in`                | number?               | scene-declared inner gap (LEO-397); wins over the host workspace-spec                               |
-|                          |                       | and the global `general:gaps_in` where set                                                          |
-| `gaps_out`               | number? \| CssGap?    | scene-declared outer gap, same precedence as `gaps_in`                                              |
-|                          |                       | Halving a scene's VISIBLE margin takes both rungs: the workspace rule's own `gaps_out` (host        |
-|                          |                       | workspace-spec, `conf/hosts/*.lua`) is stripped from the work area before the layout runs, so a     |
-|                          |                       | scene-only edit cannot shrink past it — `reference` and `media` declare the halved numbers in both  |
-|                          |                       | places. The rule's half needs a `hyprctl reload`; the scene's half lands on the next layout pass.   |
-|                          |                       | A workspace's own gaps never redefine its monitor's resting gap (`geometry.monitor_gaps` reads the  |
-|                          |                       | profile).                                                                                           |
-| `bar_follows_scene_gaps` | boolean?              | while this workspace is active, the bar on its screen subscribes to the gap this                    |
-|                          |                       | workspace actually tiles at (quickshell BarGaps) — the FINAL distance from the monitor edge to the  |
-|                          |                       | scene's outermost visible window. The layout's own gap is one term of that sum: the compositor      |
-|                          |                       | strips the workspace rule's `gaps_out` out of the work area before the layout runs, then adds the   |
-|                          |                       | rule's `gaps_in` and the border on every side the layout did not leave flush. Hyprland folds all of |
-|                          |                       | it in `hypr/lib/geometry.lua`'s `resolved_gaps` and publishes the left/right pair to the `geometry` |
-|                          |                       | store's `workspaces` key. The bar only reads it; without the flag it rests on the monitor's gap.    |
+| Field                    | Type                  | Meaning                                                                                            |
+| ------------------------ | --------------------- | -------------------------------------------------------------------------------------------------- |
+| `name`                   | string                | workspace `default_name` (`code`, `dofus`). This is the key; ids are host data.                    |
+| `blocks`                 | Block[]               | the ordered tiles of the scene                                                                     |
+| `barred`                 | string[]              | classes that may land here but must never join a group                                             |
+| `strays`                 | `"slot"` \| `"float"` | how unmatched tiled windows are treated                                                            |
+| `solo_frame`             | boolean?              | opt-out of centring a lone tile at its paired width (LEO-421; default on)                          |
+| `bindings`               | string[]?             | binding trees this scene admits while active                                                       |
+| `moods`                  | string[]?             | mood tags that select this scene when the mode does not                                            |
+| `machines`               | table?                | machine-specific geometry overrides                                                                |
+| `gaps_in`                | number?               | scene-declared inner gap (LEO-397); wins over the host workspace-spec                              |
+|                          |                       | and the global `general:gaps_in` where set                                                         |
+| `gaps_out`               | number? \| CssGap?    | scene-declared outer gap, same precedence as `gaps_in`                                             |
+|                          |                       | Halving a scene's VISIBLE margin takes both rungs: the workspace rule's own `gaps_out` (host       |
+|                          |                       | workspace-spec, `conf/hosts/*.lua`) is stripped from the work area before the layout runs, so a    |
+|                          |                       | scene-only edit cannot shrink past it — `reference` and `media` declare the halved numbers in both |
+|                          |                       | places. The rule's half needs a `hyprctl reload`; the scene's half lands on the next layout pass.  |
+|                          |                       | A workspace's own gaps never redefine its monitor's resting gap (`geometry.monitor_gaps` reads the |
+|                          |                       | profile).                                                                                          |
+| `bar_follows_scene_gaps` | boolean?              | retired: ignored. A resting bar depends only on its monitor; surfaces are placed in `areas`.       |
 
 ### Block fields
 
