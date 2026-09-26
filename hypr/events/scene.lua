@@ -1490,15 +1490,22 @@ end)
 ---last map stands, and quickshell keeps placing isles against boxes that
 ---belong to a scene now standing somewhere else entirely.
 local function sweep_docks()
-  local keep = {}
+  local keep, keep_areas = {}, {}
   for _, monitor in ipairs(hl.get_monitors() or {}) do
     local ws = monitor.active_workspace
     local spec = ws and ws.name and specs[ws.name]
-    if monitor.name and spec and spec.docks then
-      keep[monitor.name] = true
+    if monitor.name and spec then
+      -- Areas publish for every scene, docked or not (docs/scenes.md
+      -- "Areas"), so its sweep keeps a monitor standing in ANY declared
+      -- scene, while the dock sweep stays scoped to ones declaring isles.
+      keep_areas[monitor.name] = true
+      if spec.docks then
+        keep[monitor.name] = true
+      end
     end
   end
   dock_publish.sweep(keep)
+  require("hypr.scene.area_publish").sweep(keep_areas)
 end
 
 handlers.on("monitor.focused", function()

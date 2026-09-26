@@ -392,6 +392,7 @@ local function publish_resolved(scenes)
     -- the declaration behind it changed, so the publish tail's write-suppressor
     -- is dropped here rather than trusted to notice.
     require("hypr.scene.dock_publish").invalidate()
+    require("hypr.scene.area_publish").invalidate()
     require("hypr.lib.store").define("geometry"):set({
       workspaces = require("hypr.lib.geometry").resolved_gaps(scenes, specs, default_gaps_out, inner),
     })

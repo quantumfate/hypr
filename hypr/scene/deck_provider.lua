@@ -11,6 +11,7 @@ local deck = require("hypr.scene.deck")
 local deck_order = require("hypr.scene.deck_order")
 local scene_provider = require("hypr.scene.provider")
 local dock_publish = require("hypr.scene.dock_publish")
+local area_publish = require("hypr.scene.area_publish")
 
 local M = {}
 
@@ -233,6 +234,39 @@ local function publish_docks(scene, scene_name, tiles, boxes, gaps_in, gaps_out)
     gaps_in = gaps_in or 0,
     gaps_out = { top = top, right = right, bottom = bottom, left = left },
     spec_lib = spec_lib,
+  })
+end
+
+---Publish `docs/scenes.md`'s "Areas" for a deck scene: `work` is the area
+---less the scene's outer gap, `columns` are the deck's own column boxes
+---(`deck.column_boxes`, keyed by declared `order`) -- unlike a plain scene's
+---blocks, a deck column is a PLACE that exists whether or not it currently
+---shows a member, so this needs no tile geometry at all.
+---@param scene Deck.Spec
+---@param scene_name string
+---@param area Scene.Area the area the compositor offered this pass
+---@param gaps_in number?
+---@param gaps_out (number|Scene.CssGap)?
+local function publish_areas(scene, scene_name, area, gaps_in, gaps_out)
+  local monitor = monitor_of(scene_name)
+  if not monitor then
+    return
+  end
+  local layout = require("hypr.scene.layout")
+  local work_abs = layout.inner_area(area, gaps_out)
+  local origin_x, origin_y = monitor.x or 0, monitor.y or 0
+  local work = { x = work_abs.x - origin_x, y = work_abs.y - origin_y, w = work_abs.w, h = work_abs.h }
+
+  local columns_by_order = {}
+  for order, box in pairs(deck.column_boxes(scene, area, { gaps_in = gaps_in, gaps_out = gaps_out })) do
+    columns_by_order[order] = { x = box.x - origin_x, y = box.y - origin_y, w = box.w, h = box.h }
+  end
+
+  area_publish.publish({
+    scene_name = scene_name,
+    monitor_name = monitor.name,
+    work = work,
+    columns_by_order = columns_by_order,
   })
 end
 
@@ -492,6 +526,7 @@ function M.place(scene, scene_name, ctx)
     -- hang off the boxes just placed. It writes to the `geometry` store and
     -- nowhere else -- no place, no dispatch, no recalculate.
     publish_docks(scene, scene_name, tiles, boxes, gaps_in, gaps_out)
+    publish_areas(scene, scene_name, ctx.area, gaps_in, gaps_out)
   end
 end
 

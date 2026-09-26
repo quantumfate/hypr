@@ -15,6 +15,7 @@ local layout = require("hypr.scene.layout")
 local order = require("hypr.scene.order")
 local layout_lib = require("hypr.lib.layout")
 local dock_publish = require("hypr.scene.dock_publish")
+local area_publish = require("hypr.scene.area_publish")
 
 local M = {}
 
@@ -238,6 +239,46 @@ local function publish_docks(scene, tiles, boxes)
   })
 end
 
+---Publish `docs/scenes.md`'s "Areas" for the monitor a scene was just placed
+---on (or a resting frame, when `area` is nil — the arrival case, before a
+---real layout pass has run). Unlike docks this runs for every scene, not
+---only ones declaring isles: a surface asks for an area whether or not the
+---scene docks anything.
+---@param scene Scene.Spec
+---@param tiles Scene.Tile[]
+---@param boxes Scene.Box[] this pass's placed boxes, absolute coordinates
+---@param area Scene.Area? the work area the compositor offered this pass
+local function publish_areas(scene, tiles, boxes, area)
+  local monitor = monitor_of(scene.name)
+  if not monitor then
+    return
+  end
+  local gaps_in, gaps_out = gaps(scene)
+  local work_area = area or { x = monitor.x, y = monitor.y, w = monitor.width, h = monitor.height }
+  local work_abs = layout.inner_area(work_area, gaps_out)
+  local origin_x, origin_y = monitor.x or 0, monitor.y or 0
+  local work = { x = work_abs.x - origin_x, y = work_abs.y - origin_y, w = work_abs.w, h = work_abs.h }
+
+  -- Columns for a plain scene are its blocks (docs/scenes.md "Areas": "a
+  -- scene with no column concept is keyed by block order"), read off the
+  -- boxes this pass actually placed — the same targets a dock resolves
+  -- against, filtered to `block:<order>`.
+  local columns_by_order = {}
+  for key, box in pairs(dock_publish.targets(scene, tiles, boxes, spec_lib)) do
+    local order = key:match("^block:(%d+)$")
+    if order then
+      columns_by_order[tonumber(order)] = { x = box.x - origin_x, y = box.y - origin_y, w = box.w, h = box.h }
+    end
+  end
+
+  area_publish.publish({
+    scene_name = scene.name,
+    monitor_name = monitor.name,
+    work = work,
+    columns_by_order = columns_by_order,
+  })
+end
+
 ---Publish the scene's dock map with no tile geometry: its `of = "screen"`
 ---resolved against the monitor's own frame, its block-docked isles resting
 ---until a real layout pass refines them. Wired to workspace arrival — the
@@ -248,7 +289,7 @@ end
 ---@param name string the scene's name, which IS its workspace name
 function M.publish_arrival(name)
   local scene = (spec_lib.load())[name]
-  if not scene or not scene.docks then
+  if not scene then
     return
   end
   -- Resolve the monitor through the workspace itself, not through whichever
@@ -263,6 +304,14 @@ function M.publish_arrival(name)
     monitor = monitor_of(name)
   end
   if not monitor then
+    return
+  end
+
+  -- Areas publish for every scene, docked or not (`publish_areas` re-resolves
+  -- `monitor_of` itself, which is fine — the same lookup, done twice).
+  publish_areas(scene, {}, {}, nil)
+
+  if not scene.docks then
     return
   end
   -- The map this scene settled at last time it stood on this monitor, when
@@ -318,6 +367,9 @@ local function place(get_scenes, ctx)
           spec_lib = spec_lib,
         })
       end
+    end
+    if scene then
+      publish_areas(scene, {}, {}, ctx.area)
     end
     return
   end
@@ -381,6 +433,7 @@ local function place(get_scenes, ctx)
   -- store and nowhere else -- never a place, never a dispatch, never a
   -- recalculate -- so a dock can't move the tile it docks to.
   publish_docks(scene, tiles, boxes)
+  publish_areas(scene, tiles, boxes, ctx.area)
 end
 
 ---@param scenes table<string, Scene.Spec>|fun(): table<string, Scene.Spec>

@@ -293,6 +293,7 @@ t.describe("arrival dock publish", function()
       "hypr.scene.layout",
       "hypr.scene.provider",
       "hypr.scene.dock_publish",
+      "hypr.scene.area_publish",
     }) do
       package.loaded[mod] = nil
     end

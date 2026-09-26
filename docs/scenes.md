@@ -468,6 +468,71 @@ Quickshell sizes each isle, aligns its growth corner to the published anchor,
 clamps it inside the published region, and warns once if it does not fit.
 Nothing is ever drawn off screen.
 
+## Areas
+
+Where a _surface_ — a popup, a panel, anything quickshell opens over a scene
+rather than docking to its frame — is allowed to sit, so it can never overlap
+a bar. Replaces the old per-workspace resolved-gap publish
+(`geometry.workspaces`, `hypr/lib/geometry.lua`'s `resolved_gaps`), which
+existed only to feed `bar_follows_scene_gaps`; a surface now asks for real
+coordinates instead of a gap number.
+
+Published to the `geometry` store, monitor-local, as `areas.<monitor>`:
+
+```json
+{
+  "scene": "code",
+  "work":    { "top_left": {"x":16,"y":58}, "top_right": {"x":5104,"y":58},
+               "bottom_left": {"x":16,"y":1424}, "bottom_right": {"x":5104,"y":1424} },
+  "columns": { "1": { "top_left": …, "top_right": …, "bottom_left": …, "bottom_right": … },
+               "2": { … } }
+}
+```
+
+- **`work`** is the area a surface may occupy at large: the monitor less the
+  bar's reserved strip (`ctx.area`, what the compositor hands the layout
+  provider — already outside the reserve) less the scene's own outer gap
+  (`hypr/scene/layout.lua`'s `M.inner_area`). Because both subtractions
+  happen before `work` is measured, a surface placed inside it can never
+  overlap a bar or sit outside the scene's own frame.
+- **`columns`** is each placed column's box, keyed by its declared `order`
+  (a JSON object, so the key is a string). A scene declares no column
+  concept of its own, so it is keyed by **block** order instead — the same
+  boxes a dock resolves `block:<order>` against. A deck scene keys by its
+  **deck column** order, and publishes every column's box whether or not it
+  currently shows a member (a column is a place, docs/deck.md), computed
+  straight from the declaration and the area (`hypr/scene/deck.lua`'s
+  `M.column_boxes`) — no live tile needed.
+
+Published from the same read-only tail of the layout pass that publishes
+docks (`hypr/scene/provider.lua`, `hypr/scene/deck_provider.lua`), cached per
+monitor+scene the same way (`hypr/scene/area_publish.lua` mirrors
+`dock_publish.lua`: written only when the resolved map changed, swept when a
+monitor stops showing a scene, invalidated on a declaration re-read).
+Unlike docks, an area publishes for **every** scene, not only ones declaring
+isles — a surface needs somewhere to sit even on a scene with no docks. On
+workspace arrival, before any real layout pass has run, `work` publishes
+against the monitor's bare frame (or, for a deck, the column boxes still
+resolve — they need no tile).
+
+A scene may declare where a surface goes, the way it declares docks:
+
+```lua
+surfaces = {
+  ["notifications"] = { of = "column:last", scale = 0.5, align = "right" },
+}
+```
+
+`of` is `"work"`, `"column:<order>"`, `"column:first"`, or `"column:last"`;
+`scale` is the fraction (0–1] of the area's width the surface takes;
+`align`/`valign` place it inside the area (`left|right|center` /
+`top|bottom|center`). **hypr does not read `surfaces` at all** — it is
+declaration-only, validated by nothing here (an unknown scene key is simply
+not copied into the normalized spec; nothing in `hypr/scene/spec.lua`
+rejects it). Quickshell resolves it (`services/SurfacePlacement.js`,
+`quickshell` repo) against the published `areas` map to compute the
+surface's actual box.
+
 ## Bindings
 
 Scene and member `bindings` tags are buffer-local. Which-key already filters `workspace › class › group › layout`. The groupbar is the active-member strip; the persistent bar is status, not a taskbar.

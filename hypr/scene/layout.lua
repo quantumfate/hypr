@@ -230,6 +230,18 @@ local function sides(gaps)
 end
 M.sides = sides
 
+---The area left after a scene's outer gap is cut from the work area the
+---compositor offered. This is `docs/scenes.md`'s "Areas" `work`: `area` is
+---already the monitor less the bar's reserved strip (`ctx.area`), so cutting
+---`gaps_out` here is the one remaining subtraction.
+---@param area Scene.Area
+---@param gaps_out Scene.CssGap?
+---@return Scene.Box
+function M.inner_area(area, gaps_out)
+  local top, right, bottom, left = sides(gaps_out)
+  return { x = area.x + left, y = area.y + top, w = area.w - left - right, h = area.h - top - bottom }
+end
+
 ---The width fraction a lone slot would hold if every block the scene
 ---declares were on screen beside it — its "paired" width (LEO-421). Built
 ---from the scene's declaration alone, never the tiles actually present, so a

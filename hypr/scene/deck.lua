@@ -319,6 +319,51 @@ function M.boxes(spec, tiles, area, opts)
   return boxes, hold
 end
 
+---Every column's own box, keyed by `order`, regardless of whether it
+---currently shows a tile. A column is a PLACE (`hypr/lib/dock.lua`'s
+---`column:<order>` doc), so an area published for `hypr/lib/area.lua` needs
+---its box even on an empty column — the same geometry `M.boxes` computes
+---per visible member, minus the placement.
+---@param spec Deck.Spec
+---@param area Scene.Area
+---@param opts { gaps_in: number?, gaps_out: (number|Scene.CssGap)? }
+---@return table<integer, Scene.Box> boxes keyed by column order
+function M.column_boxes(spec, area, opts)
+  opts = opts or {}
+  local gaps_in = opts.gaps_in or 0
+  local top, right, bottom, left = layout.sides(opts.gaps_out)
+
+  local columns = {}
+  for _, c in ipairs(spec.columns) do
+    columns[#columns + 1] = c
+  end
+  table.sort(columns, function(a, b)
+    return a.order < b.order
+  end)
+  while #columns > MAX_COLUMNS do
+    columns[#columns] = nil
+  end
+  if #columns < MIN_COLUMNS then
+    return {}
+  end
+
+  local inner_x = area.x + left
+  local inner_y = area.y + top
+  local inner_w = area.w - left - right
+  local inner_h = area.h - top - bottom
+  local usable = inner_w - gaps_in * (#columns - 1)
+
+  local shares = fractions(columns)
+  local out = {}
+  local cursor = inner_x
+  for i, column in ipairs(columns) do
+    local width = (i == #columns) and (inner_x + inner_w - cursor) or math.floor(usable * shares[i] + 0.5)
+    out[column.order] = { x = cursor, y = inner_y, w = width, h = inner_h }
+    cursor = cursor + width + gaps_in
+  end
+  return out
+end
+
 M.MIN_COLUMNS = MIN_COLUMNS
 M.MAX_COLUMNS = MAX_COLUMNS
 
