@@ -1059,10 +1059,14 @@ end
 ---change that only did one of them would leave the desk describing a mode it
 ---is not in.
 ---
----The pointer is written FIRST. Every other reader — the shell's pill, the
----notification routing, a later schedule deciding whether it may act — learns
----the mode from it, and writing it after the work would mean a window where
----the desk has changed and nothing can say why.
+---The veil goes up first, the pointer second, the work last. Every reader —
+---the shell's pill, the notification routing, a later schedule deciding
+---whether it may act — learns the mode from the pointer, and the shell redraws
+---the moment it changes; written before the veil, that redraw leaked in front
+---of the transition. `converge` publishes the veil synchronously and defers
+---every move behind a lead, so the pointer still lands long before anything
+---moves: there is no window where the desk has changed and nothing can say
+---why.
 ---
 ---The services half is spawned rather than waited on. It talks to systemd,
 ---which can take seconds on a unit that stops slowly, and a compositor that
@@ -1083,6 +1087,7 @@ function M.enter(mode, source, until_at)
     return nil, resolve_err
   end
 
+  local report, converge_err = M.converge(mode)
   local wrote, handle = pcall(store.define, POINTER)
   if wrote then
     pcall(function()
@@ -1117,7 +1122,7 @@ function M.enter(mode, source, until_at)
 
   -- `converge` itself lands on the mode's declared main scene (LEO-423), so
   -- there is nothing extra to do once it returns.
-  return M.converge(mode)
+  return report, converge_err
 end
 
 -- How long to wait after the last mode change before running the theme

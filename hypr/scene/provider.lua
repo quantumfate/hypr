@@ -254,7 +254,17 @@ local function publish_areas(scene, tiles, boxes, area)
     return
   end
   local _, gaps_out = gaps(scene)
-  local work_area = area or { x = monitor.x, y = monitor.y, w = monitor.width, h = monitor.height }
+  -- No layout area yet (a scene arriving, before its first pass): the monitor
+  -- less what other surfaces reserved -- the bar's strip above all. The full
+  -- monitor put every surface of an empty scene over the bar.
+  local reserved = monitor.reserved or {}
+  local work_area = area
+    or {
+      x = monitor.x + (reserved.left or 0),
+      y = monitor.y + (reserved.top or 0),
+      w = monitor.width - (reserved.left or 0) - (reserved.right or 0),
+      h = monitor.height - (reserved.top or 0) - (reserved.bottom or 0),
+    }
   local work_abs = layout.inner_area(work_area, gaps_out)
   local origin_x, origin_y = monitor.x or 0, monitor.y or 0
   local work = { x = work_abs.x - origin_x, y = work_abs.y - origin_y, w = work_abs.w, h = work_abs.h }
