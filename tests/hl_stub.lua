@@ -7,15 +7,10 @@
 --- that construction merely "didn't error".
 local M = {}
 
---- hl.dsp.* / hl.dsp.window.* / hl.dsp.workspace.* are an arbitrarily nested
---- namespace of dispatcher constructors in the real API. A recursive proxy
---- means the stub never needs updating when the config calls a new one.
----@param path string dotted path so far, for the recorded dispatcher's `name`
----
---- Except the namespaces the real API exposes as plain tables: calling one
---- raises there ("attempt to call a table value"), and a stub that accepted it
---- let the bar's `hl.dsp.workspace("name:x")` pass every spec while it failed
---- on every click (measured live, 2026-09-26).
+-- Dispatcher namespaces the real API exposes as plain tables: calling one
+-- raises there ("attempt to call a table value"), and a stub that accepted it
+-- let the bar's `hl.dsp.workspace("name:x")` pass every spec while it failed
+-- on every click (measured live, 2026-09-26).
 local NAMESPACES = {
   ["dsp.workspace"] = true,
   ["dsp.window"] = true,
@@ -23,6 +18,10 @@ local NAMESPACES = {
   ["dsp.cursor"] = true,
 }
 
+--- hl.dsp.* / hl.dsp.window.* / hl.dsp.workspace.* are an arbitrarily nested
+--- namespace of dispatcher constructors in the real API. A recursive proxy
+--- means the stub never needs updating when the config calls a new one.
+---@param path string dotted path so far, for the recorded dispatcher's `name`
 local function dispatcher_proxy(path)
   return setmetatable({}, {
     __index = function(_, key)
