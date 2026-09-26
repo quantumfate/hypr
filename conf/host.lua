@@ -17,7 +17,6 @@ local geometry = require("hypr.lib.geometry")
 local profile = require("hypr.lib.profile")
 local Store = require("hypr.lib.store")
 local nav = require("hypr.lib.nav")
-local spec_lib = require("hypr.scene.spec")
 
 local M = {}
 
@@ -121,8 +120,6 @@ function M.build()
   )
 
   local default_gaps_out = hl.get_config("general.gaps_out") or config.default_gaps.gaps_out
-  local default_gaps_in = hl.get_config("general.gaps_in") or config.default_gaps.gaps_in
-  local border = hl.get_config("general.border_size") or 0
   -- Publish host-derived geometry without clobbering `docks`, which is owned
   -- by the scene engine (`hypr/scene/dock_publish.lua`) and must survive a
   -- config reload until the next layout pass re-publishes it.

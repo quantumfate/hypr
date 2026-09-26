@@ -115,15 +115,69 @@ function M.on_force_settle(cb)
   force_settle_hook = cb
 end
 
--- Whether animations were enabled before this transition, so finish restores
--- what was actually there rather than assuming "on" (another subsystem, like
--- the alt-tab picker, may have suspended them for its own reasons).
-local prior_animations = true
--- Whether activation took focus before this transition. It is switched off for
--- the bracket so a window activating mid-rearrangement cannot interrupt the
--- transition; nil when the option was unreadable, in which case finish leaves
--- it alone.
-local prior_focus_on_activate = nil
+-- Everything the compositor may do ON ITS OWN that moves focus, the
+-- workspace or the pointer while a transition rearranges the desk -- the
+-- whole list of what a graceful transition needs, in one place. Each entry is
+-- switched to its quiet value when a bracket begins and restored to whatever
+-- was live before when the grace after the landing ends, so a reader never
+-- has to reverse-engineer which later correction guards against which
+-- compositor behaviour.
+--
+-- Beside these, the `GUARD_RULE` window rule keeps every window that maps
+-- inside the bracket from taking focus on open: Hyprland 0.56 has no config
+-- toggle for that (`misc.new_window_takes_focus` is gone).
+---@type { key: string, quiet: any, why: string }[]
+M.QUIET = {
+  {
+    key = "animations.enabled",
+    quiet = false,
+    why = "every move lands in one frame instead of swiping across the desk",
+  },
+  {
+    key = "misc.focus_on_activate",
+    quiet = false,
+    why = "an app activating itself (xdg-activation) cannot take focus off the landing",
+  },
+  {
+    key = "misc.mouse_move_focuses_monitor",
+    quiet = false,
+    why = "the pointer -- including the seat's own warp -- cannot move monitor focus under the landing",
+  },
+  {
+    key = "input.follow_mouse",
+    quiet = 0,
+    why = "a window sliding under a resting pointer cannot take focus",
+  },
+  {
+    key = "binds.workspace_back_and_forth",
+    quiet = false,
+    why = "landing on main while main is already shown cannot bounce to the previous workspace",
+  },
+  {
+    key = "binds.allow_workspace_cycles",
+    quiet = false,
+    why = "the same bounce, through workspace history",
+  },
+}
+
+-- How long the desk stays quiet after the landing. The CLI half (services,
+-- theme) starts at the landing, and what it starts maps seconds later -- the
+-- obsidian suite is the case that bit. Inside the grace those windows open
+-- unfocused and cannot activate, so the landing holds without a later check
+-- having to put it back. The veil is already down; nothing visible waits on
+-- this.
+local GRACE_MS = 6000
+M.GRACE_MS = GRACE_MS
+
+-- The live values the quiet set replaced, by key, captured by the first begin
+-- of a chain (nil where the runtime refused the key: that one is left alone).
+---@type table<string, any>
+local priors = {}
+-- Whether the quiet set and the open-focus guard are in force. Outlives
+-- `bracketed`: the bracket ends at the landing, the quiet at the grace's end.
+local quieted = false
+-- The grace timer, so a newer bracket can take the quiet over.
+local grace = nil
 
 ---Read a live config value, or nil when the runtime refuses the key.
 ---@param key string
@@ -136,6 +190,78 @@ local function read_config(key)
     return value
   end
   return nil
+end
+
+---A nested `hl.config` patch setting each quiet key to `pick(entry)`.
+---@param pick fun(entry: { key: string, quiet: any }): any
+---@return table
+local function patch_of(pick)
+  local patch = {}
+  for _, entry in ipairs(M.QUIET) do
+    local value = pick(entry)
+    if value ~= nil then
+      local section, name = entry.key:match("^([^.]+)%.(.+)$")
+      patch[section] = patch[section] or {}
+      patch[section][name] = value
+    end
+  end
+  return patch
+end
+
+---Put the desk into its quiet state: capture what is live (once per chain --
+---a second begin would read the already-quiet values back as "prior"), raise
+---the open-focus guard, apply the quiet set.
+local function raise_quiet()
+  if grace then
+    pcall(function()
+      grace:set_enabled(false)
+    end)
+    grace = nil
+  end
+  if not quieted then
+    priors = {}
+    for _, entry in ipairs(M.QUIET) do
+      priors[entry.key] = read_config(entry.key)
+    end
+  end
+  quieted = true
+  pcall(function()
+    -- Raised before the config update: a rule re-declared right after an
+    -- `hl.config` can land inert on this build.
+    hl.window_rule({
+      name = GUARD_RULE,
+      match = { class = ".*" },
+      no_focus = true,
+    })
+  end)
+  pcall(function()
+    hl.config(patch_of(function(entry)
+      return entry.quiet
+    end))
+  end)
+end
+
+---Return the desk to what it was: withdraw the guard, restore every captured
+---value.
+local function release_quiet()
+  if grace then
+    pcall(function()
+      grace:set_enabled(false)
+    end)
+    grace = nil
+  end
+  if not quieted then
+    return
+  end
+  quieted = false
+  pcall(function()
+    hl.window_rule({ name = GUARD_RULE, enabled = false })
+  end)
+  pcall(function()
+    hl.config(patch_of(function(entry)
+      return priors[entry.key]
+    end))
+  end)
 end
 
 ---@param active boolean
@@ -218,16 +344,8 @@ local function force_settle(gen)
     pcall(cb)
   end
   bracketed = false
-  pcall(function()
-    hl.window_rule({ name = GUARD_RULE, enabled = false })
-  end)
-  pcall(function()
-    local patch = { animations = { enabled = prior_animations } }
-    if prior_focus_on_activate ~= nil then
-      patch.misc = { focus_on_activate = prior_focus_on_activate }
-    end
-    hl.config(patch)
-  end)
+  -- No grace: a bracket that had to be forced is not trusted to stay quiet.
+  release_quiet()
   publish(false, current_mode, veiled, current_duration_ms)
   if force_settle_hook then
     pcall(force_settle_hook)
@@ -266,17 +384,6 @@ M.SETTLE_MS = SETTLE_MS
 function M.begin(mode, veil, on_settled, duration_ms)
   generation = generation + 1
   disarm_failsafe()
-  -- Only the first begin of a chain captures the pre-transition value. A second
-  -- apply that lands before the first has settled (boot cascades three within a
-  -- frame) would otherwise read the already-suspended `false` as "prior" and
-  -- restore animations off for the rest of the session.
-  if not bracketed then
-    prior_animations = read_config("animations.enabled")
-    if prior_animations == nil then
-      prior_animations = true
-    end
-    prior_focus_on_activate = read_config("misc.focus_on_activate")
-  end
   -- The latest apply in a chain owns the bracket's identity: a converge landing
   -- inside a reload's bracket upgrades it to a veiled transition. A reload
   -- landing inside a transition's bracket would normally downgrade it, but
@@ -291,26 +398,9 @@ function M.begin(mode, veil, on_settled, duration_ms)
   current_mode = mode
   settled_cb = on_settled
   bracketed = true
-  pcall(function()
-    -- No window opening mid-bracket may steal focus: a window that maps
-    -- during the rearrangement opens unfocused behind the veil instead of
-    -- dragging the user off the scene the transition is building. Raised
-    -- before the config update — a rule re-declared right after an
-    -- `hl.config` can land inert on this build.
-    hl.window_rule({
-      name = GUARD_RULE,
-      match = { class = ".*" },
-      no_focus = true,
-    })
-  end)
-  pcall(function()
-    hl.config({
-      animations = { enabled = false },
-      -- No activation may take focus while the desk is being rearranged: the
-      -- transition must run uninterrupted and then land on main (LEO-423).
-      misc = { focus_on_activate = false },
-    })
-  end)
+  -- The desk goes quiet for the whole bracket and the grace after it
+  -- (`M.QUIET`); a begin inside a running grace takes the quiet over.
+  raise_quiet()
   publish(true, mode, veiled, current_duration_ms)
   pcall(function()
     require("hypr.lib.trace").emit({
@@ -409,18 +499,20 @@ function M.finish(mode)
       pcall(cb)
     end
     bracketed = false
-    -- Withdraw the open-focus guard and restore the pre-transition settings
-    -- only after focus has landed on the mode's main scene.
+    -- The veil comes down now; the quiet holds for the grace, so whatever the
+    -- landing started (the CLI half's services) maps without taking focus.
+    -- A newer begin cancels this timer and keeps the quiet as its own.
     pcall(function()
-      hl.window_rule({ name = GUARD_RULE, enabled = false })
+      grace = hypr.oneshot(GRACE_MS, function()
+        grace = nil
+        if gen == generation and not bracketed then
+          release_quiet()
+        end
+      end)
     end)
-    pcall(function()
-      local patch = { animations = { enabled = prior_animations } }
-      if prior_focus_on_activate ~= nil then
-        patch.misc = { focus_on_activate = prior_focus_on_activate }
-      end
-      hl.config(patch)
-    end)
+    if not grace then
+      release_quiet()
+    end
     publish(false, mode, veiled, current_duration_ms)
     pcall(function()
       require("hypr.lib.trace").emit({

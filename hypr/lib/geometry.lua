@@ -58,23 +58,6 @@ local function left_right(gaps_out, default_gaps_out)
   return n, n
 end
 
----One side of a CssGap (integer or {top,right,bottom,left} table) as a number.
----A table's unnamed side is a real 0; `nil` falls to `fallback` first.
----@param gap integer|table|nil
----@param which "top"|"right"|"bottom"|"left"
----@param fallback integer|table|nil
----@return integer
-local function side(gap, which, fallback)
-  local value = gap == nil and fallback or gap
-  if value == nil then
-    return 0
-  end
-  if type(value) == "table" then
-    return value[which] or 0
-  end
-  return tonumber(value) or 0
-end
-
 ---Per-monitor left/right outer gap: a MONITOR's resting geometry, not any one
 ---workspace's. The base gap only — never the scene layout's own solo widen,
 ---which is a transient per-workspace correction.

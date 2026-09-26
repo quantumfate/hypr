@@ -98,7 +98,7 @@ Token-saving guidance for agents:
 | `60_navigation.sh`             | mod+h/l/j/k across tiles, into/out of a group, onto an empty monitor                                                                                                                | yes  |
 | `61_seat.sh`                   | the seat: mod+h/l onto the empty secondary and back ×3 (real bind closures), pointer brought along, pointer motion never moves the seat, a switch for one monitor never leaves it   | yes  |
 | `65_focus_transitions.sh`      | work→study→gaming→work, timed expiry falls back to `previous`, neutral recovery — held sets and pointer fields at each step                                                         | yes  |
-| `67_transition_focus_guard.sh` | a window opening mid-transition stays unfocused behind the veil; the bracket's no_focus guard holds the landing                                                                     | yes  |
+| `67_transition_focus_guard.sh` | a window opening mid-transition stays unfocused behind the veil; the landing on main holds; a window inside the 6 s grace opens unfocused, one after it takes focus                 | yes  |
 | `70_boot_pointer.sh`           | boot: a stale pointer lands on `work`; an unexpired timed mode survives a restart                                                                                                   | no   |
 | `75_undeclared_workspace.sh`   | a window on a workspace the host never declared moves to its monitor's own                                                                                                          | no   |
 | `80_collect_home.sh`           | a claimed window standing elsewhere is re-homed to its scene, focus unmoved                                                                                                         | no   |
@@ -121,13 +121,11 @@ A scenario is a script that sources `lib.sh`, calls `e2e_start`, and exits
 non-zero on failure (`e2e_fail`). Each gets its own nested compositor.
 
 **Boot focus.** When the boot transition settles, `focus_mode_entry`
-(`hypr/hyprfocus/init.lua`) lands on the mode's declared `main` scene and
-re-asserts that landing at +1.2s/+3s/+6s: each check yanks focus back to
-`main` whenever the active workspace is not main, and nothing gives it back.
-A scenario that opens a project on another workspace inside that window has
-its focus stolen out from under it, so focus-sensitive scenarios call
-`wait_boot_focus_quiet` right after `e2e_start` (it waits the series out from
-the settle `e2e_start` already stalls on). Scenarios that only spawn and
+(`hypr/hyprfocus/init.lua`) lands on the mode's declared `main` scene once,
+and the desk then stays quiet for a 6 s grace (`hypr/lib/transition.lua`
+`M.QUIET`): a window mapped inside it opens without focus. Focus-sensitive
+scenarios call `wait_boot_focus_quiet` right after `e2e_start` (it waits the
+grace out from the settle `e2e_start` already stalls on). Scenarios that only spawn and
 count windows never need it.
 
 ## Real bar (`E2E_REAL_BAR=1`, `97_bar_truth.sh`)

@@ -44,7 +44,10 @@ wait_transition_settled || e2e_fail "transition to work never settled"
 
 hc eval "require('hypr.hyprfocus').enter('gaming')" >/dev/null || e2e_fail "enter gaming failed"
 wait_until 50 sh -c "jq -e '.mode == \"gaming\"' '$QF_STORE/focus.json'" >/dev/null || e2e_fail "pointer never named gaming"
-wait_until 50 sh -c "hyprctl -i '$E2E_SIG' -j activeworkspace | jq -e '.name == \"arena\"'" ||
+# The landing happens AT the settle (after the veil), so wait for the settle
+# rather than a fixed span shorter than the veil itself.
+wait_transition_settled || e2e_fail "transition to gaming never settled"
+wait_until 20 sh -c "hyprctl -i '$E2E_SIG' -j activeworkspace | jq -e '.name == \"arena\"' >/dev/null" ||
     e2e_fail "gaming entry never focused its main scene 'arena': $(hc -j activeworkspace | jq -c '{name}')"
 
 e2e_log "PASS focus survives a reload; a fresh mode entry lands on its main scene"

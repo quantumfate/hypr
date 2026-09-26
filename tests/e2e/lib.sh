@@ -195,16 +195,13 @@ wait_transition_settled() {
     "
 }
 
-# wait_boot_focus_quiet: block until the compositor's boot main-landing
-# window is over. `focus_mode_entry` (hypr/hyprfocus/init.lua) lands on the
-# mode's declared main scene when the boot transition settles, then re-checks
-# that landing at +1.2s/+3s/+6s: each check yanks focus back to main whenever
-# the active workspace is not main. A scenario opening a project on another
-# workspace inside that window has focus stolen out from under it and nothing
-# gives it back, so focus-sensitive steps must wait the series out first. The
-# settle `e2e_start` already stalls on is the same moment the checks are
-# scheduled from, so the window measures from there; the final check is
-# +6000ms, and +7s clears it with margin.
+# wait_boot_focus_quiet: block until the boot transition's grace is over.
+# `focus_mode_entry` (hypr/hyprfocus/init.lua) lands on the mode's declared
+# main scene when the boot transition settles, and the desk then stays quiet
+# for `transition.GRACE_MS` (6000ms, hypr/lib/transition.lua `M.QUIET`): a
+# window mapped inside it opens WITHOUT focus. A focus-sensitive step must
+# wait the grace out first. The settle `e2e_start` already stalls on is the
+# moment the grace starts, so +7s clears it with margin.
 wait_boot_focus_quiet() {
     [[ $E2E_SETTLE_AT != 0 ]] || e2e_fail "wait_boot_focus_quiet: no settle recorded (e2e_start)"
     local tv=$((7000 * 1000000))

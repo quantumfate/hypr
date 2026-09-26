@@ -253,7 +253,7 @@ local function publish_areas(scene, tiles, boxes, area)
   if not monitor then
     return
   end
-  local gaps_in, gaps_out = gaps(scene)
+  local _, gaps_out = gaps(scene)
   local work_area = area or { x = monitor.x, y = monitor.y, w = monitor.width, h = monitor.height }
   local work_abs = layout.inner_area(work_area, gaps_out)
   local origin_x, origin_y = monitor.x or 0, monitor.y or 0
@@ -265,9 +265,9 @@ local function publish_areas(scene, tiles, boxes, area)
   -- against, filtered to `block:<order>`.
   local columns_by_order = {}
   for key, box in pairs(dock_publish.targets(scene, tiles, boxes, spec_lib)) do
-    local order = key:match("^block:(%d+)$")
-    if order then
-      columns_by_order[tonumber(order)] = { x = box.x - origin_x, y = box.y - origin_y, w = box.w, h = box.h }
+    local block = key:match("^block:(%d+)$")
+    if block then
+      columns_by_order[tonumber(block)] = { x = box.x - origin_x, y = box.y - origin_y, w = box.w, h = box.h }
     end
   end
 

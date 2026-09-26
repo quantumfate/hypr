@@ -37,11 +37,19 @@ thief_ws=$(clients | jq -r 'map(select(.class == "e2e-thief"))[0].workspace.name
 [[ $thief_ws == "special:hyprfocus-held" ]] ||
     e2e_fail "the mid-transition window is on '$thief_ws', expected special:hyprfocus-held"
 
-# The guard is withdrawn with the bracket: a window opened NOW takes focus as
-# normal again.
+# Inside the grace after the landing the desk is still quiet: a window that
+# maps now (a service the landing started, say) opens WITHOUT focus.
+spawn_test_window e2e-grace
+grace=$(hc -j activewindow | jq -r '.class')
+[[ $grace != e2e-grace ]] ||
+    e2e_fail "a window opened inside the grace took focus; the quiet ended at the settle"
+
+# The quiet is withdrawn when the grace ends (hypr/lib/transition.lua
+# GRACE_MS): a window opened after it takes focus as normal again.
+sleep 6.5
 spawn_test_window e2e-after
 after=$(hc -j activewindow | jq -r '.class')
 [[ $after == e2e-after ]] ||
-    e2e_fail "a window opened after the settle is '$after', expected e2e-after; the guard outlived the bracket"
+    e2e_fail "a window opened after the grace is '$after', expected e2e-after; the quiet outlived the grace"
 
 echo "67_transition_focus_guard: ok"

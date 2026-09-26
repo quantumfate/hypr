@@ -73,6 +73,13 @@ local function failsafe_timer(stub)
   return found
 end
 
+---The grace timer armed at a settle: the quiet set is released when it fires.
+---@param stub any
+---@return table
+local function grace_timer(stub)
+  return settle_timer(stub, require("hypr.lib.transition").GRACE_MS)
+end
+
 t.describe("transition", function()
   t.it("begin suspends animations, drops activation focus, and publishes the bracket", function()
     local stub, transition, stores = fresh()
@@ -98,10 +105,53 @@ t.describe("transition", function()
     transition.finish("gaming")
     settle_timer(stub, 400).cb()
 
-    t.eq(true, stub.last_config.animations.enabled)
-    t.eq(true, stub.last_config.misc.focus_on_activate)
+    -- The bracket is over, the desk is still quiet for the grace.
     t.eq(false, stores["hyprfocus.transition"].active)
     t.eq(false, transition.active())
+    t.eq(false, stub.last_config.misc.focus_on_activate)
+
+    grace_timer(stub).cb()
+    t.eq(true, stub.last_config.animations.enabled)
+    t.eq(true, stub.last_config.misc.focus_on_activate)
+  end)
+
+  t.it("quiets every declared option and restores each to what was live", function()
+    local stub, transition = fresh()
+    stub.config_values["misc.mouse_move_focuses_monitor"] = true
+    stub.config_values["binds.workspace_back_and_forth"] = true
+    stub.config_values["input.follow_mouse"] = 1
+
+    transition.begin("gaming", true)
+    for _, entry in ipairs(transition.QUIET) do
+      local section, name = entry.key:match("^([^.]+)%.(.+)$")
+      t.eq(entry.quiet, stub.last_config[section][name], entry.key .. " is quiet during the bracket")
+    end
+
+    transition.finish("gaming")
+    settle_timer(stub, 4200).cb()
+    grace_timer(stub).cb()
+    t.eq(true, stub.last_config.misc.mouse_move_focuses_monitor)
+    t.eq(true, stub.last_config.binds.workspace_back_and_forth)
+    t.eq(1, stub.last_config.input.follow_mouse)
+  end)
+
+  t.it("a begin inside the grace keeps the quiet and the original priors", function()
+    local stub, transition = fresh()
+    stub.config_values["misc.focus_on_activate"] = true
+
+    transition.begin("work", true)
+    transition.finish("work")
+    settle_timer(stub, 4200).cb()
+    local first_grace = grace_timer(stub)
+
+    -- The live value reads quiet now; a second chain must not adopt it.
+    stub.config_values["misc.focus_on_activate"] = false
+    transition.begin("gaming", true)
+    t.eq(false, first_grace.enabled, "the newer bracket owns the quiet")
+    transition.finish("gaming")
+    settle_timer(stub, 4200).cb()
+    grace_timer(stub).cb()
+    t.eq(true, stub.last_config.misc.focus_on_activate)
   end)
 
   t.it("restores enabled=false when something else had suspended animations", function()
@@ -111,6 +161,7 @@ t.describe("transition", function()
     transition.begin("work")
     transition.finish("work")
     settle_timer(stub, 400).cb()
+    grace_timer(stub).cb()
 
     t.eq(false, stub.last_config.animations.enabled)
   end)
@@ -128,7 +179,7 @@ t.describe("transition", function()
     t.eq(false, stores["hyprfocus.transition"].present, "the veil unmaps once the transition settles")
   end)
 
-  t.it("brackets the apply with the open-focus guard, withdrawn at the settle", function()
+  t.it("brackets the apply with the open-focus guard, withdrawn when the grace ends", function()
     local stub, transition = fresh()
     stub.config_values["animations.enabled"] = true
 
@@ -150,6 +201,8 @@ t.describe("transition", function()
 
     transition.finish("gaming")
     settle_timer(stub, 4200).cb()
+    t.eq(2, #stub.window_rules, "still raised through the grace")
+    grace_timer(stub).cb()
     t.eq(3, #stub.window_rules)
     local dropped = stub.window_rules[3]
     t.eq("hyprfocus-transition-guard", dropped.name)
@@ -198,8 +251,9 @@ t.describe("transition", function()
     t.eq(true, stores["hyprfocus.transition"].active)
 
     settle_timer(stub, 400).cb()
-    t.eq(true, stub.last_config.animations.enabled)
     t.eq(false, stores["hyprfocus.transition"].active)
+    grace_timer(stub).cb()
+    t.eq(true, stub.last_config.animations.enabled)
   end)
 
   t.it("arms a failsafe at every begin and stands it down at a legitimate settle", function()

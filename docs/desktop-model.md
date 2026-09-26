@@ -84,16 +84,21 @@ animations **and activation focus** (`misc.focus_on_activate`) for its
 duration (`hypr/lib/transition.lua`), so every workspace and window move lands
 at its final geometry in one frame and no window activating mid-move can
 interrupt, and publishes `hyprfocus.transition` (`{ active, present, mode }`)
-on the shared store. The same bracket also raises a named catch-all
-`no_focus` window rule (`hyprfocus-transition-guard`, re-declared
-`enabled = false` at the settle): a window opening mid-transition maps
-unfocused instead of stealing the landing. Focus lands on the mode's main
-scene **while the bracket is still active**, before the guard is withdrawn and
-settings are restored, so the final focus cannot be interrupted by an
-activation request or newly mapped window — and the landing is **re-asserted
-once** about a second later, quietly, only if something finishing its own
-bring-up in the same breath (a launcher with explicit focus dispatches, which
-the guard does not cover) pulled focus off main again. The apply itself is
+on the shared store.
+
+**The quiet desk.** Everything the compositor may do on its own that moves
+focus, the workspace or the pointer is switched off for the bracket, from one
+declared list — `M.QUIET` in `hypr/lib/transition.lua`, each entry with the
+reason it is there (animations, `focus_on_activate`,
+`mouse_move_focuses_monitor`, `follow_mouse`, workspace back-and-forth and
+cycles) — plus a named catch-all `no_focus` window rule
+(`hyprfocus-transition-guard`), since Hyprland has no option for open-time
+focus. Focus lands on the mode's main scene **once**, while the desk is quiet,
+and the quiet holds for a **grace** (`GRACE_MS`, 6 s) after the landing: the
+CLI half starts at the landing, and what it starts maps unfocused inside the
+grace instead of stealing the landing. Nothing re-lands later on a timer — a
+landing that has to be put back means a behaviour missing from `M.QUIET`, and
+that is where it gets named. The apply itself is
 **deferred by a lead** (~900 ms) after the veil is published, covering the
 shell's mapping of the full-screen surface, so the veil is fully in place
 before anything moves; the rearrange then lands behind it. When `present` is
@@ -109,18 +114,14 @@ no key reaches a hidden window.
 
 A transition can never wedge the desk. Every `begin` arms a **failsafe**
 (~8 s — beyond any legitimate bracket's lifetime): if `finish` never ran, the
-failsafe force-settles without the settle callback (the desk may be
-half-placed, so landing on main then would be a guess), restores the
-suspended settings, withdraws the guard, releases the apply guard so the next
+failsafe force-settles: it still lands on main (the landing is a fact about
+the mode, not about how far the placing got), then restores the quiet set at
+once — no grace for a bracket that had to be forced — withdraws the guard,
+releases the apply guard so the next
 mode change is not refused, and publishes the bracket's end. The shell adds
 its own watchdog on top (~duration + 4.5 s): if the compositor is so wedged
 the store write never lands, the veil force-hides locally anyway — the veil
-must never become a room the user cannot leave. The landing on main is
-**re-asserted quietly a few times over the next few seconds** (bounded, each
-only when focus was actually pulled off main, all dropped once a newer apply
-owns the desk): a launcher with explicit focus dispatches pulls focus in the
-bracket's tail, and a service the CLI half just started can map seconds after
-the settle and take focus on open.
+must never become a room the user cannot leave.
 
 The modes a user picks between are `work` and `gaming` (`study` is retired
 for now — see [scenes.md](scenes.md)). **Login

@@ -1045,31 +1045,10 @@ local function focus_mode_entry(desk)
     })
     return ok
   end
+  -- Once. Nothing re-lands later: the transition keeps the desk quiet
+  -- through a grace after this (`hypr/lib/transition.lua` `M.QUIET`), so what
+  -- the bring-up maps meanwhile opens without taking focus.
   land("focus", "mode entry falls back to the declared main scene")
-  -- Bring-up keeps landing after the settle: a launcher with explicit focus
-  -- dispatches pulls focus in the bracket's tail, and a service the CLI half
-  -- just started can map seconds later and take focus on open — the obsidian
-  -- suite is the case that actually bit. A few quiet checks re-land on main
-  -- while that bring-up keeps arriving: each fires only when focus was
-  -- actually pulled off main, the series stops the moment main holds, and
-  -- every check is dropped once a newer apply owns the desk.
-  local REASSERT_AT = { 1200, 3000, 6000 }
-  local check = 0
-  local function reassert()
-    check = check + 1
-    if applied_desk ~= desk then
-      return
-    end
-    local ok, ws = pcall(hl.get_active_workspace)
-    if ok and ws and ws.name and ws.name ~= main then
-      land("reassert", "landing was pulled off main right after the settle")
-    end
-    local next_at = REASSERT_AT[check + 1]
-    if next_at then
-      require("hypr.lib.hypr").oneshot(next_at - REASSERT_AT[check], reassert)
-    end
-  end
-  require("hypr.lib.hypr").oneshot(REASSERT_AT[1], reassert)
 end
 
 ---Enter a mode: record it, apply this runtime's half, and hand the rest to the
