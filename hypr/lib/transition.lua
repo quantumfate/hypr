@@ -310,6 +310,104 @@ local function disarm_failsafe()
   end
 end
 
+-- Gap between settle steps. The watchdog kills an `hl.timer` callback after
+-- 50 ms on this build (see `PHASE_GAP_MS` in hypr/hyprfocus/init.lua), and the
+-- settle used to do all of it in one tick -- stand the other monitors, land on
+-- main, admit main's binding trees, start the CLI half. On a full desk that
+-- crossed the budget and was killed partway: no landing, main's keys never
+-- admitted, not even the trace line saying so (live, 2026-09-26). Each step
+-- gets its own tick now.
+local STEP_GAP_MS = 25
+
+-- The event handlers held while a bracket is up, each run ONCE after the
+-- settle instead of on every event the rearrangement fires. The bracket moves
+-- many workspaces and every move fires `workspace.active` synchronously
+-- inside the dispatch -- inside the apply's or the settle's own 50 ms budget
+-- -- and what these handlers do is either work the settle does itself (admit
+-- the bindings for the scene landed on) or corrections that are only
+-- meaningful on a desk that has stopped moving.
+---@type table<string, string>
+M.HELD = {
+  ["scene.workspace_active"] = "dock/area sweep, ignored-monitor correction, re-place, arrival publish, "
+    .. "binding admission -- the settle's own last steps; once after it is enough",
+  ["scene.monitor_focused"] = "dock/area sweep -- meaningless mid-move",
+}
+
+-- Held handlers that fired during the bracket, by key (coalesced: one run
+-- each, with the latest arguments).
+---@type table<string, fun()>
+local held = {}
+
+---Hold handler `key` while a bracket is up: returns true (the caller skips
+---its body) and queues `fn` to run once after the settle. Outside a bracket
+---returns false and the caller runs as normal. `key` must be in `M.HELD`.
+---@param key string
+---@param fn fun()
+---@return boolean
+function M.hold(key, fn)
+  assert(M.HELD[key], "transition.hold: undeclared handler " .. tostring(key))
+  if not bracketed then
+    return false
+  end
+  held[key] = fn
+  return true
+end
+
+---Run `steps` one per tick, then `done`. Dropped as soon as a newer bracket
+---owns the desk.
+---@param gen integer
+---@param steps (fun())[]
+---@param done fun()
+local function run_steps(gen, steps, done)
+  local index = 0
+  local function next_step()
+    if gen ~= generation then
+      return
+    end
+    index = index + 1
+    local step = steps[index]
+    if not step then
+      -- The steps' own dispatches fire held handlers too: drain those before
+      -- concluding, so none waits for the next bracket.
+      local key, fn = next(held)
+      if key then
+        held[key] = nil
+        steps[index] = fn
+        step = fn
+      else
+        done()
+        return
+      end
+    end
+    pcall(step)
+    local ok = pcall(function()
+      hypr.oneshot(STEP_GAP_MS, next_step)
+    end)
+    if not ok then
+      next_step()
+    end
+  end
+  next_step()
+end
+
+---The settle's steps: what the settle callback asked for (a function is one
+---step, a list is several). Held handlers are drained after them.
+---@return (fun())[]
+local function settle_steps()
+  local steps = {}
+  local cb = settled_cb
+  settled_cb = nil
+  if cb then
+    local ok, result = pcall(cb)
+    if ok and type(result) == "table" then
+      for _, step in ipairs(result) do
+        steps[#steps + 1] = step
+      end
+    end
+  end
+  return steps
+end
+
 ---Force-settle a bracket whose `finish` never came.
 ---
 ---The settle callback STILL RUNS. It used to be dropped here on the grounds
@@ -338,15 +436,12 @@ local function force_settle(gen)
   -- Land first, while the open-focus guard is still raised and activation
   -- focus is still off -- the same order the legitimate settle uses, so a
   -- window mapping in this instant cannot steal the landing.
-  local cb = settled_cb
-  settled_cb = nil
-  if cb then
-    pcall(cb)
-  end
-  bracketed = false
-  -- No grace: a bracket that had to be forced is not trusted to stay quiet.
-  release_quiet()
-  publish(false, current_mode, veiled, current_duration_ms)
+  run_steps(gen, settle_steps(), function()
+    bracketed = false
+    -- No grace: a bracket that had to be forced is not trusted to stay quiet.
+    release_quiet()
+    publish(false, current_mode, veiled, current_duration_ms)
+  end)
   if force_settle_hook then
     pcall(force_settle_hook)
   end
@@ -490,38 +585,34 @@ function M.finish(mode)
     disarm_failsafe()
     -- Land on main while the bracket is still active: activation focus is
     -- still off and the open-focus guard is still raised, so a window that
-    -- tries to interrupt the landing is ignored. Restoring settings first
-    -- would let an activation request or newly mapped window steal focus
-    -- between the restore and the focus dispatch.
-    local cb = settled_cb
-    settled_cb = nil
-    if cb then
-      pcall(cb)
-    end
-    bracketed = false
-    -- The veil comes down now; the quiet holds for the grace, so whatever the
-    -- landing started (the CLI half's services) maps without taking focus.
-    -- A newer begin cancels this timer and keeps the quiet as its own.
-    pcall(function()
-      grace = hypr.oneshot(GRACE_MS, function()
-        grace = nil
-        if gen == generation and not bracketed then
-          release_quiet()
-        end
+    -- tries to interrupt the landing is ignored. One step per tick (see
+    -- `STEP_GAP_MS`), held handlers last.
+    run_steps(gen, settle_steps(), function()
+      bracketed = false
+      -- The veil comes down now; the quiet holds for the grace, so whatever
+      -- the landing started (the CLI half's services) maps without taking
+      -- focus. A newer begin cancels this timer and keeps the quiet as its own.
+      pcall(function()
+        grace = hypr.oneshot(GRACE_MS, function()
+          grace = nil
+          if gen == generation and not bracketed then
+            release_quiet()
+          end
+        end)
       end)
-    end)
-    if not grace then
-      release_quiet()
-    end
-    publish(false, mode, veiled, current_duration_ms)
-    pcall(function()
-      require("hypr.lib.trace").emit({
-        stage = "transition",
-        event = "settled",
-        decision = "done",
-        mode = mode,
-        generation = gen,
-      })
+      if not grace then
+        release_quiet()
+      end
+      publish(false, mode, veiled, current_duration_ms)
+      pcall(function()
+        require("hypr.lib.trace").emit({
+          stage = "transition",
+          event = "settled",
+          decision = "done",
+          mode = mode,
+          generation = gen,
+        })
+      end)
     end)
   end)
   timer = handle

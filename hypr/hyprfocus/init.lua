@@ -828,8 +828,9 @@ end
 ---@param mode string
 ---@param present boolean? cover the apply with the shell's transition veil
 ---(true only for a genuine mode transition, never for a reload's apply)
----@param on_settled fun(desk: Hyprfocus.Desk)? run once the transition
----settles, after the moves
+---@param on_settled (fun(desk: Hyprfocus.Desk): (fun())[]?)? run once the
+---transition settles, after the moves; may return steps the transition runs
+---one per tick
 ---@return table? report, string? error
 function M.apply(mode, present, on_settled)
   if applying then
@@ -859,7 +860,7 @@ function M.apply(mode, present, on_settled)
     local phases = apply_phases()
     local total_duration_ms = transition.VEIL_MS + VEIL_LEAD_MS + ((#phases - 1) * PHASE_GAP_MS)
     transition.begin(mode, true, on_settled and function()
-      on_settled(ctx.desk)
+      return on_settled(ctx.desk)
     end, total_duration_ms)
     trace.begin_batch()
     local index = 0
@@ -1012,43 +1013,42 @@ end
 
 local function focus_mode_entry(desk)
   if not desk or not desk.main then
-    return
+    return {}
   end
   local main = desk.main
-  -- Other screens first, main last: every one of these is a focus dispatch,
-  -- so the order is what leaves the keyboard where the mode says it belongs.
-  stand_monitors(desk)
-  local function land(decision, reason)
-    local ok = pcall(function()
+  -- Steps, not one call: the transition runs each in its own timer tick
+  -- (`hypr/lib/transition.lua` `STEP_GAP_MS`), because together they crossed
+  -- the watchdog's 50 ms and the settle was killed partway -- no landing, and
+  -- main's keys never admitted (live, 2026-09-26). Order is the contract:
+  -- other screens first, main last, since each is a focus dispatch and the
+  -- keyboard must end where the mode says; then the keys for where it ended.
+  return {
+    function()
+      stand_monitors(desk)
+    end,
+    function()
+      -- Once. Nothing re-lands later: the transition keeps the desk quiet
+      -- through a grace after this (`transition.QUIET`), so what the bring-up
+      -- maps meanwhile opens without taking focus.
       hl.dispatch(hl.dsp.focus({ workspace = "name:" .. main }))
-    end)
-    -- Re-admit for the scene we just landed on. `phase_binds` runs FIRST in
-    -- an apply, so it reads the workspace focused BEFORE the mode placed
-    -- anything -- entering gaming from code admitted code's trees, and the
-    -- dofus submap stayed withheld until some later `workspace.active`
-    -- happened to re-admit it. When main was already the active workspace no
-    -- such event ever fires, so the keys simply were not there until the user
-    -- switched away and back (live complaint, 2026-09-25).
-    --
-    -- `main` rather than a fresh read of the active workspace: the dispatch
-    -- above is queued, so reading the compositor in the same breath answers
-    -- with the desk as it was. What we asked focus to land on is what the
-    -- keys should be for.
-    pcall(M.apply_bindings, desk.mode, main)
-    trace.emit({
-      stage = "admit",
-      event = "main_focused",
-      decision = decision,
-      reason = reason,
-      mode = desk.mode,
-      workspace = main,
-    })
-    return ok
-  end
-  -- Once. Nothing re-lands later: the transition keeps the desk quiet
-  -- through a grace after this (`hypr/lib/transition.lua` `M.QUIET`), so what
-  -- the bring-up maps meanwhile opens without taking focus.
-  land("focus", "mode entry falls back to the declared main scene")
+      trace.emit({
+        stage = "admit",
+        event = "main_focused",
+        decision = "focus",
+        reason = "mode entry falls back to the declared main scene",
+        mode = desk.mode,
+        workspace = main,
+      })
+    end,
+    function()
+      -- The keys for the scene just landed on. `phase_binds` runs FIRST in an
+      -- apply and reads the workspace focused BEFORE anything moved, and the
+      -- `workspace.active` that would re-admit is held during the bracket
+      -- (`transition.HELD`) -- and never fires at all when main was already
+      -- active. `main`, not a fresh read: the dispatch above may be queued.
+      M.apply_bindings(desk.mode, main)
+    end,
+  }
 end
 
 ---Enter a mode: record it, apply this runtime's half, and hand the rest to the
@@ -1215,8 +1215,11 @@ function M.converge(mode)
   -- (via ,theme.sh), which restarts the Lua state and drops the active
   -- bracket -- the veil vanishes and focus lands half-moved.
   local report, apply_err = M.apply(mode, true, function(desk)
-    focus_mode_entry(desk)
-    spawn_cli_half(mode)
+    local steps = focus_mode_entry(desk)
+    steps[#steps + 1] = function()
+      spawn_cli_half(mode)
+    end
+    return steps
   end)
   pcall(function()
     require("hypr.lib.submap").reset()

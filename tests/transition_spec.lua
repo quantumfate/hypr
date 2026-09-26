@@ -223,6 +223,48 @@ t.describe("transition", function()
     t.eq(1, ran)
   end)
 
+  t.it("runs settle steps one per timer tick, then concludes", function()
+    -- The watchdog kills an hl.timer callback at 50 ms; the settle's work
+    -- together crossed it, so each step gets its own tick.
+    local stub, transition, stores = fresh()
+    local ran = {}
+    transition.begin("gaming", true, function()
+      return {
+        function()
+          ran[#ran + 1] = "stand"
+        end,
+        function()
+          ran[#ran + 1] = "land"
+        end,
+      }
+    end)
+    transition.finish("gaming")
+    settle_timer(stub, 4200).cb()
+    t.eq({ "stand" }, ran, "only the first step inside the settle's own tick")
+    t.eq(true, stores["hyprfocus.transition"].active, "still bracketed while steps remain")
+    settle_timer(stub, 25).cb()
+    t.eq({ "stand", "land" }, ran)
+    settle_timer(stub, 25).cb()
+    t.eq(false, stores["hyprfocus.transition"].active, "concluded after the last step")
+  end)
+
+  t.it("holds a declared handler during the bracket, runs it once after", function()
+    local stub, transition = fresh()
+    local count = 0
+    local function handler()
+      count = count + 1
+    end
+    t.eq(false, transition.hold("scene.workspace_active", handler), "outside a bracket it runs live")
+
+    transition.begin("gaming", true)
+    t.eq(true, transition.hold("scene.workspace_active", handler))
+    t.eq(true, transition.hold("scene.workspace_active", handler), "coalesced")
+    transition.finish("gaming")
+    settle_timer(stub, 4200).cb()
+    t.eq(1, count, "run once, after the settle")
+    t.eq(false, pcall(transition.hold, "undeclared.handler", handler), "only declared handlers may be held")
+  end)
+
   t.it("a reload's apply suspends animations without veiling", function()
     local stub, transition, stores = fresh()
     stub.config_values["animations.enabled"] = true

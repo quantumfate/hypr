@@ -1508,11 +1508,21 @@ local function sweep_docks()
   require("hypr.scene.area_publish").sweep(keep_areas)
 end
 
+local transition = require("hypr.lib.transition")
+
 handlers.on("monitor.focused", function()
+  -- Held while a transition rearranges the desk (`transition.HELD`).
+  if transition.hold("scene.monitor_focused", function()
+    pcall(sweep_docks)
+  end) then
+    return
+  end
   pcall(sweep_docks)
 end)
 
-handlers.on("workspace.active", function()
+---What a workspace becoming active owes the desk; run live, or once after a
+---transition that held it.
+local function on_workspace_active()
   pcall(sweep_docks)
   keep_off_ignored(nil)
   -- A scene workspace created after the last apply (or after its output
@@ -1534,6 +1544,15 @@ handlers.on("workspace.active", function()
       hyprfocus.apply_bindings(hyprfocus.active(), scene_name)
     end)
   end
+end
+
+handlers.on("workspace.active", function()
+  -- Held while a transition rearranges the desk (`transition.HELD`): every
+  -- move fires this synchronously inside the apply's own timer budget.
+  if transition.hold("scene.workspace_active", on_workspace_active) then
+    return
+  end
+  on_workspace_active()
 end)
 
 return M

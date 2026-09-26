@@ -98,7 +98,18 @@ and the quiet holds for a **grace** (`GRACE_MS`, 6 s) after the landing: the
 CLI half starts at the landing, and what it starts maps unfocused inside the
 grace instead of stealing the landing. Nothing re-lands later on a timer — a
 landing that has to be put back means a behaviour missing from `M.QUIET`, and
-that is where it gets named. The apply itself is
+that is where it gets named.
+
+**The settle, in steps.** An `hl.timer` callback is killed after 50 ms on
+this build, and the settle used to stand the other monitors, land on main,
+admit main's binding trees and start the CLI half in one tick. On a full
+desk that crossed the budget and was killed partway: no landing, main's keys
+never admitted — the "bindings only work after dancing focus around"
+report. The settle callback now returns steps and the bracket runs one per
+tick, concluding after the last. Event handlers that the rearrangement fires
+on every move are **held** while the bracket is up and run once after it —
+named in one place, `M.HELD` in `hypr/lib/transition.lua`, each with its
+reason (`scene.workspace_active`, `scene.monitor_focused`). The apply itself is
 **deferred by a lead** (~900 ms) after the veil is published, covering the
 shell's mapping of the full-screen surface, so the veil is fully in place
 before anything moves; the rearrange then lands behind it. When `present` is
