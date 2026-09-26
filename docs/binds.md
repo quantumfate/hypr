@@ -70,7 +70,7 @@ whichever monitor holds it.
 
 ## Root — always live
 
-83 binds.
+84 binds.
 
 | Key                        | Does                                                | Where it should live |
 | -------------------------- | --------------------------------------------------- | -------------------- |
@@ -139,6 +139,7 @@ whichever monitor holds it.
 | `SUPER+bracketleft`        | Workspace [ on this monitor                         | system               |
 | `SUPER+bracketright`       | Workspace ] on this monitor                         | system               |
 | `SUPER+comma`              | Control centre (theme, wallpaper, sound, focus)     | system               |
+| `SUPER+dollar`             | Focus the next monitor                              | system               |
 | `SUPER+e`                  | Logs…                                               | tree: logs           |
 | `SUPER+equal`              | Workspace = on this monitor                         | system               |
 | `SUPER+f`                  | Modes…                                              | tree: modes          |
